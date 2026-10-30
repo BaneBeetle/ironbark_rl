@@ -17,8 +17,12 @@
 - Found Luwu's own RL env, [luwu_mjlab](https://github.com/LuwuDynamics/luwu_mjlab) (mjlab + RSL-RL, Mini2S MJCF, 50 Hz joint targets).
 - Decision: **sim stack = mjlab + RSL-RL, starting from luwu_mjlab** (replaces the brief's MuJoCo Playground/MJX + Brax). Its MJCF and trainer are used as infrastructure; Brian writes his own obs/actions/rewards, and luwu's reward is the baseline to beat.
 
+- **luwu_mjlab runs natively on Windows** (conda env `luwu_mjlab` in Anaconda: Python 3.11, torch 2.12+cu130, warp 1.12.1, mujoco 3.6.0, mjlab 1.2.0; repo at `~/dev/luwu_mjlab`). The conda CUDA toolkit wasn't needed.
+  - Luwu's Mini2S walk policy (HF `robomotic/XGO`, `model_1499.pt`; loads under `weights_only=True`), headless over 256 envs × 10 s sim: **0 falls, velocity-tracking error 0.044 m/s** (commanded |vx| 0.203, achieved 0.202 m/s).
+  - Training throughput, `Mini2S-Walk-Flat` with 4096 envs × 24 steps: **~2.0–2.3 s per PPO iteration (~45k env-steps/s)**. A full 1500-iteration run (Luwu's setting) is ≈ 55 min on the 3090. Not compared against Linux.
+
 ### Open: decisions
-- [ ] Native Windows vs. WSL2. WSL was chosen because JAX has no Windows GPU support; mjlab documents native Windows, so that reason no longer applies. Settle it by running luwu_mjlab on this PC.
+- [ ] Native Windows vs. WSL2. The evidence above says native works, which would make the mirrored-mode and Hyper-V firewall steps unnecessary (a plain Windows Defender rule for the ZMQ ports is enough). Brian to confirm.
 
 ### Open: Brian
 - [ ] V2 repo onto the PC as a read-only reference (only on the Mac today)
