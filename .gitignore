@@ -19,3 +19,6 @@ wandb/
 .DS_Store
 Thumbs.db
 desktop.ini
+
+# Machine-local Claude Code preview config (absolute paths)
+.claude/launch.json
