@@ -15,9 +15,10 @@
 - Decision: `ironbark_rl` is a separate repo. The V2 repo (DogZilla FOLLOW work on the Mac) stays separate and serves as a read-only reference.
 - Phase 1, step 1 started: xgolib joint-control API read from source → [phase1-xgolib-api.md](phase1-xgolib-api.md). Firmware `M-4.0.1-Y` (XGO Mini family).
 - Found Luwu's own RL env, [luwu_mjlab](https://github.com/LuwuDynamics/luwu_mjlab) (mjlab + RSL-RL, Mini2S MJCF, 50 Hz joint targets).
+- Decision: **sim stack = mjlab + RSL-RL, starting from luwu_mjlab** (replaces the brief's MuJoCo Playground/MJX + Brax). Its MJCF and trainer are used as infrastructure; Brian writes his own obs/actions/rewards, and luwu's reward is the baseline to beat.
 
 ### Open: decisions
-- [ ] Sim stack: luwu_mjlab/mjlab + RSL-RL (vendor MJCF exists, PyTorch, supports Windows) vs. the brief's MuJoCo Playground/MJX + Brax.
+- [ ] Native Windows vs. WSL2. WSL was chosen because JAX has no Windows GPU support; mjlab documents native Windows, so that reason no longer applies. Settle it by running luwu_mjlab on this PC.
 
 ### Open: Brian
 - [ ] V2 repo onto the PC as a read-only reference (only on the Mac today)
