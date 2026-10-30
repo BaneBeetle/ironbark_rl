@@ -29,4 +29,4 @@ That creates `EXP-NNN-<title>.md` from [TEMPLATE.md](TEMPLATE.md), fills in the 
 
 | ID | Date | Title | Change vs parent | Verdict |
 |---|---|---|---|---|
-| [EXP-000](EXP-000-luwu-reward-on-s2-baseline.md) | 2026-10-30 | Luwu reward on S2 (baseline) | baseline: Luwu task + reward, S2 robot | _running_ |
+| [EXP-000](EXP-000-luwu-reward-on-s2-baseline.md) | 2026-10-30 | Luwu reward on S2 (baseline) | baseline: Luwu task + reward, S2 robot | trained; 0 falls, 0.052 m/s interim (scoreboard pending) |

@@ -1,6 +1,6 @@
 # EXP-000: Luwu reward on S2 (baseline)
 
-**Status:** running · **Parent:** none
+**Status:** trained (awaiting scoreboard v1) · **Parent:** none
 
 ## Hypothesis (Brian, before the run)
 
@@ -26,7 +26,17 @@ Filled by hand: this run started before experiment tagging, so it has no `_EXP-0
 
 ## Results (scoreboard: `metrics.py`)
 
-_Pending. Filled by the evaluation harness once training finishes._
+_Scoreboard (`metrics.py` v1) results pending: the scoreboard isn't frozen yet._
+
+**2026-10-30, interim sanity check, NOT the scoreboard.** Checkpoint `model_1499.pt`. Headless play config: 256 envs × 500 steps (10 s sim each), random commands in the play ranges (vx −0.35…0.45 m/s, vy ±0.25 m/s, yaw rate 0), no pushes or observation noise. "Falls" = the env's own terminations.
+
+| | Luwu Mini2S policy on Mini2S (same check) | EXP-000 on S2 |
+|---|---|---|
+| Falls / early terminations | 0 | 0 |
+| Mean planar speed error | 0.044 m/s | 0.052 m/s |
+| Mean \|vx\| achieved / commanded | 0.202 / 0.203 m/s | 0.202 / 0.210 m/s |
+
+End of training (iteration 1499, training conditions with pushes and noise): mean reward 83.58 (reward-scale specific; don't compare across rewards), mean episode length 965.5 / 1000, training-time planar error 0.204 m/s, yaw-rate error 0.496 rad/s. Wall time 1 h 12 min, slowed by a viewer open alongside; ~2.1 s/iteration without it.
 
 ## What I saw (Brian: viewer, curves)
 
