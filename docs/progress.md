@@ -21,12 +21,11 @@
   - Luwu's Mini2S walk policy (HF `robomotic/XGO`, `model_1499.pt`; loads under `weights_only=True`), headless over 256 envs × 10 s sim: **0 falls, velocity-tracking error 0.044 m/s** (commanded |vx| 0.203, achieved 0.202 m/s).
   - Training throughput, `Mini2S-Walk-Flat` with 4096 envs × 24 steps: **~2.0–2.3 s per PPO iteration (~45k env-steps/s)**. A full 1500-iteration run (Luwu's setting) is ≈ 55 min on the 3090. Not compared against Linux.
 
-### Open: decisions
-- [ ] Native Windows vs. WSL2. The evidence above says native works, which would make the mirrored-mode and Hyper-V firewall steps unnecessary (a plain Windows Defender rule for the ZMQ ports is enough). Brian to confirm.
+- Decision: **native Windows** for everything (training and Pi-facing tools). WSL2 isn't needed; skip mirrored mode and the Hyper-V firewall rule.
 
 ### Open: Brian
 - [ ] V2 repo onto the PC as a read-only reference (only on the Mac today)
-- [ ] WSL mirrored mode + Hyper-V firewall rule for TCP 5556/5558/50505/50507
+- [ ] Windows Defender inbound rule for TCP 5556/5558/50505/50507 from `192.168.68.0/22` (only needed once the Pi connects back to the PC)
 - [ ] Deco DHCP reservations: Pi `.56`, PC `.55`
 - [ ] Mac's Claude memory folder copied to the PC
 - [ ] Remote access to the PC (Tailscale)
