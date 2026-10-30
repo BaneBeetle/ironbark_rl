@@ -109,3 +109,5 @@ Stretch (either path): learned "walk to object" policy vs the old Claude-API bra
 ---
 
 Track progress in `docs/progress.md` (phase/week, done, key result, one interview talking point). Update it at the end of each session.
+
+Every training run gets an entry in `docs/experiments/` (`python tools/new_experiment.py "title" --parent EXP-NNN`). Follow the rules in `docs/experiments/README.md`: hypothesis before the run, one change per experiment, compare only on the frozen `metrics.py` scoreboard. Hypothesis / observations / why are Brian's; Claude fills Setup and Results.
