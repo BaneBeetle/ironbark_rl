@@ -39,6 +39,6 @@ It's an RViz-only export:
 
 1. Start from the Mini2S MJCF (kinematics match, and it's already tuned for mjlab), and remove the arm.
 2. Add the S2's top-side payload (Pi 5, lidar, camera) as fixed bodies. Placement comes from the Yahboom URDF (`laser_Joint`, `camera_Joint`).
-3. Scale masses to measured values. `# MEASURE:` total mass on a kitchen scale; one leg's mass if it can be removed.
+3. Scale masses to measured values. Working value until measured: **~0.972 kg total**, reported online (2026-10-30, source not recorded, unverified). That's ~57% above the URDF's 0.619 kg, consistent with the Pi 5 / battery / lidar missing from the URDF. `# MEASURE:` total mass (bathroom-scale difference method or a luggage scale); one leg's mass if it can be removed. Until then, randomize base mass widely in training.
 4. Joint limits from xgolib `MOTOR_LIMIT` (see [phase1-xgolib-api.md](phase1-xgolib-api.md)), mapped to the MJCF zero pose. `# MEASURE:` the zero-pose offset per joint (command 0° and photograph against the MJCF default pose).
 5. Actuator gains, torque limit and delay from Phase 1 step responses. `# MEASURE:` replaces the Mini2S `kp=1.15, forcerange ±0.43` placeholders.
