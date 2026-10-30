@@ -10,11 +10,12 @@
 - Environment detected (above). PC LAN IP `192.168.68.55` (DHCP, no reservation yet).
 - V1 reference repo cloned read-only to WSL `~/ironbark-v1` (push URL disabled).
 - Pi located: `raspberrypi.local` → `192.168.68.56` (fixed MAC). ED25519 host key verified: `SHA256:wqOZO9hVbi+SvpNwRq5HVHM1M877bQ1TpzFUTJUguZ8`.
+- `ssh pi` works from WSL (key `ironbark-pc`, alias points at `192.168.68.56` until mirrored mode makes `.local` resolve). Pi `authorized_keys` holds only `ironbark-mac` and `ironbark-pc`.
+- Pi state: Debian 13, Python 3.13.5. `~/ironbark` is a deployed copy from 2026-08-29 (Pi-side files + smoke logs), not a git checkout.
 
 ### Open: Brian
 - [ ] URL of the V2 repo (only on the Mac today)
 - [ ] WSL mirrored mode + Hyper-V firewall rule for TCP 5556/5558/50505/50507
-- [ ] WSL SSH key authorized on the Pi (from the Mac) + `ssh pi` alias
 - [ ] Deco DHCP reservations: Pi `.56`, PC `.55`
 - [ ] Mac's Claude memory folder copied to the PC
 - [ ] Remote access to the PC (Tailscale)
