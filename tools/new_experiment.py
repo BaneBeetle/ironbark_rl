@@ -74,10 +74,11 @@ def main() -> None:
         "train_cmd": train_cmd,
         "run_glob": f"{RUNS_LOG_ROOT}/{args.experiment_name}/*_{exp_id}",
     }
-    path.write_text(Template(TEMPLATE_PATH.read_text(encoding="utf-8")).substitute(fields), encoding="utf-8")
+    # newline="\n": the repo is LF-only (.gitattributes); Windows would otherwise write CRLF.
+    path.write_text(Template(TEMPLATE_PATH.read_text(encoding="utf-8")).substitute(fields), encoding="utf-8", newline="\n")
 
     row = f"| [{exp_id}]({path.name}) | {fields['date']} | {args.title} | vs. {args.parent}: _fill in_ | _pending_ |\n"
-    with INDEX_PATH.open("a", encoding="utf-8") as index:
+    with INDEX_PATH.open("a", encoding="utf-8", newline="\n") as index:
         index.write(row)
 
     print(f"created {path.relative_to(REPO)}")
