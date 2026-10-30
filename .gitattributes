@@ -1,0 +1,2 @@
+# Repo is shared by Windows, WSL and the Pi: keep LF everywhere.
+* text=auto eol=lf
