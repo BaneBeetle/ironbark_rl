@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ironbark-rl"
+version = "0.1.0"
+description = "Locomotion RL for the IronBark robot dog (Yahboom DogZilla S2)"
+requires-python = ">=3.11"
+# No declared dependencies: mjlab, mujoco, warp, torch and Luwu's luwu_mjlab
+# (imported as `src`) come from the `luwu_mjlab` conda env. See docs/progress.md.
+
+[tool.setuptools.packages.find]
+include = ["ironbark_rl*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
