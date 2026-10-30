@@ -86,7 +86,7 @@ For each 🧠 piece: (1) explain the concept in ≤15 lines with 1–2 reference
 
 ## Phase 2A — RL locomotion (8 weeks, if Path A)
 
-Sim stack: MuJoCo Playground (MJX/JAX) + Brax PPO on the 3090. Use an existing quadruped joystick env as the template. Check current docs/APIs before coding.
+Sim stack: mjlab (MuJoCo Warp) + RSL-RL PPO on the 3090, starting from [LuwuDynamics/luwu_mjlab](https://github.com/LuwuDynamics/luwu_mjlab)'s XGO Mini2S velocity env (chosen 2026-10-30 over MuJoCo Playground/MJX + Brax, because the vendor's MJCF exists for the XGO Mini family). Use its MJCF, env plumbing and trainer as infrastructure; Brian's obs/actions/rewards replace its own, and its reward is the baseline to beat. Check current docs/APIs before coding.
 1. **Foundations:** DOGZILLA MJCF, standing test, sanity checks. 🧠 obs + action design. 📖 Rudin et al. 2021.
 2. **System ID:** reuse Phase 1 logs + replay in sim. 🧠 actuator model fit. 📖 Hwangbo et al. 2019; Tan et al. 2018.
 3. **First policy:** env + train script. 🧠 rewards v1; PPO side quest. 📖 Spinning Up PPO/GAE.
