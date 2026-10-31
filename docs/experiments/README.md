@@ -29,5 +29,5 @@ That creates `EXP-NNN-<title>.md` from [TEMPLATE.md](TEMPLATE.md), fills in the 
 
 | ID | Date | Title | Change vs parent | Verdict |
 |---|---|---|---|---|
-| [EXP-000](EXP-000-luwu-reward-on-s2-baseline.md) | 2026-10-30 | Luwu reward on S2 (baseline) | baseline: Luwu task + reward, S2 robot | trained; 0 falls, 0.052 m/s interim (scoreboard pending) |
+| [EXP-000](EXP-000-luwu-reward-on-s2-baseline.md) | 2026-10-30 | Luwu reward on S2 (baseline) | baseline: Luwu task + reward, S2 robot | v1: 0 falls · planar 0.035 m/s · yaw 0.094 rad/s · smooth 2.31 rad/s · CoT 1.42 |
 | [EXP-001](EXP-001-reward-v1-tracking-bonus-stability-smoothness.md) | 2026-10-30 | reward v1: tracking bonus, stability, smoothness | reward: Luwu's → Brian's v1 (tracking bonus, stability + smoothness penalties) | _planned_ |

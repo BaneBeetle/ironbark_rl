@@ -1,6 +1,6 @@
 # EXP-000: Luwu reward on S2 (baseline)
 
-**Status:** trained (awaiting scoreboard v1) · **Parent:** none
+**Status:** trained · scored (scoreboard v1) · **Parent:** none
 
 ## Hypothesis (Brian, before the run)
 
@@ -30,7 +30,7 @@ Filled by hand: this run started before experiment tagging, so it has no `_EXP-0
 
 ## Results (scoreboard: `metrics.py`)
 
-_Scoreboard (`metrics.py` v1) results pending: the scoreboard isn't frozen yet._
+_Scoreboard v1 results: the dated block below the interim check. Eval repeatability on the same checkpoint and seed: ±0.002 (GPU non-determinism)._
 
 **2026-10-30, interim sanity check, NOT the scoreboard.** Checkpoint `model_1499.pt`. Headless play config: 256 envs × 500 steps (10 s sim each), random commands in the play ranges (vx −0.35…0.45 m/s, vy ±0.25 m/s, yaw rate 0), no pushes or observation noise. "Falls" = the env's own terminations.
 
@@ -41,6 +41,20 @@ _Scoreboard (`metrics.py` v1) results pending: the scoreboard isn't frozen yet._
 | Mean \|vx\| achieved / commanded | 0.202 / 0.203 m/s | 0.202 / 0.210 m/s |
 
 End of training (iteration 1499, training conditions with pushes and noise): mean reward 83.58 (reward-scale specific; don't compare across rewards), mean episode length 965.5 / 1000, training-time planar error 0.204 m/s, yaw-rate error 0.496 rad/s. Wall time 1 h 12 min, slowed by a viewer open alongside; ~2.1 s/iteration without it.
+
+**2026-10-30, scoreboard v1.** Checkpoint `model_1499.pt` (iteration 1499), 32 dogs × 10 s per command, seed 0, mass 0.972 kg. Smoothness and CoT use only episodes that never fell; CoT is NaN by design where there's no ground speed (standing, turning in place).
+
+| Command (vx, vy, wz) | Fall rate | Planar err [m/s] | Yaw err [rad/s] | Joint-target rate [rad/s] | CoT |
+|---|---|---|---|---|---|
+| (+0.0, +0.0, +0.0) | 0.000 | 0.001 | 0.003 | 0.30 | nan |
+| (+0.2, +0.0, +0.0) | 0.000 | 0.046 | 0.115 | 2.60 | 1.16 |
+| (+0.4, +0.0, +0.0) | 0.000 | 0.083 | 0.145 | 3.54 | 1.43 |
+| (-0.2, +0.0, +0.0) | 0.000 | 0.037 | 0.062 | 2.23 | 1.00 |
+| (+0.0, +0.2, +0.0) | 0.000 | 0.037 | 0.115 | 2.81 | 1.76 |
+| (+0.0, -0.2, +0.0) | 0.000 | 0.036 | 0.100 | 2.80 | 1.76 |
+| (+0.0, +0.0, +0.5) | 0.000 | 0.020 | 0.100 | 2.17 | nan |
+| (+0.0, +0.0, -0.5) | 0.000 | 0.022 | 0.111 | 2.02 | nan |
+| **overall (mean of rows)** | 0.000 | 0.035 | 0.094 | 2.31 | 1.42 |
 
 ## What I saw (Brian: viewer, curves)
 
