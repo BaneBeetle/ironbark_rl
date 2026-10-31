@@ -10,6 +10,10 @@ Brian, 2026-10-30, verbatim:
 >
 > Id say everyting would proabbly be worse but future iterations we can make it better
 
+Brian's clarification, 2026-10-30, still before the run, verbatim:
+
+> When I mean cold start, I mean this is our first run without any adaptations. We probably didnt account for power consumption, and potential consequences of our naive reward policies for now. Like originally, u saw I had a loophole, there may be other loop holes who knows?
+
 ## Change (one variable)
 
 vs. EXP-000: **the reward.** Luwu's reward is replaced by Brian's reward v1 (`ironbark_rl/brian/rewards.py`). Everything else (robot, observations, actions, commands, randomization, PPO settings) stays EXP-000's.
