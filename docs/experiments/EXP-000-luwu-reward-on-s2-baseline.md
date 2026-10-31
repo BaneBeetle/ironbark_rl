@@ -56,6 +56,32 @@ End of training (iteration 1499, training conditions with pushes and noise): mea
 | (+0.0, +0.0, -0.5) | 0.000 | 0.022 | 0.111 | 2.02 | nan |
 | **overall (mean of rows)** | 0.000 | 0.035 | 0.094 | 2.31 | 1.42 |
 
+**2026-10-30, scoreboard v1.** Run `2026-10-30_20-14-38_EXP-000-s43`, checkpoint `model_1499.pt` (iteration 1499), 32 dogs × 10 s per command, seed 0, mass 0.972 kg. Smoothness and CoT use only episodes that never fell; CoT is NaN by design where there's no ground speed (standing, turning in place).
+
+| Command (vx, vy, wz) | Fall rate | Planar err [m/s] | Yaw err [rad/s] | Joint-target rate [rad/s] | CoT |
+|---|---|---|---|---|---|
+| (+0.0, +0.0, +0.0) | 0.000 | 0.002 | 0.002 | 0.33 | nan |
+| (+0.2, +0.0, +0.0) | 0.000 | 0.050 | 0.090 | 2.42 | 1.09 |
+| (+0.4, +0.0, +0.0) | 0.000 | 0.080 | 0.142 | 3.30 | 1.38 |
+| (-0.2, +0.0, +0.0) | 0.000 | 0.032 | 0.071 | 2.08 | 0.97 |
+| (+0.0, +0.2, +0.0) | 0.000 | 0.036 | 0.129 | 2.68 | 1.68 |
+| (+0.0, -0.2, +0.0) | 0.000 | 0.048 | 0.136 | 2.53 | 1.55 |
+| (+0.0, +0.0, +0.5) | 0.000 | 0.018 | 0.119 | 1.78 | nan |
+| (+0.0, +0.0, -0.5) | 0.000 | 0.019 | 0.101 | 1.83 | nan |
+| **overall (mean of rows)** | 0.000 | 0.036 | 0.099 | 2.12 | 1.33 |
+
+**2026-10-30, noise floor (seed 42 vs seed 43, scoreboard v1, overall rows).** Same setup, different training seed. Seed 43 trained to iteration 1499 in 1 h 19 min; end-of-training mean reward 87.77 (seed 42: 83.58).
+
+| Metric | Seed 42 | Seed 43 | Mean | Seed-to-seed difference |
+|---|---|---|---|---|
+| Fall rate | 0.000 | 0.000 | 0.000 | 0 |
+| Planar error [m/s] | 0.035 | 0.036 | 0.0355 | 0.001 (~3%) |
+| Yaw-rate error [rad/s] | 0.094 | 0.099 | 0.0965 | 0.005 (~5%) |
+| Joint-target rate [rad/s] | 2.31 | 2.12 | 2.215 | 0.19 (~9%) |
+| CoT | 1.42 | 1.33 | 1.375 | 0.09 (~7%) |
+
+Rule of thumb for comparisons against EXP-000: a difference smaller than these is noise. With only two seeds this is a rough floor; a third seed (44) would firm it up.
+
 ## What I saw (Brian: viewer, curves)
 
 ## Why / next (Brian)
