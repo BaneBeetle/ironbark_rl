@@ -1,8 +1,14 @@
 """Scoreboard metrics: the fixed yardstick every experiment is compared on.
 
-Brian implements this file. Claude wrote only the signatures, docstrings and the tests
-in tests/brian/test_metrics.py (run: python -m pytest tests/brian). Scoreboard rules:
-docs/experiments/README.md.
+Who wrote what (an exception to "Claude never implements brian/", Brian's call on
+2026-10-30, so the time goes to reward design):
+- Brian: tilt_deg, is_fallen, fall_rate, steps_before_fall, FALL_TILT_DEG.
+- Claude, implementing Brian's decisions: velocity_tracking_error, joint_target_rate
+  (RMS), cost_of_transport (|torque x velocity|), COMMAND_GRID, MIN_SPEED_FOR_COT_MPS.
+  Brian reviews these and must be able to explain every line.
+- Claude also wrote the signatures, docstrings and tests in tests/brian/test_metrics.py
+  (run: python -m pytest tests/brian).
+Scoreboard rules: docs/experiments/README.md.
 
 Design constraints, from the 2026-10-30 discussion:
 - Comparable across rewards AND action spaces: physical units only. Never reward
@@ -32,15 +38,26 @@ SCOREBOARD_VERSION = "v0-draft"
 # Justify it in a comment. What tilt can the S2 still recover from? What does the
 # IMU read when the dog walks normally?
 FALL_TILT_DEG: float = 46 # Mathematically, it would be able to handle 36.8 degrees. We will give 10 whole degrees of room and if it hits 46, I'm fairly certain it fell over (this would be a point of no return). This is our first place holder
-# TODO(Brian): the fixed command grid, shape (K, 3): rows of (vx, vy, wz).
-# Must include standing still. Stay inside what the real S2 can do. Measured so far:
-# the firmware turns at 39.2 deg/s (0.68 rad/s) when commanded 40. Forward speed is
-# not yet measured (# MEASURE: firmware gait top speed, tape + phone timer).
-COMMAND_GRID: np.ndarray | None = None
+# Fixed command grid, shape (K, 3): rows of (vx [m/s], vy [m/s], wz [rad/s]).
+# (Claude, Brian's accepted default.) Inside the training command ranges (vx -0.5..0.6,
+# vy +-0.3, wz +-0.8) and below the real S2's measured firmware turn rate (39.2 deg/s =
+# 0.68 rad/s). MEASURE: the S2's real forward top speed (tape + phone timer); revisit
+# the 0.4 m/s row once known.
+COMMAND_GRID: np.ndarray = np.array([
+    [0.0, 0.0, 0.0],    # stand still
+    [0.2, 0.0, 0.0],    # walk forward
+    [0.4, 0.0, 0.0],    # walk forward, faster
+    [-0.2, 0.0, 0.0],   # walk backward
+    [0.0, 0.2, 0.0],    # sidestep left
+    [0.0, -0.2, 0.0],   # sidestep right
+    [0.0, 0.0, 0.5],    # turn left in place
+    [0.0, 0.0, -0.5],   # turn right in place
+])
 
-# TODO(Brian): below this mean ground speed (m/s), cost of transport is undefined
-# (it divides by speed). Pick a value and say why.
-MIN_SPEED_FOR_COT_MPS: float | None = None
+# Below this mean ground speed, cost of transport is undefined (it divides by speed and
+# blows up as the dog stands still). (Claude, Brian's accepted default.) The standing
+# row of COMMAND_GRID will report NaN CoT by design.
+MIN_SPEED_FOR_COT_MPS: float = 0.05
 
 UPRIGHT_GRAVITY = (0, 0, -1)
 
@@ -115,7 +132,19 @@ def velocity_tracking_error(command: np.ndarray, velocity: np.ndarray, valid: np
         yaw_rate_error: mean over valid steps of |wz error|, rad/s.
       NaN for an episode with no valid steps.
     """
-    raise NotImplementedError
+    # (Claude) Error at every step for every dog, then average only the valid steps.
+    error = velocity - command                                   # (T, N, 3)
+    planar_error = np.linalg.norm(error[..., :2], axis=-1)       # (T, N), m/s
+    yaw_rate_error = np.abs(error[..., 2])                       # (T, N), rad/s
+    return _mean_over_valid_steps(planar_error, valid), _mean_over_valid_steps(yaw_rate_error, valid)
+
+
+def _mean_over_valid_steps(values: np.ndarray, valid: np.ndarray) -> np.ndarray:
+    """(Claude) Per-episode mean over time of `values` (T, N), using only `valid` steps; NaN if none."""
+    valid_count = valid.sum(axis=0)                              # (N,) how many steps count
+    valid_total = np.where(valid, values, 0.0).sum(axis=0)       # (N,) sum of the steps that count
+    with np.errstate(invalid="ignore", divide="ignore"):         # 0/0 for no-valid episodes -> NaN below
+        return np.where(valid_count > 0, valid_total / valid_count, np.nan)
 
 
 def joint_target_rate(joint_targets: np.ndarray, dt: float) -> np.ndarray:
@@ -132,7 +161,10 @@ def joint_target_rate(joint_targets: np.ndarray, dt: float) -> np.ndarray:
     Returns:
       (N,) rad/s.
     """
-    raise NotImplementedError
+    # (Claude, Brian's choice: RMS.) RMS weights big sudden target jumps more than mean
+    # |rate| does, and sudden jumps are what stress servos and transfer badly to hardware.
+    rate = np.diff(joint_targets, axis=0) / dt                   # (T-1, N, J) rad/s
+    return np.sqrt(np.mean(rate ** 2, axis=(0, 2)))              # (N,) over time and joints
 
 
 def cost_of_transport(
@@ -158,4 +190,11 @@ def cost_of_transport(
       MIN_SPEED_FOR_COT_MPS. Decide (and justify) how negative mechanical power
       (joints being back-driven) is counted.
     """
-    raise NotImplementedError
+    # (Claude, Brian's choice: absolute power.) Hobby servos draw current to brake as well
+    # as to drive and can't recover energy, so back-driven (negative) power still costs.
+    power_w = np.abs(joint_torque * joint_velocity).sum(axis=-1)     # (T, N) summed over joints
+    mean_power_w = power_w.mean(axis=0)                              # (N,)
+    mean_speed_mps = np.linalg.norm(base_velocity_xy, axis=-1).mean(axis=0)  # (N,)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        cot = mean_power_w / (mass_kg * gravity_mps2 * mean_speed_mps)
+    return np.where(mean_speed_mps >= MIN_SPEED_FOR_COT_MPS, cot, np.nan)
