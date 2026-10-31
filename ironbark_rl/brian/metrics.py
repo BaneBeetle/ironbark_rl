@@ -31,8 +31,7 @@ SCOREBOARD_VERSION = "v0-draft"
 # TODO(Brian): tilt from vertical (degrees) beyond which the dog counts as fallen.
 # Justify it in a comment. What tilt can the S2 still recover from? What does the
 # IMU read when the dog walks normally?
-FALL_TILT_DEG: float | None = None
-
+FALL_TILT_DEG: float = 46 # Mathematically, it would be able to handle 36.8 degrees. We will give 10 whole degrees of room and if it hits 46, I'm fairly certain it fell over (this would be a point of no return). This is our first place holder
 # TODO(Brian): the fixed command grid, shape (K, 3): rows of (vx, vy, wz).
 # Must include standing still. Stay inside what the real S2 can do. Measured so far:
 # the firmware turns at 39.2 deg/s (0.68 rad/s) when commanded 40. Forward speed is
@@ -43,6 +42,7 @@ COMMAND_GRID: np.ndarray | None = None
 # (it divides by speed). Pick a value and say why.
 MIN_SPEED_FOR_COT_MPS: float | None = None
 
+UPRIGHT_GRAVITY = (0, 0, -1)
 
 def tilt_deg(projected_gravity_b: np.ndarray) -> np.ndarray:
     """Body tilt from vertical, in degrees.
@@ -54,8 +54,13 @@ def tilt_deg(projected_gravity_b: np.ndarray) -> np.ndarray:
 
     Returns:
       (...) degrees: 0 = upright, 90 = on its side, 180 = upside down.
+
     """
-    raise NotImplementedError
+    
+
+    cos_tilt = np.dot(projected_gravity_b, UPRIGHT_GRAVITY)
+    cos_tilt = np.clip(cos_tilt, -1.0, 1.0)
+    return np.degrees(np.arccos(cos_tilt))
 
 
 def is_fallen(projected_gravity_b: np.ndarray) -> np.ndarray:
@@ -67,7 +72,8 @@ def is_fallen(projected_gravity_b: np.ndarray) -> np.ndarray:
     Returns:
       (T, N) bool, True where the dog counts as fallen at that step.
     """
-    raise NotImplementedError
+    return tilt_deg(projected_gravity_b) >= FALL_TILT_DEG
+    
 
 
 def fall_rate(fallen: np.ndarray) -> float:
@@ -79,8 +85,7 @@ def fall_rate(fallen: np.ndarray) -> float:
     Returns:
       float in [0, 1]. An episode that is flagged at several steps counts once.
     """
-    raise NotImplementedError
-
+    return float(fallen.any(axis=0).mean())
 
 def steps_before_fall(fallen: np.ndarray) -> np.ndarray:
     """Mask of the steps that count for the other metrics: everything before an episode's first fall.
@@ -92,7 +97,7 @@ def steps_before_fall(fallen: np.ndarray) -> np.ndarray:
       (T, N) bool. True strictly before the first fall in each episode, False from
       the first fall onwards, even if the dog is later flagged upright again.
     """
-    raise NotImplementedError
+    return np.cumsum(fallen, axis=0) == 0
 
 
 def velocity_tracking_error(command: np.ndarray, velocity: np.ndarray, valid: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
