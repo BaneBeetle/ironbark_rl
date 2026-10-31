@@ -46,7 +46,8 @@ def load_policy(task: str, env, checkpoint: Path):
     return runner.get_inference_policy(device=DEVICE)
 
 
-def make_pinned_command_env(task: str, commands: np.ndarray, seed: int, render: bool = False, viewer_size: tuple[int, int] | None = None):
+def make_pinned_command_env(task: str, commands: np.ndarray, seed: int, render: bool = False,
+                            viewer_size: tuple[int, int] | None = None, camera_distance_m: float | None = None):
     """Play-config env with one dog per row of `commands`, terminations off, resampling off."""
     cfg = load_env_cfg(task, play=True)
     cfg.scene.num_envs = len(commands)
@@ -58,6 +59,8 @@ def make_pinned_command_env(task: str, commands: np.ndarray, seed: int, render: 
     twist.init_velocity_prob = 0.0
     if viewer_size is not None:
         cfg.viewer.height, cfg.viewer.width = viewer_size
+    if camera_distance_m is not None:
+        cfg.viewer.distance = camera_distance_m
     env = RslRlVecEnvWrapper(
         ManagerBasedRlEnv(cfg=cfg, device=DEVICE, render_mode="rgb_array" if render else None),
         clip_actions=load_rl_cfg(task).clip_actions,
