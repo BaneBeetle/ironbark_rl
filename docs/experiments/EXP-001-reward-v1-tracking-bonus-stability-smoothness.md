@@ -4,7 +4,11 @@
 
 ## Hypothesis (Brian, before the run)
 
-> What will change on the scoreboard compared to the parent, and why?
+Brian, 2026-10-30, verbatim:
+
+> Id say maybe our fall rate would be higher purely because we are having a cold start rn.
+>
+> Id say everyting would proabbly be worse but future iterations we can make it better
 
 ## Change (one variable)
 
