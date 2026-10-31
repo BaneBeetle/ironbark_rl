@@ -35,6 +35,21 @@
 - **EXP-000 baseline trained** (Luwu reward, S2, 1500 iterations, 1 h 12 min). Interim check: **0 falls, 0.052 m/s planar speed error** (Luwu's own Mini2S policy: 0, 0.044). The S2 model can learn to walk. Scoreboard numbers wait on `metrics.py` v1. See [EXP-000](experiments/EXP-000-luwu-reward-on-s2-baseline.md).
 - Brian's `metrics.py` in progress: `tilt_deg`, `is_fallen`, `FALL_TILT_DEG = 46` (provisional: passive sim recovery ≤30° pitch / 25–30° roll; rigid-leg tipping 36.8° / 30.1°; +10° margin).
 
+## 2026-10-30 (evening): scoreboard v1, reward v1 design, eval + video tooling
+
+- **Scoreboard v1 frozen** (`ironbark_rl/brian/metrics.py`, 29 tests). Brian wrote `tilt_deg`, `is_fallen`, `fall_rate`, `steps_before_fall` and chose `FALL_TILT_DEG`. Claude wrote the last three functions to Brian's decisions (an exception recorded in CLAUDE.md and the file header).
+- **EXP-000 scored on v1** (`tools/eval.py`: 8 commands × 32 dogs × 10 s). Mean of seeds 42/43: 0 falls, planar 0.036 m/s, yaw 0.097 rad/s, joint-target rate 2.2 rad/s, CoT 1.38. **Seed noise floor ~3–5% (tracking), ~7–9% (smoothness, CoT).** Sim walking tilt p99 ≈ 5°, far below `FALL_TILT_DEG`.
+- **Reward v1 designed by Brian** (EXP-001: tracking bonus ≥ 0 as the largest term, stability and smoothness penalties, falls end the episode). Hypothesis recorded before the run. `brian/rewards.py` stubbed with 15 spec tests that encode his own rules (positive steps, no standing-still loophole, priority order). Glue task `IronBark-S2-Walk-Flat-BrianReward` wired and smoke-tested.
+- **Tools:** `tools/eval.py` (scoreboard → experiment file), `tools/record.py` (labeled side-on clips and progression videos to `~/dev/ironbark_runs/videos`), `tools/progress.py` (scoreboard over training iterations → `docs/figures/`), `tools/tilt_test.py`.
+
+**Interview talking point:** before comparing rewards, I froze a scoreboard in physical units and measured the seed-to-seed noise floor (~3–9%), so "my reward beat the baseline" only counts if the gap is bigger than what a different random seed alone produces.
+
+### Next session
+1. Brian implements `ironbark_rl/brian/rewards.py` (3 functions + `WEIGHTS`) until `python -m pytest tests/brian -q -k reward` passes.
+2. Train EXP-001 (command in its experiment file, ~55 min), then `tools/eval.py ... --exp EXP-001`, `tools/record.py`, `tools/progress.py --chart` against EXP-000.
+3. Learning-protocol step 6 for `metrics.py`: 2–3 interview questions, answers in `docs/notes/`.
+4. Still open: trained-policy tilt sweep to confirm `FALL_TILT_DEG`; Phase 1 joint-control measurement script (Claude writes, Brian runs on the dog); real-dog mass and walking tilt (`# MEASURE:`).
+
 **Interview talking point:** I didn't build the robot model from scratch. I checked that the vendor-family model's kinematics matched ours to within 1 mm, kept its physics, and changed only what differed (arm, payload, mass), with each change tested and each unknown marked for measurement.
 
 ### Open: Brian
