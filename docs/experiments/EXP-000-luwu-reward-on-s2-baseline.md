@@ -24,6 +24,10 @@ Filled by hand: this run started before experiment tagging, so it has no `_EXP-0
 - Run folder: `~/dev/ironbark_runs/logs/rsl_rl/ironbark_s2_walk/2026-10-30_18-26-15`
 - Console log: `~/dev/ironbark_runs/baseline_s2_luwu_reward.log`
 
+### Seed replicates (same setup, different seed: measures the noise floor, rule 4)
+
+- **Seed 43**, started 2026-10-30 20:14 at commit `c660d05`: `python tools/run.py train IronBark-S2-Walk-Flat --env.scene.num-envs 4096 --agent.max-iterations 1500 --agent.seed 43 --agent.run-name EXP-000-s43`. Run folder `~/dev/ironbark_runs/logs/rsl_rl/ironbark_s2_walk/2026-10-30_20-14-38_EXP-000-s43`, console log `~/dev/ironbark_runs/EXP-000-s43.log`.
+
 ## Results (scoreboard: `metrics.py`)
 
 _Scoreboard (`metrics.py` v1) results pending: the scoreboard isn't frozen yet._
