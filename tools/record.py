@@ -49,6 +49,15 @@ def _stamp(frame: np.ndarray, text: str, font) -> np.ndarray:
     return np.asarray(img)
 
 
+def _face_forward(env) -> None:
+    """Reset heading to +x so the fixed-azimuth camera films every segment side-on (resets randomize yaw)."""
+    robot = env.unwrapped.scene["robot"]
+    pos = robot.data.root_link_pos_w.clone()
+    identity_wxyz = torch.zeros(pos.shape[0], 4, device=pos.device)
+    identity_wxyz[:, 0] = 1.0
+    robot.write_root_link_pose_to_sim(torch.cat([pos, identity_wxyz], dim=-1))
+
+
 def record(task: str, checkpoints: list[Path], command, seconds: float, label: str, out: Path) -> Path:
     commands = np.array([command], dtype=float)
     env, _ = make_pinned_command_env(task, commands, RECORD_SEED, render=True, viewer_size=(FRAME_HEIGHT, FRAME_WIDTH),
@@ -62,10 +71,11 @@ def record(task: str, checkpoints: list[Path], command, seconds: float, label: s
         for checkpoint in checkpoints:
             policy = load_policy(task, env, checkpoint)
             env.reset()
+            _face_forward(env)
             pin_commands(env, commands)
             obs = env.get_observations()
             text = f"{label}  ·  iteration {checkpoint_iteration(checkpoint)}  ·  {cmd_text}"
-            with torch.inference_mode():
+            with torch.no_grad():  # not inference_mode: see ironbark_rl/evaluation.py
                 for _ in range(round(seconds / base.step_dt)):
                     obs, *_ = env.step(policy(obs))
                     writer.append_data(_stamp(np.asarray(env.unwrapped.render()), text, font))
