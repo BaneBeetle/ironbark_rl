@@ -30,9 +30,10 @@ every result.
 
 import numpy as np
 
-# Bump to "v1" when you freeze the scoreboard. Once frozen, any change to this file
-# means re-evaluating every experiment you compare against.
-SCOREBOARD_VERSION = "v0-draft"
+# Frozen 2026-10-30. Any change to this file means bumping the version and
+# re-evaluating every experiment you compare against (checkpoints are kept, so it's cheap).
+# FALL_TILT_DEG is still provisional: re-check it with the trained-policy tilt sweep.
+SCOREBOARD_VERSION = "v1"
 
 # TODO(Brian): tilt from vertical (degrees) beyond which the dog counts as fallen.
 # Justify it in a comment. What tilt can the S2 still recover from? What does the
