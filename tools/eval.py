@@ -29,8 +29,8 @@ def append_to_experiment(exp_id: str, result: dict, table: str) -> Path:
     path = matches[0]
     text = path.read_text(encoding="utf-8")
     block = (
-        f"**{result['date']}, scoreboard {result['scoreboard_version']}.** Checkpoint "
-        f"`{Path(result['checkpoint']).name}` (iteration {result['iteration']}), "
+        f"**{result['date']}, scoreboard {result['scoreboard_version']}.** Run `{Path(result['checkpoint']).parent.name}`, "
+        f"checkpoint `{Path(result['checkpoint']).name}` (iteration {result['iteration']}), "
         f"{result['episodes_per_command']} dogs × {result['seconds']:g} s per command, seed {result['seed']}, "
         f"mass {result['mass_kg']:.3f} kg. Smoothness and CoT use only episodes that never fell; "
         f"CoT is NaN by design where there's no ground speed (standing, turning in place).\n\n{table}\n"
