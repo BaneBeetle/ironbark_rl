@@ -73,6 +73,8 @@ RL locomotion needs per-joint position control at a usable rate. Today the firmw
 ### 🧠 Brian implements: `ironbark_rl/brian/`
 You may create stubs (signature, docstring with shapes/units, `raise NotImplementedError`, TODOs) and tests in `tests/brian/`. **Never the implementation.**
 
+Exception (Brian's call, 2026-10-30): Claude implemented the last three functions of `metrics.py` (`velocity_tracking_error`, `joint_target_rate`, `cost_of_transport`) to Brian's decisions, so his time goes to reward design. The file header records who wrote what. No other `brian/` file is covered; `rewards.py` stays fully Brian's.
+
 Path A: `obs.py`, `actions.py`, `rewards.py`, `actuator_model.py` (system ID fit), `randomization.py` (ranges justified by data), `metrics.py`, plus side quest `ppo_minimal.py` (GAE + clipped loss on CartPole).
 Path B: `obs.py` (what the policy sees), `actions.py` (discrete motion vocab), `rewards.py` or `bc_loss.py`, `metrics.py` (success rate, target-loss rate, time-to-reacquire, command smoothness vs rule-based).
 
