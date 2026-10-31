@@ -35,14 +35,14 @@ Design reasoning (Brian):
 
 ## Setup
 
-_Refreshed when training starts: the task will be an S2 task using `rewards.py` (not `IronBark-S2-Walk-Flat`, which uses Luwu's reward), and the commit will include Brian's implementation._
+_Commit is filled at launch (it must include Brian's implementation)._
 
 - Date: 2026-10-30
 - Commit: _at launch_
-- Task: _S2 task with Brian's reward (to be wired)_
+- Task: `IronBark-S2-Walk-Flat-BrianReward` (EXP-000's task with only the reward swapped; glue in `ironbark_rl/tasks/s2_walk_brian/`)
 - Seed: 42 · Iterations: 1500 · Envs: 4096
-- Train: _at launch_ (tagged `--agent.run-name EXP-001`)
-- Run folder: `~/dev/ironbark_runs/logs/rsl_rl/<experiment>/*_EXP-001`
+- Train: `python tools/run.py train IronBark-S2-Walk-Flat-BrianReward --env.scene.num-envs 4096 --agent.max-iterations 1500 --agent.seed 42 --agent.run-name EXP-001`
+- Run folder: `~/dev/ironbark_runs/logs/rsl_rl/ironbark_s2_walk_brian_reward/*_EXP-001`
 
 ## Results (scoreboard: `metrics.py`)
 
