@@ -75,39 +75,42 @@ def pin_commands(env, commands: np.ndarray) -> None:
     base.scene["robot"].write_root_link_velocity_to_sim(torch.zeros(len(commands), 6, device=base.device))
 
 
-def rollout(task: str, checkpoint: Path, episodes_per_command: int, seconds: float, seed: int) -> dict:
-    """Run the grid and return per-step arrays (numpy) for the metrics."""
+def rollouts(task: str, checkpoints: list[Path], episodes_per_command: int, seconds: float, seed: int):
+    """Yield (checkpoint, per-step arrays) for each checkpoint, reusing one env (building it is the slow part)."""
     grid = np.asarray(metrics.COMMAND_GRID, dtype=float)
     commands = np.repeat(grid, episodes_per_command, axis=0)  # dog i runs grid[i // episodes_per_command]
     env, cfg = make_pinned_command_env(task, commands, seed)
-    policy = load_policy(task, env, checkpoint)
     base, robot = env.unwrapped, env.unwrapped.scene["robot"]
-    env.reset()
-    pin_commands(env, commands)
     scale = cfg.actions[JOINT_ACTION].scale
     default_q = robot.data.default_joint_pos
     steps = round(seconds / base.step_dt)
     keys = ("gravity", "command", "velocity", "joint_targets", "joint_torque", "joint_velocity", "base_velocity_xy")
-    rec = {k: [] for k in keys}
-    obs = env.get_observations()
-    with torch.inference_mode():
-        for _ in range(steps):
-            obs, *_ = env.step(policy(obs))
-            lin_b, ang_b = robot.data.root_link_lin_vel_b, robot.data.root_link_ang_vel_b
-            for key, value in (
-                ("gravity", robot.data.projected_gravity_b),
-                ("command", base.command_manager.get_command(TWIST_COMMAND)),
-                ("velocity", torch.cat([lin_b[:, :2], ang_b[:, 2:3]], dim=-1)),
-                ("joint_targets", default_q + scale * base.action_manager.action),
-                ("joint_torque", robot.data.actuator_force),
-                ("joint_velocity", robot.data.joint_vel),
-                ("base_velocity_xy", lin_b[:, :2]),
-            ):
-                rec[key].append(value.cpu().numpy())
-    out = {k: np.stack(v) for k, v in rec.items()}  # each (T, N, ...)
-    out.update(grid=grid, dt=base.step_dt, mass_kg=float(base.sim.mj_model.body_mass.sum()))
+    for checkpoint in checkpoints:
+        policy = load_policy(task, env, checkpoint)
+        env.reset()
+        pin_commands(env, commands)
+        rec = {k: [] for k in keys}
+        obs = env.get_observations()
+        # no_grad, not inference_mode: inference_mode marks env buffers created during the
+        # rollout read-only, and the next checkpoint's env.reset() then fails to update them.
+        with torch.no_grad():
+            for _ in range(steps):
+                obs, *_ = env.step(policy(obs))
+                lin_b, ang_b = robot.data.root_link_lin_vel_b, robot.data.root_link_ang_vel_b
+                for key, value in (
+                    ("gravity", robot.data.projected_gravity_b),
+                    ("command", base.command_manager.get_command(TWIST_COMMAND)),
+                    ("velocity", torch.cat([lin_b[:, :2], ang_b[:, 2:3]], dim=-1)),
+                    ("joint_targets", default_q + scale * base.action_manager.action),
+                    ("joint_torque", robot.data.actuator_force),
+                    ("joint_velocity", robot.data.joint_vel),
+                    ("base_velocity_xy", lin_b[:, :2]),
+                ):
+                    rec[key].append(value.cpu().numpy())
+        data = {k: np.stack(v) for k, v in rec.items()}  # each (T, N, ...)
+        data.update(grid=grid, dt=base.step_dt, mass_kg=float(base.sim.mj_model.body_mass.sum()))
+        yield checkpoint, data
     env.close()
-    return out
 
 
 def score(data: dict, episodes_per_command: int) -> dict:
@@ -149,13 +152,21 @@ def markdown_table(result: dict) -> str:
     return header + body + fmt(result["overall"], "**overall (mean of rows)**")
 
 
+def evaluate_many(task: str, checkpoints: list[Path], episodes_per_command: int = EPISODES_PER_COMMAND,
+                  seconds: float = EVAL_SECONDS, seed: int = EVAL_SEED) -> list[dict]:
+    results = []
+    for checkpoint, data in rollouts(task, checkpoints, episodes_per_command, seconds, seed):
+        result = score(data, episodes_per_command)
+        result.update(
+            scoreboard_version=metrics.SCOREBOARD_VERSION, task=task, checkpoint=str(checkpoint),
+            iteration=checkpoint_iteration(checkpoint), episodes_per_command=episodes_per_command,
+            seconds=seconds, seed=seed, mass_kg=data["mass_kg"], date=datetime.date.today().isoformat(),
+        )
+        results.append(result)
+    return results
+
+
 def evaluate(task: str, checkpoint: Path, episodes_per_command: int = EPISODES_PER_COMMAND,
              seconds: float = EVAL_SECONDS, seed: int = EVAL_SEED) -> dict:
-    data = rollout(task, checkpoint, episodes_per_command, seconds, seed)
-    result = score(data, episodes_per_command)
-    result.update(
-        scoreboard_version=metrics.SCOREBOARD_VERSION, task=task, checkpoint=str(checkpoint),
-        iteration=checkpoint_iteration(checkpoint), episodes_per_command=episodes_per_command,
-        seconds=seconds, seed=seed, mass_kg=data["mass_kg"], date=datetime.date.today().isoformat(),
-    )
-    return result
+    """The official scoreboard number for one checkpoint (fresh env, fixed seed)."""
+    return evaluate_many(task, [checkpoint], episodes_per_command, seconds, seed)[0]
