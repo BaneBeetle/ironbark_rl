@@ -52,6 +52,19 @@
 
 **Interview talking point:** I didn't build the robot model from scratch. I checked that the vendor-family model's kinematics matched ours to within 1 mm, kept its physics, and changed only what differed (arm, payload, mass), with each change tested and each unknown marked for measurement.
 
+## 2026-11-06: EXP-000 progress chart, reward plan change, off OneDrive
+
+- **EXP-000 progress chart** ([figure](figures/EXP-000--Luwu-reward_progress.png), seed 42): speed-tracking error 0.152 → 0.041 m/s by iteration 200, ~0.036 after. 0 falls at every checkpoint, iteration 0 included (with terminations off, an untrained dog doesn't tip past 46°). The sweep takes 241 s on a free GPU; the earlier 45-min attempt shared the GPU with seed-43 training. Recording is ~1 ms of a ~29 ms env step, so `evaluation.py` is unchanged. **Run eval/progress/record only while nothing is training.**
+- **Plan change (Brian):** reward v1's three terms give way to Brian's own legged_gym-style terms (Rudin et al. 2021), one function each returning (num_envs,): `track_lin_vel_xy`, `track_ang_vel_z` (exp kernels), `lin_vel_z`, `ang_vel_xy`, `orientation`, `base_height`, `torques`, `joint_acc`, `action_rate`, `feet_air_time`, `undesired_contacts`. None implemented yet. Brian writes every term; never show or summarize Luwu's reward code; stubs and reviews annotate tensor shapes on every line.
+- Claude's part: (1) per term, which mjlab tensors and shapes, no math; (2) stubs + known-case tests in `tests/brian/test_rewards.py`; (3) weights in a config file Brian edits; (4) task `IronBark-S2-Walk-Flat-Brian`, baseline except the reward; (5) compare on `metrics.py` only, never reward values. Note in `docs/roadmap.md` (don't build): RL policy as the fast "cerebellum", a VLM as the slow "brain" sending (vx, vy, yaw_rate).
+- Step 1 done for `track_ang_vel_z` and `orientation`, checked in the S2 training env: `env.command_manager.get_command("twist")` (num_envs, 3) = (vx, vy, wz), body frame, wz ∈ [−0.8, 0.8] rad/s, resampled every 3–8 s, zeroed when its norm < 0.1; yaw rate `robot.data.root_link_ang_vel_b[:, 2]` (body; `_w` is world); `robot.data.projected_gravity_b` (num_envs, 3), level (0, 0, −1), standing S2 ≈ (0.025, −0.007, −0.9997).
+- Off OneDrive: Claude memory merged into the dev-folder project; code docstrings no longer mention OneDrive. Brian deletes the OneDrive copy himself.
+
+### Next session (open it on `C:\Users\lolly\dev\ironbark_rl`)
+1. Brian decides: does the new term set replace reward v1 (EXP-001, never trained, 15 spec tests)? Keep the `-BrianReward` task or register `IronBark-S2-Walk-Flat-Brian`?
+2. Step 1 for the other nine terms, one batch at a time, waiting for Brian; then steps 2–5.
+3. Then items 3–4 of the 2026-10-30 list.
+
 ### Open: Brian
 - [ ] V2 repo onto the PC as a read-only reference (only on the Mac today)
 - [ ] Windows Defender inbound rule for TCP 5556/5558/50505/50507 from `192.168.68.0/22` (only needed once the Pi connects back to the PC)
