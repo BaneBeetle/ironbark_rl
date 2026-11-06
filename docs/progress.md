@@ -59,10 +59,17 @@
 - Claude's part: (1) per term, which mjlab tensors and shapes, no math; (2) stubs + known-case tests in `tests/brian/test_rewards.py`; (3) weights in a config file Brian edits; (4) task `IronBark-S2-Walk-Flat-Brian`, baseline except the reward; (5) compare on `metrics.py` only, never reward values. Note in `docs/roadmap.md` (don't build): RL policy as the fast "cerebellum", a VLM as the slow "brain" sending (vx, vy, yaw_rate).
 - Step 1 done for `track_ang_vel_z` and `orientation`, checked in the S2 training env: `env.command_manager.get_command("twist")` (num_envs, 3) = (vx, vy, wz), body frame, wz ∈ [−0.8, 0.8] rad/s, resampled every 3–8 s, zeroed when its norm < 0.1; yaw rate `robot.data.root_link_ang_vel_b[:, 2]` (body; `_w` is world); `robot.data.projected_gravity_b` (num_envs, 3), level (0, 0, −1), standing S2 ≈ (0.025, −0.007, −0.9997).
 - Off OneDrive: Claude memory merged into the dev-folder project; code docstrings no longer mention OneDrive. Brian deletes the OneDrive copy himself.
+- **Decisions (Brian):** the new term set **replaces reward v1**. EXP-001 is marked superseded, never trained. The v1 stubs, 15 spec tests and `-BrianReward` glue go when the new stubs land. Two v1 rules carry over as scenario tests: a normal walking step pays > 0, and standing still loses when ordered to walk. **Task name: `IronBark-S2-Walk-Flat-Brian`.**
+- **Step 1, batch 1 (base state)**, checked in the S2 training env (16 envs, 2 s at zero action, default pose). All tensors are on `robot = env.scene["robot"]`, body frame unless marked `_w`:
+  - `track_lin_vel_xy`: `command[:, :2]` (num_envs, 2) vs `robot.data.root_link_lin_vel_b[:, :2]` (num_envs, 2), m/s. Command ranges vx ∈ [−0.5, 0.6] and vy ∈ [−0.3, 0.3]. `heading_command` is off, so wz is commanded directly.
+  - `lin_vel_z`: `root_link_lin_vel_b[:, 2]` (num_envs,), m/s. Standing: |.| ≤ 0.001.
+  - `ang_vel_xy`: `root_link_ang_vel_b[:, :2]` (num_envs, 2), roll and pitch rate, rad/s. Standing: |.| ≤ 0.007.
+  - `base_height`: `root_link_pos_w[:, 2]` (num_envs,), m. The terrain is a plane at z = 0 and every env origin has z = 0, so world z is the height above ground. Standing at the default pose: 0.1228 m (spawn height 0.20). The target height is Brian's call.
+  - Gotcha: the root body `base` is a massless frame (the trunk mass sits in its child `base_model`), so `root_com_*` is meaningless on this model (`root_com_pos_w` z reads 0.273). Use `root_link_*`, which the scoreboard (`evaluation.py`) also reads.
 
 ### Next session (open it on `C:\Users\lolly\dev\ironbark_rl`)
-1. Brian decides: does the new term set replace reward v1 (EXP-001, never trained, 15 spec tests)? Keep the `-BrianReward` task or register `IronBark-S2-Walk-Flat-Brian`?
-2. Step 1 for the other nine terms, one batch at a time, waiting for Brian; then steps 2–5.
+1. Brian reviews batch 1. Then step 1, batch 2 (joint space: `torques`, `joint_acc`, `action_rate`) and batch 3 (contacts: `feet_air_time`, `undesired_contacts`), waiting for Brian after each.
+2. Steps 2–5: stubs + known-case tests (replacing v1's), weights config, register `IronBark-S2-Walk-Flat-Brian` (drop `-BrianReward`), a new experiment entry (Brian's hypothesis first), eval vs EXP-000 on `metrics.py`. Plus the `docs/roadmap.md` cerebellum/brain note.
 3. Then items 3–4 of the 2026-10-30 list.
 
 ### Open: Brian
