@@ -6,7 +6,7 @@
 
 One dog, camera following it, command pinned, starting from rest, terminations off (a
 fall stays on camera). Every frame is stamped with label, iteration and command.
-Videos go to IRONBARK_RUNS/videos (outside OneDrive).
+Videos go to IRONBARK_RUNS/videos (outside the repo).
 """
 
 import argparse

@@ -1,6 +1,6 @@
 """Where training runs live, and how to find their checkpoints.
 
-Runs go to IRONBARK_RUNS (default ~/dev/ironbark_runs), outside the OneDrive-synced repo.
+Runs go to IRONBARK_RUNS (default ~/dev/ironbark_runs), outside the repo.
 """
 
 import os

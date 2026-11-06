@@ -1,7 +1,6 @@
 """Run luwu_mjlab's train/play scripts with the IronBark tasks registered.
 
-Logs and checkpoints land in IRONBARK_RUNS (default ~/dev/ironbark_runs), outside the
-OneDrive-synced repo.
+Logs and checkpoints land in IRONBARK_RUNS (default ~/dev/ironbark_runs), outside the repo.
 
   python tools/run.py train IronBark-S2-Walk-Flat --env.scene.num-envs 4096
   python tools/run.py play  IronBark-S2-Walk-Flat --viewer native
