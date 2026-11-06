@@ -30,4 +30,4 @@ That creates `EXP-NNN-<title>.md` from [TEMPLATE.md](TEMPLATE.md), fills in the 
 | ID | Date | Title | Change vs parent | Verdict |
 |---|---|---|---|---|
 | [EXP-000](EXP-000-luwu-reward-on-s2-baseline.md) | 2026-10-30 | Luwu reward on S2 (baseline) | baseline: Luwu task + reward, S2 robot | v1, mean of seeds 42/43: 0 falls · planar 0.036 m/s · yaw 0.097 rad/s · smooth 2.2 rad/s · CoT 1.38 (seed noise ~3–9%) |
-| [EXP-001](EXP-001-reward-v1-tracking-bonus-stability-smoothness.md) | 2026-10-30 | reward v1: tracking bonus, stability, smoothness | reward: Luwu's → Brian's v1 (tracking bonus, stability + smoothness penalties) | _planned_ |
+| [EXP-001](EXP-001-reward-v1-tracking-bonus-stability-smoothness.md) | 2026-10-30 | reward v1: tracking bonus, stability, smoothness | reward: Luwu's → Brian's v1 (tracking bonus, stability + smoothness penalties) | superseded 2026-11-06, never trained (replaced by the legged_gym-style term set) |

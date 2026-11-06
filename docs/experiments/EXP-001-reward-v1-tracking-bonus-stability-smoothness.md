@@ -1,6 +1,6 @@
 # EXP-001: reward v1: tracking bonus, stability, smoothness
 
-**Status:** planned · **Parent:** EXP-000
+**Status:** superseded 2026-11-06, never trained · **Parent:** EXP-000
 
 ## Hypothesis (Brian, before the run)
 
@@ -47,6 +47,8 @@ _Commit is filled at launch (it must include Brian's implementation)._
 ## Results (scoreboard: `metrics.py`)
 
 _Pending. Filled by the evaluation harness once training finishes._
+
+- 2026-11-06: not run. Brian replaced reward v1 with his own legged_gym-style term set (Rudin et al. 2021), which becomes a new experiment under task `IronBark-S2-Walk-Flat-Brian`. See [progress.md](../progress.md), 2026-11-06.
 
 ## What I saw (Brian: viewer, curves)
 
