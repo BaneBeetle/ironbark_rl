@@ -66,13 +66,26 @@
   - `ang_vel_xy`: `root_link_ang_vel_b[:, :2]` (num_envs, 2), roll and pitch rate, rad/s. Standing: |.| ≤ 0.007.
   - `base_height`: `root_link_pos_w[:, 2]` (num_envs,), m. The terrain is a plane at z = 0 and every env origin has z = 0, so world z is the height above ground. Standing at the default pose: 0.1228 m (spawn height 0.20). The target height is Brian's call.
   - Gotcha: the root body `base` is a massless frame (the trunk mass sits in its child `base_model`), so `root_com_*` is meaningless on this model (`root_com_pos_w` z reads 0.273). Use `root_link_*`, which the scoreboard (`evaluation.py`) also reads.
+- **Decision (Brian): body frame (`root_link_*_b`) for `lin_vel_z` and `ang_vel_xy`.** Why: on a slope the body z axis follows the slope normal. World-frame z velocity would punish ordinary downhill walking (it's negative the whole way down), but body-frame z velocity stays ≈ 0 unless the dog is bouncing. On flat ground the two are nearly identical, so body frame costs nothing now and carries over to slopes and rough terrain. It's also the legged_gym convention.
+- **Base-height target:** Brian measures the real S2 standing with a ruler. Until then it's `BASE_HEIGHT_TARGET_M = None` in `ironbark_rl/brian/reward_config.py`, whose `# MEASURE:` comment says how: floor → thigh-pivot centre, mean of 4 legs, + 0.021 m (sim offset from the thigh pivot to the `base` origin).
+- **Fall terminations as the task stands (train and play alike):**
+  - `fell_over` (mjlab `bad_orientation`): tilt > 1.2217 rad = **70°**, using the same tilt as `metrics.tilt_deg` (angle between body z and gravity).
+  - `illegal_contact`: any non-foot geom (everything except the 4 calf collision geoms) touching the ground with > 10 N in any of the last 4 physics substeps.
+  - Episodes time out at 20 s.
+  - Open for Brian: the scoreboard counts a fall at 46° (`FALL_TILT_DEG`) but training only ends at 70°. And 10 N is more than the S2's whole weight (9.54 N), so a trunk resting on the floor may never trip `illegal_contact`; only impacts would.
+- **Step 1, batch 2 (joint space)**, same probe (16 envs, 2 s standing at the default pose). 12 joints, ordered fl, fr, br, bl × (hip, thigh, calf). Actuator and action order match.
+  - `torques`: `robot.data.actuator_force` (num_envs, 12), N·m. These are MuJoCo position servos, gear 1, clamped at ±0.43 N·m (`forcerange`, a Mini2S placeholder, `# MEASURE:` in Phase 1). mjlab's `joint_torques` raises NotImplementedError. Standing: max 0.125, mean 0.045 N·m.
+  - `joint_acc`: `robot.data.joint_acc` (num_envs, 12), rad/s² (MuJoCo `qacc`). Standing: max 1.4, mean 0.05 rad/s², so it isn't 0 even at rest. mjlab doesn't keep the previous step's `joint_vel` (num_envs, 12), so a per-policy-step difference would need glue state.
+  - `action_rate`: `env.action_manager.action` and `.prev_action`, both (num_envs, 12), the raw policy output (unitless). Joint target = `default_joint_pos` + 0.25 × action, no clip. `prev_prev_action` also exists. On reset mjlab zeroes all three, so an episode's first step compares against 0.
+  - Timing: the reward runs once per 20 ms policy step, after 5 physics substeps of 4 ms. `actuator_force` and `joint_acc` are the last substep's values, not averages.
 
 ### Next session (open it on `C:\Users\lolly\dev\ironbark_rl`)
-1. Brian reviews batch 1. Then step 1, batch 2 (joint space: `torques`, `joint_acc`, `action_rate`) and batch 3 (contacts: `feet_air_time`, `undesired_contacts`), waiting for Brian after each.
-2. Steps 2–5: stubs + known-case tests (replacing v1's), weights config, register `IronBark-S2-Walk-Flat-Brian` (drop `-BrianReward`), a new experiment entry (Brian's hypothesis first), eval vs EXP-000 on `metrics.py`. Plus the `docs/roadmap.md` cerebellum/brain note.
+1. Brian reviews batch 2 and the two termination questions (46° vs 70°, the 10 N contact threshold). Then step 1, batch 3 (contacts: `feet_air_time`, `undesired_contacts`), waiting for Brian.
+2. Steps 2–5: stubs + known-case tests (replacing v1's), weights in `reward_config.py`, register `IronBark-S2-Walk-Flat-Brian` (drop `-BrianReward`), a new experiment entry (Brian's hypothesis first), eval vs EXP-000 on `metrics.py`. Plus the `docs/roadmap.md` cerebellum/brain note.
 3. Then items 3–4 of the 2026-10-30 list.
 
 ### Open: Brian
+- [ ] Ruler: real S2 standing thigh-pivot height → `BASE_HEIGHT_TARGET_M` (how: `ironbark_rl/brian/reward_config.py`)
 - [ ] V2 repo onto the PC as a read-only reference (only on the Mac today)
 - [ ] Windows Defender inbound rule for TCP 5556/5558/50505/50507 from `192.168.68.0/22` (only needed once the Pi connects back to the PC)
 - [ ] Deco DHCP reservations: Pi `.56`, PC `.55`
