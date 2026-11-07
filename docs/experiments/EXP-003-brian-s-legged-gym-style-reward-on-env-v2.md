@@ -1,6 +1,6 @@
 # EXP-003: Brian's legged_gym-style reward on env v2
 
-**Status:** training · **Parent:** EXP-002
+**Status:** trained 2026-11-07 (seed 42), verdict pending (Brian) · **Parent:** EXP-002
 
 ## Hypothesis (Brian, before the run)
 
@@ -29,6 +29,26 @@ Fall-on-purpose guard before training (`tools/reward_check.py`): mean per-step t
 ## Results (scoreboard: `metrics.py`)
 
 _Pending. Filled by the evaluation harness once training finishes._
+
+**2026-11-07, scoreboard v1.** Run `2026-11-07_00-08-25_EXP-003`, checkpoint `model_1499.pt` (iteration 1499), 32 dogs × 10 s per command, seed 0, mass 0.972 kg. Smoothness and CoT use only episodes that never fell; CoT is NaN by design where there's no ground speed (standing, turning in place).
+
+| Command (vx, vy, wz) | Fall rate | Planar err [m/s] | Yaw err [rad/s] | Joint-target rate [rad/s] | CoT |
+|---|---|---|---|---|---|
+| (+0.0, +0.0, +0.0) | 0.000 | 0.009 | 0.032 | 0.71 | nan |
+| (+0.2, +0.0, +0.0) | 0.000 | 0.046 | 0.072 | 2.87 | 1.04 |
+| (+0.4, +0.0, +0.0) | 0.000 | 0.070 | 0.104 | 3.97 | 1.37 |
+| (-0.2, +0.0, +0.0) | 0.000 | 0.048 | 0.074 | 2.40 | 1.00 |
+| (+0.0, +0.2, +0.0) | 0.000 | 0.045 | 0.099 | 2.99 | 1.60 |
+| (+0.0, -0.2, +0.0) | 0.000 | 0.040 | 0.088 | 2.97 | 1.57 |
+| (+0.0, +0.0, +0.5) | 0.000 | 0.024 | 0.096 | 2.10 | nan |
+| (+0.0, +0.0, -0.5) | 0.000 | 0.029 | 0.110 | 2.19 | 2.21 |
+| **overall (mean of rows)** | 0.000 | 0.039 | 0.084 | 2.53 | 1.47 |
+
+**2026-11-07, gait diagnostics (not scoreboard).** Run `2026-11-07_00-08-25_EXP-003`, checkpoint `model_1499.pt`, 32 dogs × 10 s per command (first 1 s skipped), seed 0. Saturation: requested torque above the 0.43 N·m cap.
+
+| Servo saturation | Swing p10 [s] | Swing median [s] | Swing p90 [s] | Flicker touchdowns (< 0.02 s) | Touchdowns / foot / s |
+|---|---|---|---|---|---|
+| 1.04% | 0.008 | 0.168 | 0.208 | 24.8% | 2.65 |
 
 ## What I saw (Brian: viewer, curves)
 
