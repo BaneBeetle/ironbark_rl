@@ -182,7 +182,11 @@ def feet_air_time(first_contact: torch.Tensor, last_air_time: torch.Tensor, comm
     Returns:
       (num_envs,), exactly 0 on a step where no foot touches down, or when the command is zero.
     """
-    raise NotImplementedError
+    pay = last_air_time - air_time_threshold_s
+    pay = pay * first_contact
+    total = pay.sum(dim=1)
+    moving = (torch.norm(command[:, :2], dim=1) > 0.1) | (torch.abs(command[:, 2]) > 0.1)
+    return total * moving
 
 
 def undesired_contacts(contact_forces: torch.Tensor) -> torch.Tensor:
