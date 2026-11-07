@@ -25,6 +25,14 @@ Only `WEIGHTS["feet_air_time"]` changed, one commit per run. Before each run: 88
 | 4 | EXP-006 | 15 | 5.34% | 0.0664 | 9.9% | 0.000 |
 | 5 | EXP-007 | 30 | 11.72% | 0.1087 | 7.4% | 0.000 |
 
+**Queue (Brian, 2026-11-07), one run at a time, same scoring, same rules as overnight** (one change per run, tests + guard before each, crash → resume once, config back to 7.5 at the end):
+1. EXP-004 seeds 43 and 44 (`EXP-004-s43`, `-s44`).
+2. EXP-005 seeds 43 and 44 (config restored as when EXP-005 trained: 3.0).
+3. EXP-002 (Luwu baseline) seeds 43 and 44. Guard skipped there: it's Luwu's reward.
+4. A new sweep point, weight 5.0, seed 42 (EXP-008).
+
+Then a final summary: per-weight mean ± spread across seeds (saturation, planar error, flicker), plus the baseline's. Started 05:48.
+
 **Ranked under the overnight objective** (superseded, kept for the record):
 
 Planar cap = EXP-002's 0.0355 m/s + 10% = **0.0391 m/s**. Ranked by flicker share (swings < 0.02 s at touchdown) among runs with 0 falls and planar error ≤ cap; runs missing a constraint follow, unranked. All seed 42, one seed each. Scoreboard v1 + `gait_check` diagnostics, command grid, eval seed 0.
