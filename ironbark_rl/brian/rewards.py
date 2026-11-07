@@ -37,6 +37,8 @@ Typical walking step: EXP-000 policy on env v2 (scoreboard conditions, 256 dogs 
 
 import torch
 
+from ironbark_rl.brian import reward_config
+
 
 def track_lin_vel_xy(command_xy: torch.Tensor, lin_vel_xy: torch.Tensor, width: float) -> torch.Tensor:
     """Bonus for matching the commanded planar velocity (an exp kernel).
@@ -237,7 +239,7 @@ def feet_air_time(first_contact: torch.Tensor, last_air_time: torch.Tensor, comm
     pay = last_air_time - air_time_threshold_s
     pay = pay * first_contact
     total = pay.sum(dim=1)
-    moving = (torch.norm(command[:, :2], dim=1) > 0.1) | (torch.abs(command[:, 2]) > 0.1)
+    moving = (torch.norm(command[:, :2], dim=1) > reward_config.MOVING_CMD_THRESHOLD) | (torch.abs(command[:, 2]) > reward_config.MOVING_CMD_THRESHOLD)
     return total * moving
 
 

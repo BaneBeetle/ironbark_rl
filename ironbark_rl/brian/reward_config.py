@@ -31,6 +31,10 @@ TRACK_ANG_VEL_WIDTH: float | None = None
 # both EXP-000 on env v2; tests/brian/test_rewards.py checks both.
 FEET_AIR_TIME_THRESHOLD_S: float | None = 0.07
 
+# feet_air_time's gate (Brian's mask): a command counts as "move" when its planar speed (m/s) or
+# its yaw rate (rad/s) exceeds this. One number for both units, Brian's 0.1.
+MOVING_CMD_THRESHOLD = 0.1
+
 # undesired_contacts: a non-foot part counts as touching only above this force, so contact-solver
 # noise isn't penalized. Anything over 1.43 N already ends the episode.
 UNDESIRED_CONTACT_MIN_FORCE_N: float | None = None
