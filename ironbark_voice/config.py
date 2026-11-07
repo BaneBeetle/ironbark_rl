@@ -43,7 +43,9 @@ TTS_SAMPLE_WIDTH_BYTES = 2  # 16-bit PCM
 VOICE_ID: str | None = None  # Brian picks from the shortlist; None until then
 
 # --- Audio output (PC dev mode) ----------------------------------------------------------
-OUTPUT_DEVICE: int | str | None = None  # Brian: system default for now (None = default)
+# Brian: system default for now (None = default). To pick one, use part of its name (e.g.
+# "Realtek Digital Output"), not its number: numbers shift when headphones connect.
+OUTPUT_DEVICE: str | None = None
 
 # --- Robot (read-only) -------------------------------------------------------------------
 PI_HOST = "raspberrypi.local"  # memory: lolly@raspberrypi.local (192.168.68.56)

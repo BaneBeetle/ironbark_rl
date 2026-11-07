@@ -1,6 +1,26 @@
 """PCM playback with a fake stream: no sound card."""
 
-from ironbark_voice.player import PcmPlayer, align_to_samples
+import pytest
+
+from ironbark_voice.player import PcmPlayer, align_to_samples, resolve_output_device
+
+DEVICES = [  # what list_output_devices() returns: default audio API only
+    {"index": 7, "name": "Microsoft Sound Mapper - Output", "host_api": "MME", "default": False},
+    {"index": 9, "name": "Realtek Digital Output (Realtek", "host_api": "MME", "default": False},
+    {"index": 10, "name": "Headphones (Elgato Wave:3)", "host_api": "MME", "default": True},
+]
+
+
+def test_resolve_device_by_name_fragment():
+    assert resolve_output_device("realtek digital", DEVICES) == 9  # case-insensitive fragment
+    assert resolve_output_device(None, DEVICES) is None  # system default
+
+
+def test_resolve_device_must_be_unambiguous():
+    with pytest.raises(ValueError, match="matched: none"):
+        resolve_output_device("AirPods", DEVICES)
+    with pytest.raises(ValueError, match="exactly one"):
+        resolve_output_device("(", DEVICES)  # matches two names
 
 
 def test_align_carries_split_samples():

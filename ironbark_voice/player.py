@@ -46,15 +46,20 @@ class PlaybackTiming:
         return self.first_write_s + self.output_latency_s
 
 
-def list_output_devices() -> list[dict]:
-    """Every device that can play sound, with the system default flagged."""
+def list_output_devices(all_host_apis: bool = False) -> list[dict]:
+    """Devices that can play sound, with the system default flagged.
+
+    Windows lists each physical device once per audio API (MME, DirectSound, WASAPI, WDM-KS).
+    By default only the default device's API is shown, so each device appears once.
+    """
     import sounddevice as sd
 
     host_apis = sd.query_hostapis()
     default_out = sd.default.device[1]  # (input, output) pair; we want output
+    default_api = sd.query_devices(default_out)["hostapi"]
     devices = []
     for index, dev in enumerate(sd.query_devices()):
-        if dev["max_output_channels"] > 0:  # skip microphones
+        if dev["max_output_channels"] > 0 and (all_host_apis or dev["hostapi"] == default_api):  # skip microphones
             devices.append(
                 {
                     "index": index,  # what config.OUTPUT_DEVICE takes
@@ -64,6 +69,24 @@ def list_output_devices() -> list[dict]:
                 }
             )
     return devices
+
+
+def resolve_output_device(name: str | None, devices: list[dict] | None = None) -> int | None:
+    """Device name fragment -> today's index, on the default audio API only.
+
+    sounddevice's own name matching fails here because each device appears once per Windows
+    audio API. Indices shift when devices connect, so config stores a name and this runs at startup.
+
+    Example: "realtek digital" with Realtek on MME at index 9 -> 9;   None -> None (system default)
+    """
+    if name is None:
+        return None
+    devices = list_output_devices() if devices is None else devices
+    matches = [d for d in devices if name.lower() in d["name"].lower()]
+    if len(matches) != 1:
+        found = ", ".join(d["name"] for d in matches) or "none"
+        raise ValueError(f"OUTPUT_DEVICE {name!r} must match exactly one output device; matched: {found}")
+    return matches[0]["index"]
 
 
 class PcmPlayer:
@@ -76,7 +99,8 @@ class PcmPlayer:
             stream_factory = sd.RawOutputStream  # raw bytes in, no numpy conversion per chunk
         self._stream_factory = stream_factory  # injectable so tests run without a sound card
         self.sample_rate_hz = sample_rate_hz
-        self.device = device  # None = system default (Brian, 2026-11-07)
+        # None = system default (Brian, 2026-11-07); a name is looked up once, here.
+        self.device = resolve_output_device(device) if isinstance(device, str) else device
 
     def play(self, chunks: Iterable[bytes]) -> PlaybackTiming:
         start = time.perf_counter()
