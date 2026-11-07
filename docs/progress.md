@@ -164,7 +164,7 @@
   | EXP-000 | 0.84% | 0.008 s | 0.136 s | 0.192 s | 24.7% | 2.74 |
   | EXP-002 | 0.79% | 0.008 s | 0.144 s | 0.196 s | 22.5% | 2.62 |
 
-  The flicker cutoff (0.02 s, one policy step) is Claude's placeholder; Brian has been asked to confirm it.
+  **Decision (Brian): flicker cutoff = 0.02 s, one policy step.** A swing that short is faster than the policy can deliberately control, so it can't be a real step. (`FLICKER_SWING_S` in `tools/gait_check.py`.)
 - **`reward_check` with the EXP-002 policy** on Brian's reward: +0.0273 per step on the grid, every command positive (+0.0234 to +0.0292), tracking 95%, torques 2.1%. Not flagged.
 - **EXP-003 started** (Brian's reward, parent EXP-002, seed 42), with his hypothesis in its file verbatim. Brian watched EXP-002 mid-training with a CPU-only playback (`tools/run.py play … --device cpu`), which costs training no measurable speed.
 

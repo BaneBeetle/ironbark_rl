@@ -30,7 +30,9 @@ REPO = Path(__file__).resolve().parents[1]
 EXPERIMENTS_DIR = REPO / "docs" / "experiments"
 RESULTS_ANCHOR = "## What I saw"
 SKIP_S = 1.0  # the drop from the spawn height and the first steps aren't walking
-FLICKER_SWING_S = 0.02  # a swing shorter than one policy step: the foot flickered, it didn't step
+# Flicker cutoff (Brian, 2026-11-07): one 0.02 s policy step. A swing that short is faster than
+# the policy can deliberately control, so it can't be a real step.
+FLICKER_SWING_S = 0.02
 FEET_SENSOR = "feet_ground_contact"
 
 
