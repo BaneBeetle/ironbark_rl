@@ -264,3 +264,14 @@ def test_commands_round_to_the_nearest_byte(monkeypatch, jid, deg, u8):
     monkeypatch.setitem(sys.modules, "xgolib", pkg)
     monkeypatch.setitem(sys.modules, "xgolib.xgolib_dog", dog_mod)
     assert probe.XgoLink("/dev/null", 115200).write([jid], [deg]) == [u8]
+
+
+def test_imu_reads_without_commanding_joints(tmp_path):
+    link = FakeLink()
+    link.imu_block = lambda: [0.1, 0.0, 9.8, 0.0, 0.0, 0.0, 0.01, 0.02, 1.0]
+    link.roll, link.pitch = (lambda: 0.5), (lambda: -0.25)
+    code, rows = run(tmp_path, ["imu", "--samples", "6"], link)
+    imu = [r for r in rows if r["type"] == "imu"]
+    assert code == 0 and link.writes == []
+    assert [r["call"] for r in imu] == ["read_imu"] * 6 + ["read_roll", "read_pitch"] * 3
+    assert all(r["t1"] >= r["t0"] for r in imu) and imu[-1]["v"] == -0.25

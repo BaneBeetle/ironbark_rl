@@ -58,3 +58,15 @@ def test_change_intervals_ignore_held_values():
     t = np.arange(10) * 0.01
     x = np.array([0, 0, 1, 1, 1, 2, 2, 2, 2, 3.0])  # changes at reads 2, 5, 9
     assert report.change_intervals(t, x) == pytest.approx([0.03, 0.04])
+
+
+def test_imu_refresh_from_held_values():
+    # read_imu every 2 ms; accel_x refreshes every 5 reads (10 ms), roll every 10 reads (20 ms).
+    rows = []
+    for k in range(100):
+        v = [float(k // 5), 0, 9.8, 0, 0, 0, float(k // 10), 0, 0]
+        rows.append({"call": "read_imu", "t0": k * 2_000_000, "t1": k * 2_000_000 + 1_000_000, "v": v})
+    out = report.report_imu({"imu": rows})["read_imu"]
+    assert out["change_interval_ms"]["accel_x"]["median"] == pytest.approx(10.0)
+    assert out["change_interval_ms"]["roll"]["median"] == pytest.approx(20.0)
+    assert out["change_interval_ms"]["accel_z"] is None and out["failed"] == 0

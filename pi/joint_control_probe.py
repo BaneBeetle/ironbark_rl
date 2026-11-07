@@ -5,6 +5,7 @@ Every subcommand opens the servo UART and can move the servos. Before each run: 
 all four feet off the ground, motor_controller stopped, a hand on the power switch.
 
   cd ~/ironbark && .venv/bin/python joint_control_probe.py read                    # readback latency + max rate; no joint commands
+  cd ~/ironbark && .venv/bin/python joint_control_probe.py imu                     # IMU refresh rate; no joint commands
   cd ~/ironbark && .venv/bin/python joint_control_probe.py passive --leg 1         # torque OFF on one leg, move it by hand
   cd ~/ironbark && .venv/bin/python joint_control_probe.py step --joints leg1      # step response per joint, per motor_speed
   cd ~/ironbark && .venv/bin/python joint_control_probe.py sine --joints leg1      # tracking vs. frequency
@@ -94,6 +95,7 @@ PRE_SAMPLES = 100  # quiet reads after commanding the hold pose: >= 3 refreshes,
 STILL_CHECK_TAIL = 40  # the drift check uses only the last 40 reads (> 1 refresh): earlier ones can be stale
 STEP_SAMPLES = 150  # reads after each step edge. MEASURE: must outlast the rise; check in the plots
 READ_SAMPLES = 2000  # `read`: back-to-back read_motor() calls
+IMU_SAMPLES = 2000  # `imu`: reads per phase (read_imu blocks, then read_roll/read_pitch alternating)
 PASSIVE_MAX_SAMPLES = 20000  # `passive`: upper bound; Enter ends it earlier
 SINE_PERIODS = "200,100,50,25"  # sine periods in samples; the analysis converts to Hz with the logged clock
 SINE_CYCLES = 3  # cycles per period: enough to fit gain and phase
@@ -142,6 +144,17 @@ class XgoLink:
 
     def yaw(self):
         return self.dog.read_yaw()  # 0 while the IMU samples gyro bias (and on a failed read)
+
+    def imu_block(self):
+        # read_imu(): 24-byte register 0x65. unpack_imu -> accel xyz (int16 / 16384 * 9.8, m/s^2),
+        # gyro xyz (int16 / 16.4, deg/s), roll/pitch/yaw (float deg / 180 * 3.14, ~rad). [] on failure.
+        return list(self.dog.read_imu())
+
+    def roll(self):
+        return self.dog.read_roll()  # float deg, rounded to 2 dp; 0 on failure
+
+    def pitch(self):
+        return self.dog.read_pitch()
 
     def speed(self, value):
         self.dog.motor_speed(value)  # 0..255 (0 becomes 1); "only effective when controlling servos separately"
@@ -329,6 +342,18 @@ def run_read(s, args, ui):
     s.segment("read", None, args.samples)
 
 
+def run_imu(s, args, ui):
+    """Back-to-back IMU reads; no joint commands. Refresh rate = how often each channel's value changes."""
+    calls = {"read_imu": s.link.imu_block, "read_roll": s.link.roll, "read_pitch": s.link.pitch}
+    for phase, names in (("imu_block", ["read_imu"]), ("roll_pitch", ["read_roll", "read_pitch"])):
+        for k in range(args.samples):
+            name = names[k % len(names)]  # roll_pitch alternates the two registers
+            t0 = ns()
+            value = calls[name]()
+            t1 = ns()
+            s.rec.write("imu", phase=phase, call=name, t0=t0, t1=t1, v=value)
+
+
 def run_passive(s, args, ui):
     leg = args.leg
     s.segment("loaded", None, PRE_SAMPLES, leg=leg)
@@ -433,7 +458,7 @@ def run_gait(s, args, ui):
         s.segment("reset_end", None, args.samples)
 
 
-TESTS = {"read": run_read, "passive": run_passive, "step": run_step, "sine": run_sine, "rate": run_rate, "gait": run_gait}
+TESTS = {"read": run_read, "imu": run_imu, "passive": run_passive, "step": run_step, "sine": run_sine, "rate": run_rate, "gait": run_gait}
 
 
 # ---------------------------------------------------------------------------------- plumbing
@@ -510,6 +535,8 @@ def build_parser():
     sub = p.add_subparsers(dest="test", required=True)
     r = sub.add_parser("read", help="back-to-back read_motor(); no joint commands")
     r.add_argument("--samples", type=int, default=READ_SAMPLES)
+    im = sub.add_parser("imu", help="back-to-back IMU reads; no joint commands")
+    im.add_argument("--samples", type=int, default=IMU_SAMPLES)
     pa = sub.add_parser("passive", help="torque off on one leg; move it by hand")
     pa.add_argument("--leg", type=int, choices=[1, 2, 3, 4], required=True)
     pa.add_argument("--max-samples", type=int, default=PASSIVE_MAX_SAMPLES)

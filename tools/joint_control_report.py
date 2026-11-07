@@ -47,6 +47,7 @@ def load(path):
         "footer": rows[-1],
         "samples": [r for r in rows if r["type"] == "sample"],
         "events": [r for r in rows if r["type"] == "event"],
+        "imu": [r for r in rows if r["type"] == "imu"],
         "hold": next((r["deg"] for r in rows if r["type"] == "hold"), None),
     }
 
@@ -142,6 +143,34 @@ def report_read(log):
     t = np.array([read_time_s(r) for r in reads])
     return {"read_latency_ms": stats_ms(lat), "read_period_ms": stats_ms(np.diff(t)),
             "reads_per_s": round(float((len(t) - 1) / (t[-1] - t[0])), 1)}
+
+
+IMU_CHANNELS = ["accel_x", "accel_y", "accel_z", "gyro_x", "gyro_y", "gyro_z", "roll", "pitch", "yaw"]  # read_imu() order
+
+
+def report_imu(log):
+    """Per IMU call: latency and rate; per channel: how often its value changes (its refresh)."""
+    out = {}
+    by_call = defaultdict(list)
+    for r in log["imu"]:
+        by_call[r["call"]].append(r)
+    for call, rows in by_call.items():
+        t = np.array([(r["t0"] + r["t1"]) / 2e9 for r in rows])
+        good = [r for r in rows if r["v"] not in ([], None)]
+        row = {"latency_ms": stats_ms([(r["t1"] - r["t0"]) / 1e9 for r in rows]),
+               "calls_per_s": round(float((len(t) - 1) / (t[-1] - t[0])), 1), "failed": len(rows) - len(good)}
+        tg = np.array([(r["t0"] + r["t1"]) / 2e9 for r in good])
+        if call == "read_imu":
+            V = np.array([r["v"] for r in good])
+            channels = {name: V[:, i] for i, name in enumerate(IMU_CHANNELS)}
+        else:
+            channels = {call.removeprefix("read_"): np.array([r["v"] for r in good])}
+        row["change_interval_ms"] = {}
+        for name, x in channels.items():
+            gaps = change_intervals(tg, x)
+            row["change_interval_ms"][name] = stats_ms(gaps) if gaps.size else None
+        out[call] = row
+    return out
 
 
 def report_passive(log):
@@ -314,7 +343,7 @@ def report_yaw(logs):
     return {"points": [{"test": n, "t_s": round(t, 1), "yaw": y} for t, y, n in pts], "rates": rates}
 
 
-REPORTS = {"read": report_read, "passive": report_passive, "step": report_step, "sine": report_sine,
+REPORTS = {"read": report_read, "imu": report_imu, "passive": report_passive, "step": report_step, "sine": report_sine,
            "rate_read_every_0": report_rate, "rate_read_every_1": report_rate, "gait": report_gait}
 
 
