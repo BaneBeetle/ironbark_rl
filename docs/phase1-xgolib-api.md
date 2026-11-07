@@ -63,3 +63,16 @@ Our firmware string starts with `M`, the XGO Mini family. So the Mini2S model is
 - The Mini2S model includes 3 arm joints. Drop them if the S2 has no arm.
 - Deployment code isn't published. The HF card says the policies weren't validated on hardware, though the repo shows real-robot clips.
 - `mini2s_constants.py` has a docstring reading "Unitree Mini2S constants". Provenance is unclear.
+
+## Re-read from source, 2026-11-07 (for `pi/joint_control_probe.py`)
+
+Same install: dist `xgolib 1.1.10` (`__init__.py` says 1.1.9, `xgolib_dog.py` says 1.4.1). `xgolib_dog.py` sha256 `4371a423707b8225f1866ee01fa66ab9a57e5db9a7c42129bec51e15b94daaa8`; the probe refuses to run if it changes.
+
+- **`XGO()` is a factory, not a class.** With `version="auto"` (the default) and a port, it scans bauds, then calls **`reset()`** (an action, so the dog moves) before building the real object. `motor_controller.py` calls `XGO(port=...)`, so its startup resets the dog. The probe builds `XGO_DOG(port, 115200, version="xgomini")` directly.
+- **`XGO_DOG.__init__`** opens the port, reads firmware and yaw, and picks the limit table by the firmware's first letter (`M` → `xgomini`). It sends no motion. Limits live in the module global `XGOparam["MOTOR_LIMIT"]`, not on the instance.
+- **`read_motor()` order** = `MOTOR_ID` = `[11, 12, 13, 21, 22, 23, 31, 32, 33, 41, 42, 43, 51, 52, 53]`. Leg index `i` uses `MOTOR_LIMIT[i % 3]`; `motor()` uses the same rows by joint position. Every read flushes input first; a failed unpack returns `[]` after a 1 s busy-poll.
+- **Commands truncate:** `conver2u8` is `int(255 / range * (deg - lo))`, so commanding a read-back angle can land one byte low (0.24–0.62°). The probe logs the exact bytes sent (`cmd.u8`) and read (`read.u8`).
+- **No `ser.flush()` after writes.** A read issued right after a 12-joint write waits behind those bytes in the TX queue; the probe's read latency includes that.
+- `motor_speed(0..255)`, 0 becomes 1. Whether 255 is fastest: `# MEASURE:` `step --speeds 255,128,64`.
+- `move_x(step)`: one byte over ±`VX_LIMIT` = 25; the source gives no physical unit. `stop()` = `move_x(0)`, `move_y(0)`, `mark_time(0)`, `turn(0)`. `reset()` = `action(255)`.
+- `SCAN_PORTS = ["/dev/ttyAMA5", "/dev/ttyAMA0"]`; this Pi has `/dev/ttyAMA0` and `/dev/ttyAMA10` only. `config.V2_MOTION_PORT` = `/dev/ttyAMA0` @ 115200.
