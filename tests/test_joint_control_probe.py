@@ -17,8 +17,14 @@ ORDER = list(probe.LEG_IDS) + [51, 52, 53]  # a 15-long read order, like read_mo
 class FakeLink:
     """Servos that move halfway to their target on every read. Records everything sent."""
 
-    def __init__(self, start=None, limits=(-40.0, 40.0), interrupt_on_write=None, swap=None, yaw_zero_reads=0):
+    def __init__(self, start=None, limits=(-40.0, 40.0), interrupt_on_write=None, swap=None, yaw_zero_reads=0,
+                 refresh_every=1, slew_per_read=None, delay_reads=0):
         self.yaw_zero_reads = yaw_zero_reads  # IMU still sampling gyro bias for this many read_yaw() calls
+        self.slew = slew_per_read  # max deg moved per read (None: half the remaining error)
+        self.delay_reads = delay_reads  # a command takes effect this many reads later (servo dead time)
+        self.pending = []  # (read count when it applies, joint, deg)
+        self.refresh_every = refresh_every  # readings re-polled every N reads (the real firmware: ~28)
+        self.n_reads, self.shown = 0, None
         self.pos = {j: 0.0 for j in ORDER} | (start or {})
         self.target = dict(self.pos)
         self.lim = limits
@@ -33,12 +39,20 @@ class FakeLink:
         for j, d in zip(ids, deg):
             if self.swap and j == self.swap[0]:
                 j = self.swap[1]
-            self.target[j] = d
+            self.pending.append((self.n_reads + self.delay_reads, j, d))
 
     def read(self):
+        due = [p for p in self.pending if p[0] <= self.n_reads]
+        self.pending = [p for p in self.pending if p[0] > self.n_reads]
+        for _, j, d in due:
+            self.target[j] = d
         for j in self.pos:
-            self.pos[j] += 0.5 * (self.target[j] - self.pos[j])
-        return [self.pos[j] for j in ORDER]
+            err = self.target[j] - self.pos[j]
+            self.pos[j] += 0.5 * err if self.slew is None else max(-self.slew, min(self.slew, err))
+        if self.n_reads % self.refresh_every == 0:
+            self.shown = [self.pos[j] for j in ORDER]  # sample-and-hold, like the firmware's round-robin poll
+        self.n_reads += 1
+        return list(self.shown)
 
     def limits(self):
         return {j: self.lim for j in probe.LEG_IDS}
@@ -126,6 +140,14 @@ def test_sine_amplitude_and_room_check(tmp_path):
     code, _ = run(tmp_path, ["sine", "--joints", "11,12", "--amp-deg", "10", "--periods", "8", "--cycles", "1"], link)
     assert code == 0 and sent(link, 12) == []
     assert max(abs(d) for d in sent(link, 11)) <= 10.0 + 1e-9
+
+
+def test_stale_readback_of_the_previous_joint_does_not_abort(tmp_path):
+    # 2026-11-07 run: joint 11's reading was still pre-refresh when joint 12's drift check ran.
+    # Like the real servo at ~3.7 ms per read: ~104 ms dead time, ~105 ms refresh, ~70 deg/s slew.
+    link = FakeLink(refresh_every=28, slew_per_read=0.25, delay_reads=28)
+    code, rows = run(tmp_path, ["sine", "--joints", "11,12", "--periods", "100", "--cycles", "3"], link)
+    assert code == 0, rows[-1]["error"]
 
 
 @pytest.mark.parametrize("read_every, reads", [(1, 40), (0, 0), (4, 10)])

@@ -85,7 +85,10 @@ MOTOR_SPEED_MAX = 255  # top of motor_speed()'s 1..255 range. MEASURE: does 255 
 # Test lengths in samples (one sample = an optional write + one read_motor()).
 # MEASURE: samples per second. `read` measures it (the docs' wire arithmetic gives ~3-4 ms per read).
 SETTLE_SAMPLES = 40  # reads before a test; their median per joint is the start ("hold") pose
-PRE_SAMPLES = 30  # quiet reads after commanding the hold pose, before each stimulus
+# Readback refresh, measured 2026-11-07: read_motor() answers in ~3.6 ms, but the firmware re-polls
+# each servo only every ~105 ms (round-robin), so a reading can be up to ~105 ms (~28 reads) stale.
+PRE_SAMPLES = 100  # quiet reads after commanding the hold pose: >= 3 refreshes, so the last joint has settled
+STILL_CHECK_TAIL = 40  # the drift check uses only the last 40 reads (> 1 refresh): earlier ones can be stale
 STEP_SAMPLES = 150  # reads after each step edge. MEASURE: must outlast the rise; check in the plots
 READ_SAMPLES = 2000  # `read`: back-to-back read_motor() calls
 PASSIVE_MAX_SAMPLES = 20000  # `passive`: upper bound; Enter ends it earlier
@@ -279,7 +282,7 @@ class Session:
         return dev
 
     def check_still(self, reads, what):
-        dev = self.max_dev(reads)
+        dev = self.max_dev(reads[-STILL_CHECK_TAIL:])  # only reads that had time to refresh
         worst = max(dev, key=dev.get)
         if dev[worst] > HOLD_DRIFT_ABORT_DEG:
             raise ProbeError(f"{what}: joint {worst} moved {dev[worst]:.1f} deg after commanding the hold pose")
