@@ -10,13 +10,15 @@ COMMAND_GRID, play config, terminations off, fixed seed, first SKIP_S seconds sk
   than FLICKER_SWING_S (counted as flicker);
 - touchdowns per foot per second.
 Reads simulator tensors only, never the task's reward. Run it only while nothing is training.
---exp appends a dated block to that experiment's Results (append-only), labeled as diagnostics.
+Writes gait_<checkpoint>.json next to the checkpoint; --exp appends a dated block to that
+experiment's Results (append-only), labeled as diagnostics.
 """
 
 import argparse
 import contextlib
 import datetime
 import io
+import json
 import sys
 from pathlib import Path
 
@@ -115,6 +117,9 @@ def main() -> None:
     r = diagnose(args.task, args.checkpoint, args.episodes_per_command, args.seconds, args.seed)
     table = markdown(r)
     print(table)
+    out = args.checkpoint.with_name(f"gait_{args.checkpoint.stem}.json")
+    out.write_text(json.dumps(r, indent=2), encoding="utf-8")
+    print(f"saved {out}")
     if args.exp:
         print("appended to", append_to_experiment(args.exp, r, table))
 
