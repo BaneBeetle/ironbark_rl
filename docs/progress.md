@@ -154,8 +154,22 @@
 - **EXP-003 hypothesis (Brian, before the run):** "similar tracking error, but smoother and gentler: lower action rate, lower servo saturation %, and fewer flicker touchdowns (p10 swing time well above 0.008 s) thanks to the 0.07 s air-time threshold and requested-torque penalty. Risk: slightly worse tracking from the extra regularization."
   - Saturation % and swing-time p10 aren't on the frozen scoreboard. They'll be reported next to it as diagnostics; a new scoreboard metric would be Brian's call.
 
+## 2026-11-07: EXP-002 scored, EXP-003 training
+
+- **EXP-002 trained** (seed 42, 1500 iterations, no errors; final training episode length 989 of 1000 steps). Scoreboard v1: **0 falls, planar 0.036 m/s, yaw 0.092 rad/s, joint-target rate 2.14 rad/s, CoT 1.36**. EXP-000, mean of seeds 42/43: 0, 0.036, 0.097, 2.2, 1.38. Verdict is Brian's.
+- **`tools/gait_check.py`** (diagnostics next to the scoreboard, not part of it). It reproduces the hand measurement of EXP-000 (saturation 0.84% vs 0.83%; swing p10 / median / p90 and touchdown rate match). Results:
+
+  | | saturation | swing p10 | median | p90 | flicker touchdowns (< 0.02 s) | touchdowns / foot / s |
+  |---|---|---|---|---|---|---|
+  | EXP-000 | 0.84% | 0.008 s | 0.136 s | 0.192 s | 24.7% | 2.74 |
+  | EXP-002 | 0.79% | 0.008 s | 0.144 s | 0.196 s | 22.5% | 2.62 |
+
+  The flicker cutoff (0.02 s, one policy step) is Claude's placeholder; Brian has been asked to confirm it.
+- **`reward_check` with the EXP-002 policy** on Brian's reward: +0.0273 per step on the grid, every command positive (+0.0234 to +0.0292), tracking 95%, torques 2.1%. Not flagged.
+- **EXP-003 started** (Brian's reward, parent EXP-002, seed 42), with his hypothesis in its file verbatim. Brian watched EXP-002 mid-training with a CPU-only playback (`tools/run.py play … --device cpu`), which costs training no measurable speed.
+
 ### Next session (open it on `C:\Users\lolly\dev\ironbark_rl`)
-1. If still running, let EXP-002 finish (`~/dev/ironbark_runs/logs/rsl_rl/ironbark_s2_walk/*_EXP-002`). Then, with nothing else training: `tools/eval.py IronBark-S2-Walk-Flat --exp EXP-002`, and `tools/reward_check.py IronBark-S2-Walk-Flat-Brian --checkpoint <EXP-002>/model_1499.pt`.
+1. (Done 2026-11-07) Let EXP-002 finish (`~/dev/ironbark_runs/logs/rsl_rl/ironbark_s2_walk/*_EXP-002`). Then, with nothing else training: `tools/eval.py IronBark-S2-Walk-Flat --exp EXP-002`, and `tools/reward_check.py IronBark-S2-Walk-Flat-Brian --checkpoint <EXP-002>/model_1499.pt`.
 2. EXP-003: `tools/new_experiment.py "..." --parent EXP-002 --task IronBark-S2-Walk-Flat-Brian --experiment-name ironbark_s2_walk_brian`, paste Brian's hypothesis (above), train, eval. Report saturation % and swing-time p10 next to the scoreboard.
 3. Brian's walkthrough of the per-term TensorBoard curves (`Episode_Metrics/reward/*`). Ask for his read first. Then a "why" quiz → `docs/notes/`.
 4. Seed 43 for EXP-002 and EXP-003 if they land close (README rule 4). The `docs/roadmap.md` cerebellum/brain note. Brian's ruler measurement → `BASE_HEIGHT_TARGET_M`.
