@@ -21,6 +21,11 @@ def test_quantize_truncates_like_xgolib():
     assert report.quantize(LOG, 11, 100.0) == 57.0 and report.quantize(LOG, 11, -100.0) == -73.0
 
 
+def test_quantize_rounds_to_nearest_when_the_log_says_so():
+    log = {"header": {"limits": {"11": [-73, 57]}, "command_rounding": "nearest"}}
+    assert report.quantize(log, 11, 19.27) == pytest.approx(-73 + 181 / 255 * 130)  # the read-back byte
+
+
 def test_edge_metrics_on_a_sample_and_hold_jump():
     t = np.arange(150) * 0.004  # reads every 4 ms
     x = np.where(t >= 0.1, 10.0, 0.0)  # readback jumps at 100 ms (a refresh), no intermediate value

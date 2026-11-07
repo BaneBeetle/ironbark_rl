@@ -71,8 +71,14 @@ def joint_index(log, jid):
 
 
 def quantize(log, jid, deg):
-    """The angle xgolib actually sends: conver2u8 truncates onto 255 steps over the joint's limit range."""
+    """The angle actually sent: one of 256 bytes over the joint's limit range.
+
+    xgolib's conver2u8 truncates; since 2026-11-07 (evening) the probe adds half a byte step first, so
+    it rounds to nearest. The header's `command_rounding` says which (absent in older logs: truncate).
+    """
     lo, hi = log["header"]["limits"][str(jid)]
+    if log["header"].get("command_rounding") == "nearest":
+        deg = deg + 0.5 * (hi - lo) / 255
     u8 = 255 if deg >= hi else 0 if deg <= lo else int(255 / (hi - lo) * (deg - lo))
     return lo + u8 / 255 * (hi - lo)
 

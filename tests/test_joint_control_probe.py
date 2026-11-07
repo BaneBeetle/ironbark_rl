@@ -2,6 +2,7 @@
 
 import importlib.util
 import json
+import sys
 from pathlib import Path
 
 import pytest
@@ -220,3 +221,46 @@ def test_gait_step_above_motor_controllers_max_is_rejected():
 def test_amplitude_above_the_excursion_cap_is_rejected():
     with pytest.raises(SystemExit, match="amp-deg"):
         probe.main(["step", "--amp-deg", str(probe.MAX_EXCURSION_DEG + 1)], link=FakeLink())
+
+
+def stub_xgolib():
+    """Just enough of xgolib 1.1.10 for XgoLink.write: its conver2u8 and motor() byte bookkeeping."""
+    import types
+
+    def conver2u8(data, limit):  # copied from xgolib_dog.py (truncating)
+        if data >= limit[1]:
+            return 0xFF
+        if data <= limit[0]:
+            return 0
+        return int(255 / (limit[1] - limit[0]) * (data - limit[0]))
+
+    dog_mod = types.ModuleType("xgolib.xgolib_dog")
+    dog_mod.XGOorder = {"MOTOR_ANGLE": [0x50] + [128] * 15}
+    dog_mod.XGOparam = {"MOTOR_LIMIT": [[-73, 57], [-66, 93], [-31, 31], [-65, 65], [-85, 50], [-75, 90]]}
+
+    class XGO_DOG:
+        def __init__(self, port, baud=115200, version="xgomini", verbose=False):
+            pass
+
+        def motor(self, ids, data):
+            for j, d in zip(ids, data):
+                index = ORDER.index(j) + 1
+                dog_mod.XGOorder["MOTOR_ANGLE"][index] = conver2u8(d, dog_mod.XGOparam["MOTOR_LIMIT"][(index - 1) % 3])
+
+    dog_mod.XGO_DOG = XGO_DOG
+    pkg = types.ModuleType("xgolib")
+    pkg.xgolib_dog = dog_mod
+    return pkg, dog_mod
+
+
+@pytest.mark.parametrize("jid, deg, u8", [
+    (11, 19.27, 181),  # joint 11's read-back start pose (byte 181): xgolib alone would send 180
+    (11, 19.27 + 130 / 255 * 0.49, 181),  # just under half a step above byte 181: still 181
+    (11, 19.27 + 130 / 255 * 0.51, 182),  # just over half a step: rounds up
+    (13, 31.0, 255), (13, -31.0, 0),  # the ends stay the ends
+])
+def test_commands_round_to_the_nearest_byte(monkeypatch, jid, deg, u8):
+    pkg, dog_mod = stub_xgolib()
+    monkeypatch.setitem(sys.modules, "xgolib", pkg)
+    monkeypatch.setitem(sys.modules, "xgolib.xgolib_dog", dog_mod)
+    assert probe.XgoLink("/dev/null", 115200).write([jid], [deg]) == [u8]

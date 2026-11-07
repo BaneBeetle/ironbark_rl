@@ -68,6 +68,7 @@ LIMIT_ROW = {1: 0, 2: 1, 3: 2}
 # motor_controller uses up to 14 (V2_FORWARD_STEP_MAX). Proposed by Claude; Brian's call.
 GAIT_PROBE_STEP = 5.0
 GAIT_STEP_MAX = 14.0  # never above what motor_controller already uses (V2_FORWARD_STEP_MAX)
+COMMAND_ROUNDING = "nearest"  # XgoLink.write adds half a byte step; logs before 2026-11-07 evening are "truncate"
 IMU_READY_MAX_READS = 5000  # read_yaw() polls before giving up. MEASURE: bias-sampling length after power-on
 
 # Leg joint ids, leg 1-4 x joint 1-3 (xgolib numbering, docs/phase1-xgolib-api.md). Arm ids 51-53 unused.
@@ -123,9 +124,16 @@ class XgoLink:
         self.last_u8 = None  # raw bytes of the last good read_motor()
 
     def write(self, ids, deg):
-        self.dog.motor(ids, deg)  # one write-only packet per joint (register 0x50 + i), no ack
+        # xgolib's conver2u8 truncates: int(255 / range * (deg - lo)). Adding half a byte step first
+        # makes that round-to-nearest, so commanding a read-back angle sends the same byte (Brian, 2026-11-07).
+        nudged = [d + 0.5 * self.byte_step(j) for j, d in zip(ids, deg)]
+        self.dog.motor(ids, nudged)  # one write-only packet per joint (register 0x50 + i), no ack
         table = self.xd.XGOorder["MOTOR_ANGLE"]  # xgolib keeps the last byte sent per joint here
-        return [table[READ_ORDER.index(j) + 1] for j in ids]  # exact bytes on the wire (conver2u8 truncates)
+        return [table[READ_ORDER.index(j) + 1] for j in ids]  # exact bytes on the wire
+
+    def byte_step(self, jid):
+        lo, hi = self.xd.XGOparam["MOTOR_LIMIT"][LIMIT_ROW[jid % 10]]
+        return (hi - lo) / 255
 
     def read(self):
         deg = list(self.dog.read_motor())  # [] when __unpack times out (1 s busy-poll)
@@ -576,6 +584,7 @@ def run(args, link, ui):
     rec.write(
         "header", test=args.test, args=vars(args), date=stamp, host=platform.node(), python=platform.python_version(),
         xgolib=installed_xgolib(), xgolib_dog_sha256=safe_call(xgolib_dog_sha256), firmware=safe_call(link.firmware),
+        command_rounding=COMMAND_ROUNDING,
         battery=safe_call(link.battery), read_order=READ_ORDER, limits=s.limits, clock="perf_counter_ns",
         safety={"max_excursion_deg": MAX_EXCURSION_DEG, "limit_margin_deg": LIMIT_MARGIN_DEG,
                 "hold_drift_abort_deg": HOLD_DRIFT_ABORT_DEG},
