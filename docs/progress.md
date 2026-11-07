@@ -1,5 +1,40 @@
 # Progress
 
+## Seed-replicate summary, 2026-11-07 (Brian reads first; no interpretation here)
+
+**What finished:** all 7 queued runs, each 1500 iterations, with no crash and no resume. Each was scored into its experiment file (scoreboard v1, `gait_check`, training curves); replicates are listed under "Seed replicates" in their experiment's file.
+
+| Run | trained |
+|---|---|
+| EXP-004-s43 | 05:49–06:36 |
+| EXP-004-s44 | 06:38–07:25 |
+| EXP-005-s43 | 07:27–08:14 (config restored as when EXP-005 trained: 3.0) |
+| EXP-005-s44 | 08:16–09:03 |
+| EXP-002-s43 | 09:05–09:53 |
+| EXP-002-s44 | 09:55–10:43 |
+| EXP-008 (weight 5.0, seed 42) | 10:47–11:36 |
+
+Config restored to EXP-004's **7.5** at the end (commit `9682ef3`). Tests passed (88/88) before every run; the guard was never flagged (skipped on the two baseline runs, which use Luwu's reward).
+
+Mean ± sample SD [min–max] across training seeds; one value where only seed 42 exists. Scoreboard v1 + gait_check, command grid, eval seed 0.
+
+| Run | feet_air_time weight | Seeds | Falls (max) | Servo saturation [%] | Planar err [m/s] | Flicker [%] |
+|---|---|---|---|---|---|---|
+| EXP-002 (Luwu baseline) | — | 42, 43, 44 | 0.000 | 0.57 ± 0.20 [0.40–0.79] | 0.0360 ± 0.0011 [0.0353–0.0373] | 23.6 ± 1.2 [22.7–25.0] |
+| EXP-003 | 1 | 42 | 0.000 | 1.03 | 0.0389 | 24.9 |
+| EXP-005 | 3 | 42, 43, 44 | 0.000 | 0.48 ± 0.08 [0.39–0.53] | 0.0347 ± 0.0024 [0.0324–0.0371] | 17.2 ± 0.7 [16.5–17.7] |
+| EXP-008 | 5 | 42 | 0.000 | 0.87 | 0.0392 | 18.5 |
+| EXP-004 | 7.5 | 42, 43, 44 | 0.000 | 0.96 ± 0.20 [0.75–1.15] | 0.0372 ± 0.0009 [0.0364–0.0382] | 15.6 ± 0.0 [15.6–15.7] |
+| EXP-006 | 15 | 42 | 0.000 | 5.34 | 0.0664 | 9.9 |
+| EXP-007 | 30 | 42 | 0.000 | 11.72 | 0.1087 | 7.4 |
+
+**What broke / notes:**
+- EXP-008's setup: Claude's helper script crashed while filling the entry (a bug in Claude's edit for this run). The weight commit (5.0) and the empty entry were already done; nothing had trained. Claude re-ran the guard and tests, then filled the entry by hand before training.
+- EXP-008's hypothesis (Brian) was written at 11:05, after training started (~10:50) but before any results. Its file says so.
+- EXP-002 seed 42's gait numbers come from a `gait_check` re-run made to save its JSON (22.7% flicker vs 22.5% in its file; saturation 0.79% both).
+- No `aws_api_mcp_server` processes seen at any check today.
+- Not done (Brian's call): verdicts, and seeds for EXP-008 / EXP-003.
+
 ## Morning summary, 2026-11-07: overnight `feet_air_time` sweep (Brian reads first; no interpretation here)
 
 **What finished:** all four runs, each 1500 iterations, seed 42, with no crash and no resume. Each was scored into its experiment file (scoreboard v1, `tools/gait_check.py`, per-term curves via `tools/term_curves.py`) and indexed in `docs/experiments/README.md`.
