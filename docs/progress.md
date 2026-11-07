@@ -155,12 +155,10 @@
   - Saturation % and swing-time p10 aren't on the frozen scoreboard. They'll be reported next to it as diagnostics; a new scoreboard metric would be Brian's call.
 
 ### Next session (open it on `C:\Users\lolly\dev\ironbark_rl`)
-0. Done 2026-11-06: weights approved, `-Brian` task, `reward_check`, EXP-002 training. Next: EXP-002 eval + `reward_check` (b) with the EXP-002 policy → train EXP-003 → eval → Brian's TensorBoard walkthrough (his read first) → quiz.
-00. (Superseded) Brian approves or edits the weight proposal, plus `TRACK_*_WIDTH`, `UNDESIRED_CONTACT_MIN_FORCE_N` and an interim `BASE_HEIGHT_TARGET_M`. Then: all reward tests, register `IronBark-S2-Walk-Flat-Brian`, `tools/reward_check.py`, EXP-002 then EXP-003 (hypotheses first).
-1. Brian writes the EXP-002 hypothesis → train it (command in the file, ~1 h; seed 43 too for the env-v2 noise floor) → `tools/eval.py --exp EXP-002`. Nothing else on the GPU during eval.
-2. Brian implements `rewards.py` (`python -m pytest tests/brian -q -k reward`), fills `reward_config.py` (weights, widths, `FEET_AIR_TIME_THRESHOLD_S`), and measures the thigh pivots → `BASE_HEIGHT_TARGET_M`.
-3. Claude, step 4: register `IronBark-S2-Walk-Flat-Brian` with the glue (previous joint velocity, joint targets in rad, requested torque, the 9 non-foot contact parts, per-step reward metrics). Then `tools/reward_check.py IronBark-S2-Walk-Flat-Brian --checkpoint <EXP-002>` → numbers to Brian, who tunes.
-4. Step 5: a new experiment vs EXP-002 (Brian's hypothesis first). Plus the `docs/roadmap.md` cerebellum/brain note.
+1. If still running, let EXP-002 finish (`~/dev/ironbark_runs/logs/rsl_rl/ironbark_s2_walk/*_EXP-002`). Then, with nothing else training: `tools/eval.py IronBark-S2-Walk-Flat --exp EXP-002`, and `tools/reward_check.py IronBark-S2-Walk-Flat-Brian --checkpoint <EXP-002>/model_1499.pt`.
+2. EXP-003: `tools/new_experiment.py "..." --parent EXP-002 --task IronBark-S2-Walk-Flat-Brian --experiment-name ironbark_s2_walk_brian`, paste Brian's hypothesis (above), train, eval. Report saturation % and swing-time p10 next to the scoreboard.
+3. Brian's walkthrough of the per-term TensorBoard curves (`Episode_Metrics/reward/*`). Ask for his read first. Then a "why" quiz → `docs/notes/`.
+4. Seed 43 for EXP-002 and EXP-003 if they land close (README rule 4). The `docs/roadmap.md` cerebellum/brain note. Brian's ruler measurement → `BASE_HEIGHT_TARGET_M`.
 5. Then items 3–4 of the 2026-10-30 list.
 
 ### Open: Brian
