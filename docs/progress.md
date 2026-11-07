@@ -1,5 +1,19 @@
 # Progress
 
+## 2026-11-07 (evening): Phase 1 measured (Brian ran the probe); decision pending
+
+**Numbers** (full table: [phase1-joint-control-results.md](phase1-joint-control-results.md); tool `tools/joint_control_report.py`):
+- 12-joint command rate: **102 Hz** write-only (wire-bound, 96% of 115200 baud); **55.6 Hz** with a `read_motor()` every loop.
+- `read_motor()`: 3.6 ms, 265 reads/s, but **each joint's value refreshes only every ~105 ms** (round-robin), so readings are 0–105 ms old. Readback is the measured position (`passive`), not an echo.
+- 10° steps: delay 50–144 ms, ≥ 90% within 250 ms, final error within ±1.25°; `motor_speed` 255/128/64 made no consistent difference at this resolution.
+- Sine (joint 11, 10°): gain 0.96 / 0.89 / 0.32 at 1.1 / 2.2 / 4.3 Hz, lag 86–108 ms.
+- **`motor()` preempts the firmware gait**, and every joint drives to its last joint-mode setpoint (unsent joints jumped ~8°). `stop()` returns control to the firmware.
+- Yaw between runs: +71° over 177 s on a stand (0.4 °/s typical, vs −0.009 °/s on a clean boot in the V2 smoke log).
+
+**Probe fixes from this run:** `e1cc046` (the sine abort was a false positive: a stale reading) and `f9a9f4f` (send all 12 joints' measured angles first). 24 + 5 new tests; 117 pass. **Not yet deployed:** the Pi went offline right after the run and still has `8e1cab7`.
+
+**Open (Brian):** his read on the numbers, then Path A / B / hybrid; whether to re-run `sine` for joints 12 and 13; whether the yaw drift needs a power cycle on the stand before the next FOLLOW session. Then the "why" quiz for this milestone.
+
 ## 2026-11-07 (later): Phase 1 joint-control probe ready for Brian, not run
 
 - `feet_air_time` confirmed at **3.0** (EXP-005) in `reward_config.py`.
