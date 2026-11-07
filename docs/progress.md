@@ -187,6 +187,7 @@
   - `tests/test_brian_task_sim.py` (opt-in `pytest -m sim`, ~16 s, GPU) drops dogs on their backs and asserts the contact-termination step is penalized. It fails, as it should, when the noise floor is set too high for any contact to count. The default `pytest` run deselects it (`addopts = -m 'not sim'`).
 
 - **EXP-004 started** (Brian): EXP-003 with only `feet_air_time`'s weight raised 1.0 → 7.5, seed 42. Hypothesis (verbatim in its file): flicker touchdowns drop well below 24.8%, `feet_air_time` rises to ~0.0015 per step, tracking roughly unchanged; risk of exaggerated high-stepping. Guard before training, with the new weight: +0.0292 standing, +0.0290 for the EXP-003 policy on the grid, every command positive. 88/88 tests pass.
+- **2026-11-07 01:56: stopped the two `aws_api_mcp_server` workers (Brian's request).** These are the AWS Claude connector's Python processes (PIDs 67048 and 80732), which had each held a full CPU core since 2026-11-05 (~123,000 CPU-s each). Their launcher shims exited with them. Checked again at each overnight stage; the morning summary says whether they came back.
 - **After EXP-004:** `tools/eval.py IronBark-S2-Walk-Flat-Brian --exp EXP-004`, `tools/gait_check.py … --exp EXP-004`, the per-term curves (Brian's read first), then Brian decides on the seed replicates.
 
 ### Next session (open it on `C:\Users\lolly\dev\ironbark_rl`)
