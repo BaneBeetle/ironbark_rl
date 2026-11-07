@@ -20,7 +20,7 @@ WEIGHTS: dict[str, float | None] = {
     "torques": -0.125,  # legged_gym A1 -0.0002, x600: torque ~ mass x length is ~0.04x an A1's
     "joint_acc": -6e-8,  # legged_gym -2.5e-7, /4: joint accelerations ~2x an A1's; a light regularizer
     "action_rate": -0.08,  # legged_gym -0.01 on raw actions = -0.16 on targets (/0.25^2), x0.5 for faster joints
-    "feet_air_time": 7.5,  # EXP-004 (Brian): 7.5x legged_gym's 1.0, which gave 0.0002/step in EXP-003 (~1.2% of tracking, too small to cut flickers); 7.5x lands near action_rate's 0.0015
+    "feet_air_time": 3.0,  # sweep run (Brian, 2026-11-07): EXP-003 had 1.0, EXP-004 7.5; after the sweep this goes back to EXP-004's 7.5
     "undesired_contacts": -0.25,  # Brian's small weight: a brushing part costs a quarter of the planar tracking bonus. Dormant on flat ground (Brian, 2026-11-07): contacts over 1.43 N end the episode first, and lighter brushes never occur
 }
 
