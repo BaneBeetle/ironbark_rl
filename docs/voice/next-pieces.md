@@ -77,15 +77,17 @@ pick("scan_complete") -> None   # not cached, so this goes to Haiku
 Cache files are keyed by voice + model + text, so changing the voice or a line regenerates only
 what changed. They're gitignored (they can be rebuilt from the text).
 
-**Draft lines** (Claude, in your persona, ≤12 words; edit freely):
+**Draft lines v2** (Claude, 2026-11-07, for persona v2: a tiny dog with big-bro energy;
+≤12 words; edit freely). They play it straight as big-bro swagger; the squeaky voice is the
+punchline:
 
 | Event | Variants |
 |---|---|
-| target_found | "Yo, found you! Let's roll." / "Got eyes on you, bro." / "There's my dude." |
-| target_reacquired | "There you are! Thought I lost you." / "Back on you, bro." / "Found you again, no sweat." |
-| target_lost | "Whoa, lost you, bro. Hang on." / "Wait, where'd you go?" / "Lost you for a sec. Looking." |
-| battery_low | "Battery's getting low, bro. Charge me soon?" / "Running on fumes here, man." / "Low battery, dude. Charger time soon." |
-| fell | "Oof, I went down. Little help?" / "Yeah, I fell. Not my best moment." / "Down bad, bro. Literally. Help me up?" |
+| target_found | "Yo, there's my guy. Let's roll." / "Got you, bro. I'm on it." / "Big dog's locked in. Lead the way." |
+| target_reacquired | "There you are, man. Had me worried for a sec." / "Back on you, bro. We good." / "Found you again. Never doubted it." |
+| target_lost | "Whoa, where'd you go, bro? Hang tight." / "Lost you, man. Big dog's on the case." / "Hold up, I lost you. Looking." |
+| battery_low | "Bro, I'm running on fumes. Charger soon?" / "Battery's low, man. Big dog needs a nap." / "Gonna need a charge soon, bro. No stress." |
+| fell | "Oof. I'm good, bro. Little help though?" / "Yeah, I ate it. Help a bro up?" / "Took a tumble, man. Still cool. Mostly." |
 
 **Questions**
 - **C1. Variants:** how many per event, and how is one chosen? *Rec: 3, random but never the
