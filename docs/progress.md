@@ -101,11 +101,31 @@
     - `feet.data.force` (num_envs, 4, 3): net force, world frame. z sums to −9.54 N standing (the whole weight; the sign points down).
   - `undesired_contacts`: `nonfoot = env.scene["nonfoot_ground_touch"]`, with `found` (num_envs, 22) and `force_history` (num_envs, 22, 4, 3), N, over the last 4 physics substeps (index 0 = newest), in the contact frame. The 22 slots are every robot geom except the 4 calf collisions; 13 are visual geoms that never touch. The 9 that can touch: `base_collision` and the 4 `*_hip_collision` and 4 `*_thigh_collision` geoms. It's the same sensor the 1.43 N contact termination reads.
 
+- **Decision (Brian): `undesired_contacts` stays, at a small weight.** Anything above 1.43 N already ends the episode, so the penalty only sees light brushes: a thigh grazing on a low stride, a belly brush while crouching, a hip scuff in a tight turn. It's there for sloppy gaits and hardware wear. Big hits are already punished by termination, since the policy loses all its future reward.
+- **Fall-on-purpose guard (Brian):** if a typical step's total reward is net negative, early termination pays and the policy learns to fall to escape the penalties. Built, with no weights changed (they're Brian's to tune):
+  - `tools/reward_check.py TASK [--checkpoint …]` (library: `ironbark_rl/reward_audit.py`) reports the mean per-step total and each term's contribution (weight × value × dt, which sum to the total), sorted by size with each one's share. It runs two scenarios under scoreboard conditions: (a) standing still on a zero command, and (b) a policy on `COMMAND_GRID` (the EXP-002 baseline once trained), also broken down by command. A negative total is flagged and the tool exits 1.
+  - TensorBoard: `per_step_reward_metrics()` adds mjlab metrics that log `Episode_Metrics/reward/<term>` and `/total`, each episode's true per-step mean. mjlab's own `Episode_Reward/*` divides episode sums by the 20 s maximum length, so early-terminated episodes read low there.
+  - Verified on a throwaway 2-term task (alive +1, effort −3·Σ|τ|): the term contributions sum to the total (error 3e-8), the alive metric reads 0.0200 = 1 × dt, and the CLI flagged the negative totals (exit 1). It gets wired into `-Brian` in step 4.
+  - Gotcha: mjlab skips computing a term whose weight is exactly 0.
+- **Step 2 done.** `ironbark_rl/brian/rewards.py` has the 11 stubs, replacing v1's; the `-BrianReward` task is removed. `tests/brian/test_rewards.py` has 46 tests:
+  - known cases per term: perfect tracking = 1, level = 0, at target height = 0, constant joint velocity = 0, held targets = 0, no touchdown = 0, only feet touching = 0, plus directions;
+  - shape (num_envs,) for every term, and penalties ≥ 0;
+  - 3 scenario rules: a normal walking step > 0, standing still on a zero command > 0, and standing still loses when ordered to walk.
+  - 1 test passes now (every term has a weight slot). Widths and the base-height target are arguments, so the known cases hold for any value. No reference implementation was written; I checked the cases by hand and verified the fixtures.
+- **Step 3 in place:** `reward_config.py` holds `WEIGHTS` (11 × None), `TRACK_LIN_VEL_WIDTH`, `TRACK_ANG_VEL_WIDTH` and `BASE_HEIGHT_TARGET_M`.
+- **Typical walking step for the scenario tests** (EXP-000 seed-42 policy on env v2, 256 dogs × 9 s, medians, p90 in `rewards.py`):
+  - tracking: planar error 0.026 m/s, yaw-rate error 0.067 rad/s;
+  - body: |vz| 0.009 m/s, roll/pitch rate 0.15 rad/s, tilt 1.5°, base height 0.128 m;
+  - joints: RMS torque 0.141 N·m (0.8% of servo-steps saturate), RMS joint acceleration 36 rad/s², target step 0.042 rad;
+  - feet: 2.7 touchdowns per foot per second, swing time at touchdown 0.136 s.
+  - EXP-000 still walks on env v2: 0 falls, no non-foot contact. Swing p10 is 0.008 s, which is contact flicker rather than real steps.
+
 ### Next session (open it on `C:\Users\lolly\dev\ironbark_rl`)
 1. Brian writes the EXP-002 hypothesis → train it (command in the file, ~1 h; seed 43 too for the env-v2 noise floor) → `tools/eval.py --exp EXP-002`. Nothing else on the GPU during eval.
-2. Brian reviews batch 3 and measures the thigh pivots → `BASE_HEIGHT_TARGET_M`.
-3. Steps 2–5: stubs + known-case tests (replacing v1's), weights in `reward_config.py`, the `IronBark-S2-Walk-Flat-Brian` task with the glue above (drop `-BrianReward`), a new experiment entry vs EXP-002 (Brian's hypothesis first). Plus the `docs/roadmap.md` cerebellum/brain note.
-4. Then items 3–4 of the 2026-10-30 list.
+2. Brian implements `rewards.py` (`python -m pytest tests/brian -q -k reward`), fills `reward_config.py`, and measures the thigh pivots → `BASE_HEIGHT_TARGET_M`.
+3. Claude, step 4: register `IronBark-S2-Walk-Flat-Brian` with the glue (previous joint velocity, joint targets in rad, requested torque, the 9 non-foot contact parts, per-step reward metrics). Then `tools/reward_check.py IronBark-S2-Walk-Flat-Brian --checkpoint <EXP-002>` → numbers to Brian, who tunes.
+4. Step 5: a new experiment vs EXP-002 (Brian's hypothesis first). Plus the `docs/roadmap.md` cerebellum/brain note.
+5. Then items 3–4 of the 2026-10-30 list.
 
 ### Open: Brian
 - [ ] Ruler: real S2 standing thigh-pivot height → `BASE_HEIGHT_TARGET_M` (how: `ironbark_rl/brian/reward_config.py`)
