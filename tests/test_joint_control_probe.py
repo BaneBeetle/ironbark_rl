@@ -17,7 +17,8 @@ ORDER = list(probe.LEG_IDS) + [51, 52, 53]  # a 15-long read order, like read_mo
 class FakeLink:
     """Servos that move halfway to their target on every read. Records everything sent."""
 
-    def __init__(self, start=None, limits=(-40.0, 40.0), interrupt_on_write=None, swap=None):
+    def __init__(self, start=None, limits=(-40.0, 40.0), interrupt_on_write=None, swap=None, yaw_zero_reads=0):
+        self.yaw_zero_reads = yaw_zero_reads  # IMU still sampling gyro bias for this many read_yaw() calls
         self.pos = {j: 0.0 for j in ORDER} | (start or {})
         self.target = dict(self.pos)
         self.lim = limits
@@ -42,15 +43,19 @@ class FakeLink:
     def limits(self):
         return {j: self.lim for j in probe.LEG_IDS}
 
+    def yaw(self):
+        self.yaw_zero_reads -= 1
+        return 0.0 if self.yaw_zero_reads >= 0 else 12.5
+
     def __getattr__(self, name):  # speed, unload, load, reset, gait_*, firmware, battery
         return lambda *a: self.calls.append((name, a))
 
 
-@pytest.fixture(autouse=True)
-def verified_api(monkeypatch):
-    monkeypatch.setattr(probe, "READ_ORDER", ORDER)
-    monkeypatch.setattr(probe, "API_VERIFIED_FOR", "test")
-    monkeypatch.setattr(probe, "LIMIT_ROW", {1: 0, 2: 1, 3: 2})
+def test_api_block_matches_the_pi_source():
+    # Read from xgolib_dog.py on the Pi (2026-11-07): MOTOR_ID order, MOTOR_LIMIT row by joint position.
+    assert probe.READ_ORDER == ORDER
+    assert probe.LIMIT_ROW == {1: 0, 2: 1, 3: 2}
+    assert len(probe.API_VERIFIED_SHA256) == 64
 
 
 def run(tmp_path, argv, link, stop=lambda: False):
@@ -149,10 +154,34 @@ def test_gait_ends_with_stop_and_reset(tmp_path):
     assert names[-2:] == ["gait_stop", "reset"] and ("gait_forward", (5.0,)) in link.calls
 
 
+def test_nothing_moves_before_the_imu_is_ready(tmp_path, monkeypatch):
+    monkeypatch.setattr(probe, "IMU_READY_MAX_READS", 50)
+    link = FakeLink(yaw_zero_reads=1000)  # still sampling bias
+    code, rows = run(tmp_path, ["step", "--joints", "11"], link)
+    assert code == 1 and "IMU" in rows[-1]["error"] and link.writes == []
+
+
+def test_imu_ready_after_some_zero_yaw_reads(tmp_path):
+    code, rows = run(tmp_path, ["read", "--samples", "5"], FakeLink(yaw_zero_reads=7))
+    (ready,) = [r for r in rows if r["type"] == "event" and r["name"] == "imu_ready"]
+    assert code == 0 and ready["reads"] == 8
+
+
 def test_unverified_api_refuses_to_open_the_port(monkeypatch):
-    monkeypatch.setattr(probe, "API_VERIFIED_FOR", None)
+    monkeypatch.setattr(probe, "API_VERIFIED_SHA256", None)
     with pytest.raises(SystemExit, match="not verified"):
         probe.main(["read"])
+
+
+def test_changed_xgolib_refuses_to_open_the_port(monkeypatch):
+    monkeypatch.setattr(probe, "xgolib_dog_sha256", lambda: "0" * 64)
+    with pytest.raises(SystemExit, match="recheck the API block"):
+        probe.main(["read"])
+
+
+def test_gait_step_above_motor_controllers_max_is_rejected():
+    with pytest.raises(SystemExit, match="gait-step"):
+        probe.main(["gait", "--gait-step", str(probe.GAIT_STEP_MAX + 1)], link=FakeLink())
 
 
 def test_amplitude_above_the_excursion_cap_is_rejected():

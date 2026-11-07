@@ -24,17 +24,22 @@ Timing: every test length is a sample count, never seconds (Pi-side rule: no wal
 The clock is only logged: time.perf_counter_ns() before and after every write and every read.
 The date in the file name and header is a label.
 
-Safety: every command is clamped to the joint's measured start pose +- MAX_EXCURSION_DEG and to
-xgolib's MOTOR_LIMIT minus LIMIT_MARGIN_DEG. The probe aborts if a command at the start pose moves
-anything (HOLD_DRIFT_ABORT_DEG), or if a step moves a joint other than the one commanded
-(READ_ORDER wrong). On exit, Ctrl+C or error it re-sends the start pose (step/sine/rate),
-re-enables torque (passive), or stops the gait and calls reset() (gait).
+Safety: nothing is commanded until the IMU has finished its power-on gyro-bias sampling (yaw reads
+exactly 0.0 until then; moving the dog during it corrupts the bias, V2 smoke log). Every command is
+clamped to the joint's measured start pose +- MAX_EXCURSION_DEG and to xgolib's MOTOR_LIMIT minus
+LIMIT_MARGIN_DEG. The probe aborts if a command at the start pose moves anything
+(HOLD_DRIFT_ABORT_DEG), or if a step moves a joint other than the one commanded (READ_ORDER wrong).
+On exit, Ctrl+C or error it re-sends the start pose (step/sine/rate), re-enables torque (passive),
+or stops the gait and calls reset() (gait).
 
-Written by Claude (2026-11-07). The xgolib block below must be filled from the Pi's source first.
+Written by Claude (2026-11-07). The xgolib block was checked against the Pi's xgolib 1.1.10
+source; the probe refuses to run if xgolib_dog.py's hash differs.
 """
 
 import argparse
+import hashlib
 import importlib.metadata
+import importlib.util
 import json
 import math
 import os
@@ -47,13 +52,21 @@ import time
 from pathlib import Path
 
 # ---------------------------------------------------------------------------------------------
-# xgolib facts the probe depends on. Claude fills these from the Pi's xgolib source, never from
-# memory. While API_VERIFIED_FOR is None, every test refuses to open the port.
+# xgolib facts the probe depends on, read from the Pi's source (2026-11-07), never from memory:
+# ~/ironbark/.venv/lib/python3.13/site-packages/xgolib/xgolib_dog.py, dist xgolib 1.1.10.
+# If that file's hash changes, every test refuses to open the port until this block is rechecked.
 # ---------------------------------------------------------------------------------------------
-API_VERIFIED_FOR = None  # xgolib version this block was checked against (docs/phase1-xgolib-api.md: 1.1.10)
-READ_ORDER = None  # motor id at each index of read_motor()'s list. VERIFY: read_motor / __unpack
-LIMIT_ROW = None  # {joint position (motor_id % 10): row of MOTOR_LIMIT}. VERIFY: __motor / conver2u8
-GAIT_PROBE_STEP = None  # move_x() argument for the gait test. VERIFY: move_x's units and accepted range
+API_VERIFIED_SHA256 = "4371a423707b8225f1866ee01fa66ab9a57e5db9a7c42129bec51e15b94daaa8"  # xgolib_dog.py
+# read_motor(): index i < 12 is MOTOR_ID[i] with MOTOR_LIMIT[i % 3]; 12..14 are the arm (rows 3..5).
+# motor() uses the same MOTOR_ID list. An unpack failure (1 s busy-poll timeout) returns [].
+READ_ORDER = [11, 12, 13, 21, 22, 23, 31, 32, 33, 41, 42, 43, 51, 52, 53]
+# __motor(index): leg joints use MOTOR_LIMIT[(index - 1) % 3], i.e. by joint position 1/2/3.
+LIMIT_ROW = {1: 0, 2: 1, 3: 2}
+# move_x(step) maps step over +-VX_LIMIT (25, xgomini) to one byte; the source gives no physical unit.
+# motor_controller uses up to 14 (V2_FORWARD_STEP_MAX). Proposed by Claude; Brian's call.
+GAIT_PROBE_STEP = 5.0
+GAIT_STEP_MAX = 14.0  # never above what motor_controller already uses (V2_FORWARD_STEP_MAX)
+IMU_READY_MAX_READS = 5000  # read_yaw() polls before giving up. MEASURE: bias-sampling length after power-on
 
 # Leg joint ids, leg 1-4 x joint 1-3 (xgolib numbering, docs/phase1-xgolib-api.md). Arm ids 51-53 unused.
 LEG_IDS = [11, 12, 13, 21, 22, 23, 31, 32, 33, 41, 42, 43]
@@ -92,45 +105,58 @@ def ns():
 
 
 class XgoLink:
-    """Every xgolib call the probe makes, in one place. VERIFY each line against the Pi's source."""
+    """Every xgolib call the probe makes, in one place (checked against xgolib_dog.py, see the block above)."""
 
     def __init__(self, port, baud):
-        from xgolib import XGO  # imported here, not at module top: importing xgolib may touch the port
+        # Importing xgolib runs only definitions (no port access). XGO_DOG directly, not the XGO()
+        # factory: with version "auto" the factory probes bauds and calls reset(), which moves the dog.
+        from xgolib import xgolib_dog
 
-        self.dog = XGO(port=port, baud=baud, version="xgomini")  # VERIFY: XGO.__init__ signature
+        self.xd = xgolib_dog
+        # Opens the port, reads firmware/yaw, sets the global XGOparam limits by firmware. No motion.
+        self.dog = xgolib_dog.XGO_DOG(port, baud, version="xgomini", verbose=False)
+        self.last_u8 = None  # raw bytes of the last good read_motor()
 
     def write(self, ids, deg):
-        self.dog.motor(ids, deg)  # VERIFY: list form; one write-only packet per joint, no ack
+        self.dog.motor(ids, deg)  # one write-only packet per joint (register 0x50 + i), no ack
+        table = self.xd.XGOorder["MOTOR_ANGLE"]  # xgolib keeps the last byte sent per joint here
+        return [table[READ_ORDER.index(j) + 1] for j in ids]  # exact bytes on the wire (conver2u8 truncates)
 
     def read(self):
-        return list(self.dog.read_motor() or [])  # VERIFY: empty on timeout; order = READ_ORDER
+        deg = list(self.dog.read_motor())  # [] when __unpack times out (1 s busy-poll)
+        self.last_u8 = list(self.dog.rx_data[: len(deg)]) if deg else None
+        return deg
+
+    def yaw(self):
+        return self.dog.read_yaw()  # 0 while the IMU samples gyro bias (and on a failed read)
 
     def speed(self, value):
-        self.dog.motor_speed(value)  # VERIFY: 1..255, "only effective when controlling servos separately"
+        self.dog.motor_speed(value)  # 0..255 (0 becomes 1); "only effective when controlling servos separately"
 
     def unload(self, leg):
-        self.dog.unload_motor(leg)  # VERIFY: leg numbering 1..4
+        self.dog.unload_motor(leg)  # 1..4 legs, 5 arm
 
     def load(self, leg):
         self.dog.load_motor(leg)
 
     def reset(self):
-        self.dog.reset()  # VERIFY: returns the firmware to its default stand
+        self.dog.reset()  # action(255): stop and return every parameter to its initial state
 
     def gait_forward(self, step):
-        self.dog.move_x(step)  # VERIFY: units/range, see GAIT_PROBE_STEP
+        self.dog.move_x(step)  # VX register, step clipped to +-VX_LIMIT
 
     def gait_stop(self):
-        self.dog.stop()  # VERIFY
+        self.dog.stop()  # move_x(0), move_y(0), mark_time(0), turn(0)
 
     def firmware(self):
         return self.dog.read_firmware()
 
     def battery(self):
-        return self.dog.read_battery()  # VERIFY: exists in this xgolib
+        return self.dog.read_battery()
 
     def limits(self):
-        return {jid: tuple(self.dog.MOTOR_LIMIT[LIMIT_ROW[jid % 10]]) for jid in LEG_IDS}  # VERIFY
+        rows = self.xd.XGOparam["MOTOR_LIMIT"]  # module global, chosen by firmware letter in XGO_DOG.__init__
+        return {jid: tuple(rows[LIMIT_ROW[jid % 10]]) for jid in LEG_IDS}
 
 
 class Recorder:
@@ -199,10 +225,10 @@ class Session:
         sent = [round(self.clamp(j, d), 3) for j, d in zip(ids, req)] if clamp else req
         self.n_clamped += sum(a != b for a, b in zip(req, sent))
         t0 = ns()
-        self.link.write(ids, sent)
+        u8 = self.link.write(ids, sent)
         t1 = ns()
         self.touched.update(ids)
-        return {"ids": ids, "req_deg": req, "deg": sent, "t0": t0, "t1": t1}
+        return {"ids": ids, "req_deg": req, "deg": sent, "u8": u8, "t0": t0, "t1": t1}
 
     def read(self):
         t0 = ns()
@@ -211,7 +237,17 @@ class Session:
         ok = len(deg) == len(READ_ORDER)
         self.n_bad_reads += not ok
         self.read_t.append((t0, t1))
-        return {"t0": t0, "t1": t1, "deg": [round(float(d), 3) for d in deg], "ok": ok}
+        u8 = getattr(self.link, "last_u8", None) if ok else None
+        return {"t0": t0, "t1": t1, "deg": [round(float(d), 3) for d in deg], "u8": u8, "ok": ok}
+
+    def wait_imu_ready(self):
+        """Command nothing until yaw is non-zero: the same latch motor_controller uses (a state, not a timer)."""
+        for i in range(IMU_READY_MAX_READS):
+            yaw = self.link.yaw()
+            if yaw:
+                self.event("imu_ready", reads=i + 1, yaw=yaw)
+                return
+        raise ProbeError(f"yaw still 0.0 after {IMU_READY_MAX_READS} reads: IMU bias sampling not done; rerun later")
 
     def tick(self, phase, targets=None, read=True, clamp=True, **tags):
         cmd = self.write(targets, clamp) if targets else None
@@ -383,12 +419,19 @@ def installed_xgolib():
         return None
 
 
+def xgolib_dog_sha256():
+    spec = importlib.util.find_spec("xgolib")  # locates the package without executing it
+    if spec is None or spec.origin is None:
+        return None
+    return hashlib.sha256((Path(spec.origin).parent / "xgolib_dog.py").read_bytes()).hexdigest()
+
+
 def check_api_verified():
-    if API_VERIFIED_FOR is None or READ_ORDER is None or LIMIT_ROW is None:
+    if API_VERIFIED_SHA256 is None or READ_ORDER is None or LIMIT_ROW is None:
         sys.exit("xgolib API block not verified yet (top of this file). Claude fills it from the Pi's source first.")
-    installed = installed_xgolib()
-    if installed != API_VERIFIED_FOR:
-        sys.exit(f"installed xgolib is {installed}, but the API block was verified for {API_VERIFIED_FOR}")
+    found = xgolib_dog_sha256()
+    if found != API_VERIFIED_SHA256:
+        sys.exit(f"xgolib_dog.py hash {found} != verified {API_VERIFIED_SHA256}: xgolib changed, recheck the API block")
 
 
 def motor_controller_running():
@@ -479,8 +522,8 @@ def validate(args):
         sys.exit("sine periods need at least 4 samples")
     if getattr(args, "read_every", 0) < 0:
         sys.exit("--read-every must be >= 0")
-    if args.test == "gait" and args.gait_step is None:
-        sys.exit("GAIT_PROBE_STEP not verified yet; pass --gait-step only once Claude has checked move_x's units")
+    if args.test == "gait" and not 0 < abs(args.gait_step) <= GAIT_STEP_MAX:
+        sys.exit(f"--gait-step must be in (0, {GAIT_STEP_MAX}] in magnitude")
 
 
 def confirm(prompt):
@@ -513,13 +556,14 @@ def run(args, link, ui):
     s = Session(link, rec)
     rec.write(
         "header", test=args.test, args=vars(args), date=stamp, host=platform.node(), python=platform.python_version(),
-        xgolib=installed_xgolib(), api_verified_for=API_VERIFIED_FOR, firmware=safe_call(link.firmware),
+        xgolib=installed_xgolib(), xgolib_dog_sha256=safe_call(xgolib_dog_sha256), firmware=safe_call(link.firmware),
         battery=safe_call(link.battery), read_order=READ_ORDER, limits=s.limits, clock="perf_counter_ns",
         safety={"max_excursion_deg": MAX_EXCURSION_DEG, "limit_margin_deg": LIMIT_MARGIN_DEG,
                 "hold_drift_abort_deg": HOLD_DRIFT_ABORT_DEG},
     )
     interrupted, error = False, None
     try:
+        s.wait_imu_ready()  # before anything moves, even by hand (passive)
         if args.test != "gait":
             s.measure_hold()  # gait measures its hold after reset()
         TESTS[args.test](s, args, ui)
