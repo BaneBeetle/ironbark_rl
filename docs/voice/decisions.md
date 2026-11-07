@@ -43,6 +43,11 @@ the Pi stays a thin player.
   per month; Flash costs 0.5–1 credit per character.
 - **Haiku 5.5.** $0.10 / $0.50 per million tokens in/out. Thinking is on by default; the
   voice turns it off (allowed at effort ≤ high) and runs effort `low` for speed.
+- **Premade voices are going away.** ElevenLabs retires default (premade) voices on
+  2026-12-31, only accounts made before March 2026 have them, and the free tier can't use
+  Voice Library voices through the API. So the shortlist (`config.VOICE_SHORTLIST`: Warren,
+  Eddie, Caleb) is ElevenLabs' official replacements. Their style tags are unverified (that
+  table needs a login); `python -m ironbark_voice.say account` checks this key can use them.
 - **Telemetry.** V1 (`~/ironbark-v1/pi/motor_controller.py`) binds a PUB on :5558 and sends
   one JSON string per message, so extra subscribers like the voice don't disturb the
   follower. The V2 field names come from CLAUDE.md and need checking when V2 lands.
