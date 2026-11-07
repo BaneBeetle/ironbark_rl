@@ -15,3 +15,5 @@ include = ["ironbark_rl*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = ["sim: builds a GPU simulation (~1 min); opt in with -m sim, and only while nothing is training"]
+addopts = "-m 'not sim'"
