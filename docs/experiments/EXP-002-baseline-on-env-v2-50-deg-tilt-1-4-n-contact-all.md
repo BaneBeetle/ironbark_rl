@@ -85,6 +85,34 @@ _Pending. Filled by the evaluation harness once training finishes._
 
 Episode endings near iteration 1499: fell_over 1.5%, illegal_contact 3.8%, time_out 94.8%.
 
+**2026-11-07, scoreboard v1.** Run `2026-11-07_09-55-00_EXP-002-s44`, checkpoint `model_1499.pt` (iteration 1499), 32 dogs × 10 s per command, seed 0, mass 0.972 kg. Smoothness and CoT use only episodes that never fell; CoT is NaN by design where there's no ground speed (standing, turning in place).
+
+| Command (vx, vy, wz) | Fall rate | Planar err [m/s] | Yaw err [rad/s] | Joint-target rate [rad/s] | CoT |
+|---|---|---|---|---|---|
+| (+0.0, +0.0, +0.0) | 0.000 | 0.001 | 0.004 | 0.31 | nan |
+| (+0.2, +0.0, +0.0) | 0.000 | 0.049 | 0.103 | 2.51 | 1.06 |
+| (+0.4, +0.0, +0.0) | 0.000 | 0.089 | 0.140 | 3.32 | 1.37 |
+| (-0.2, +0.0, +0.0) | 0.000 | 0.029 | 0.070 | 2.22 | 0.98 |
+| (+0.0, +0.2, +0.0) | 0.000 | 0.043 | 0.122 | 2.59 | 1.63 |
+| (+0.0, -0.2, +0.0) | 0.000 | 0.043 | 0.116 | 2.71 | 1.70 |
+| (+0.0, +0.0, +0.5) | 0.000 | 0.019 | 0.109 | 2.14 | nan |
+| (+0.0, +0.0, -0.5) | 0.000 | 0.025 | 0.104 | 2.04 | nan |
+| **overall (mean of rows)** | 0.000 | 0.037 | 0.096 | 2.23 | 1.35 |
+
+**2026-11-07, gait diagnostics (not scoreboard).** Run `2026-11-07_09-55-00_EXP-002-s44`, checkpoint `model_1499.pt`, 32 dogs × 10 s per command (first 1 s skipped), seed 0. Saturation: requested torque above the 0.43 N·m cap.
+
+| Servo saturation | Swing p10 [s] | Swing median [s] | Swing p90 [s] | Flicker touchdowns (< 0.02 s) | Touchdowns / foot / s |
+|---|---|---|---|---|---|
+| 0.51% | 0.008 | 0.136 | 0.192 | 23.1% | 2.69 |
+
+**2026-11-07, training curves (TensorBoard).** Run `2026-11-07_09-55-00_EXP-002-s44`. Reward rows: each term's per-step contribution (weight × value × dt), mean over ±10 iterations.
+
+| | iter 0 | iter 100 | iter 400 | iter 1499 |
+|---|---|---|---|---|
+| episode length (steps) | 133 | 960 | 958 | 978 |
+
+Episode endings near iteration 1499: fell_over 1.1%, illegal_contact 3.8%, time_out 95.1%.
+
 ## What I saw (Brian: viewer, curves)
 
 ## Why / next (Brian)
