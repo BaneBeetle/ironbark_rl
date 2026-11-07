@@ -1,9 +1,12 @@
 """S2 flat-ground walking task.
 
-Luwu's Mini2S walking task, unchanged (rewards, observations, commands, randomization,
-latency), with the S2 robot swapped in. Luwu's reward is the baseline Brian's reward
-gets compared against, so nothing here tunes it.
+Luwu's Mini2S walking task (rewards, observations, commands, randomization, latency)
+with the S2 robot swapped in. Luwu's reward is the baseline Brian's reward gets compared
+against, so nothing here tunes the reward. Env changes since EXP-000 (Brian, 2026-11-06,
+baselined in EXP-002): the fall-tilt termination below.
 """
+
+import math
 
 from mjlab.envs import ManagerBasedRlEnvCfg
 from src.tasks.velocity.config.mini2s_walk.env_cfgs import mini2s_flat_walk_env_cfg
@@ -14,6 +17,12 @@ from ironbark_rl.assets.s2 import get_s2_walk_robot_cfg
 # The Mini2S pose reward has per-joint entries for its arm joints; the S2 has none.
 _MINI2S_ARM_JOINT_MARKER = "arm_"
 _POSE_STD_KEYS = ("std_standing", "std_walking", "std_running")
+
+# Training ends an episode once the body tilts past this (Brian, 2026-11-06; Luwu's task
+# used 70). The scoreboard's fall line is metrics.FALL_TILT_DEG = 46, where passive sim
+# recovery fails, so 50 ends an episode just past the point the scoreboard calls a fall.
+# Recheck both once Brian's policy is trained.
+FALL_TILT_TERMINATION_DEG = 50.0
 
 
 def s2_flat_walk_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
@@ -28,4 +37,5 @@ def s2_flat_walk_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
             for pattern, std in pose_params[key].items()
             if _MINI2S_ARM_JOINT_MARKER not in pattern
         }
+    cfg.terminations["fell_over"].params["limit_angle"] = math.radians(FALL_TILT_TERMINATION_DEG)
     return cfg
