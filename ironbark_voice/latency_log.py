@@ -71,7 +71,7 @@ def summarize(path: Path) -> dict:
     """Median and spread of event -> first sound, split by source, against Brian's target."""
     rows = [json.loads(line) for line in Path(path).read_text(encoding="utf-8").splitlines() if line.strip()]
     out = {"target_p50_s": config.LATENCY_TARGET_P50_S}
-    for source in ("cache", "haiku", "all"):
+    for source in sorted({r["source"] for r in rows}) + ["all"]:  # cache, haiku, tts (manual lines), ...
         values = sorted(
             r["event_to_first_sound_s"]
             for r in rows

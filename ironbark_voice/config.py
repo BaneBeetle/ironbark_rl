@@ -41,6 +41,14 @@ TTS_OUTPUT_FORMAT = "pcm_24000"
 TTS_SAMPLE_RATE_HZ = 24_000  # must match TTS_OUTPUT_FORMAT
 TTS_SAMPLE_WIDTH_BYTES = 2  # 16-bit PCM
 VOICE_ID: str | None = None  # Brian picks from the shortlist; None until then
+# Claude's shortlist for Brian (2026-11-07). Premade voices retire on 2026-12-31, so these are
+# ElevenLabs' official replacements; names/IDs from their replacement table, style tags
+# unverified (the tag table needs a login). `say account` checks this account can use them.
+VOICE_SHORTLIST = {
+    "Warren": "7QN34D2r3hCNwbOYIeK0",  # "Effortless and Cool"; replaces Will
+    "Eddie": "l7kNoIfnJKPg7779LI2t",  # "Natural and Helpful"; replaces Eric
+    "Caleb": "AaOhDHYJ1XLZk74lXhdE",  # "Trusted Guide"; replaces Chris
+}
 
 # --- Audio output (PC dev mode) ----------------------------------------------------------
 # Brian: system default for now (None = default). To pick one, use part of its name (e.g.
