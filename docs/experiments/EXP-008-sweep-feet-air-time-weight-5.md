@@ -8,6 +8,8 @@
 
 (2026-11-07) No per-run hypothesis: a new sweep point Brian asked for, verbatim: "A new sweep point: feet_air_time weight 5.0, seed 42, as its own experiment, scored the same way." Ranking objective in force (Brian, 2026-11-07): servo saturation first, then planar tracking error, then flicker share; 0 falls required.
 
+(2026-11-07 11:05; written after training started at ~10:50, before any results) Every metric lands between EXP-005 (3.0) and EXP-004 (7.5): flicker ~16-17%, saturation ~0.5-1.0%, planar error ~0.035-0.036. If saturation stays near EXP-005's while flicker drops toward EXP-004's, 5.0 could be the sweet spot.
+
 ## Change (one variable)
 
 vs. EXP-004: **one weight.** `WEIGHTS["feet_air_time"]` 7.5 → **5** (EXP-003: 1.0; EXP-005: 3.0). Everything else (task, other weights and parameters, seed 42, 1500 iterations, 4096 envs) is unchanged.
