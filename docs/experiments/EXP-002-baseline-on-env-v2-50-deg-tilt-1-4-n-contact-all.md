@@ -28,6 +28,10 @@ The scoreboard runs with terminations off, so changes 1–2 only affect training
 - Run folder: `~/dev/ironbark_runs/logs/rsl_rl/ironbark_s2_walk/*_EXP-002`
 - Trained at commit `ef8fde1` (the baseline env is unchanged since `347a788`), 2026-11-06.
 
+### Seed replicates (same setup, different seed: measures the noise floor, rule 4)
+
+- **Seed 43**, started 2026-11-07 09:04 at commit `15c2f9d` (Brian: check the noise, 2026-11-07): `python tools/run.py train IronBark-S2-Walk-Flat --env.scene.num-envs 4096 --agent.max-iterations 1500 --agent.seed 43 --agent.run-name EXP-002-s43`. Run folder `~/dev/ironbark_runs/logs/rsl_rl/ironbark_s2_walk/*_EXP-002-s43`. Tests: 88 passed, 1 deselected, 35 warnings in 5.49s. Guard skipped: this is Luwu's reward (the guard is for Brian's terms, and would list Luwu's).
+
 ## Results (scoreboard: `metrics.py`)
 
 _Pending. Filled by the evaluation harness once training finishes._
