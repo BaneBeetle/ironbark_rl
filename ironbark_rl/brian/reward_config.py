@@ -26,6 +26,11 @@ WEIGHTS: dict[str, float | None] = {
 TRACK_LIN_VEL_WIDTH: float | None = None
 TRACK_ANG_VEL_WIDTH: float | None = None
 
+# feet_air_time: a touchdown after a swing shorter than this pays negative (Brian, 2026-11-06).
+# Must sit above contact flicker (p10 swing 0.008 s) and below a typical swing (median 0.136 s),
+# both EXP-000 on env v2; tests/brian/test_rewards.py checks both.
+FEET_AIR_TIME_THRESHOLD_S: float | None = None
+
 # MEASURE: real S2 standing height of the sim's `base` frame origin, m. Brian measures it:
 #   dog standing in its default pose on a flat floor, ruler from the floor to the centre of
 #   each thigh (upper-leg) pivot, mean of the 4 legs, plus 0.021 m (the sim's offset from

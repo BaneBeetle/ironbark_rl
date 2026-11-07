@@ -162,19 +162,25 @@ def action_rate(joint_targets: torch.Tensor, prev_joint_targets: torch.Tensor) -
     raise NotImplementedError
 
 
-def feet_air_time(first_contact: torch.Tensor, last_air_time: torch.Tensor, command: torch.Tensor) -> torch.Tensor:
-    """Bonus (or cost) tied to each foot's swing, paid at touchdown.
+def feet_air_time(first_contact: torch.Tensor, last_air_time: torch.Tensor, command: torch.Tensor,
+                  air_time_threshold_s: float) -> torch.Tensor:
+    """Bonus for real steps, cost for flickers, paid at touchdown.
+
+    Brian's spec (2026-11-06): a touchdown after a swing shorter than air_time_threshold_s
+    pays negative (contact flicker, which hobby servos can't track), a longer swing pays
+    positive, and nothing is paid unless the command asks the dog to move (forward,
+    sideways or turning; turning in place needs steps too).
 
     Args:
       first_contact: (num_envs, 4) bool, True for a foot that touched down during this step.
         Feet in order fl, fr, br, bl.
       last_air_time: (num_envs, 4) s, how long each foot's last swing lasted. Where
         first_contact is True, that's the swing that just ended.
-      command: (num_envs, 3) commanded (vx, vy, wz), if your design depends on it.
+      command: (num_envs, 3) commanded (vx, vy, wz), m/s, m/s, rad/s.
+      air_time_threshold_s: reward_config.FEET_AIR_TIME_THRESHOLD_S.
 
     Returns:
-      (num_envs,), exactly 0 on a step where no foot touches down. Any parameters (named
-      constants with a why) go in reward_config.py.
+      (num_envs,), exactly 0 on a step where no foot touches down, or when the command is zero.
     """
     raise NotImplementedError
 

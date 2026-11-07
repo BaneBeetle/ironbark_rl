@@ -30,6 +30,7 @@ SUBSTEPS = 4
 ANY_WIDTH = 0.25  # the known cases hold for any positive kernel width
 ANY_TARGET_M = 0.13  # likewise for any base-height target
 SERVO_LIMIT_NM = 0.43
+AIR_TIME_THRESHOLD_S = 0.1  # Brian's example; the feet_air_time cases hold for any value in (FLICKER_S, SWING_S)
 
 # Measured typical walking step: EXP-000 policy on env v2, 256 dogs x 9 s, 2026-11-06 (medians).
 PLANAR_ERROR_MPS = 0.026
@@ -43,10 +44,12 @@ JOINT_ACC_RADPS2 = 36.0  # RMS over joints
 TARGET_STEP_RAD = 0.042  # RMS over joints
 TOUCHDOWNS_PER_FOOT_PER_STEP = 0.0547  # 2.7 per foot per s
 SWING_S = 0.136  # swing time at touchdown
+FLICKER_S = 0.008  # p10 swing time at touchdown: a foot flickering on and off the ground, not a step
 STAND_TORQUE_NM = 0.045  # mean |servo torque| standing at the default pose (2026-11-06 probe)
 
 WALK_COMMAND = (0.3, 0.0, 0.0)  # m/s forward, inside COMMAND_GRID's range
 STAND_COMMAND = (0.0, 0.0, 0.0)
+TURN_IN_PLACE_COMMAND = (0.0, 0.0, 0.5)  # rad/s yaw, no planar velocity
 
 
 def _t(*rows):
@@ -73,7 +76,7 @@ SHAPE_CASES = {
     "torques": lambda n: rewards.torques((0.6 * torch.randn(n, J)).clamp(-SERVO_LIMIT_NM, SERVO_LIMIT_NM), 0.6 * torch.randn(n, J), SERVO_LIMIT_NM),
     "joint_acc": lambda n: rewards.joint_acc(torch.randn(n, J), torch.randn(n, J), DT),
     "action_rate": lambda n: rewards.action_rate(torch.randn(n, J), torch.randn(n, J)),
-    "feet_air_time": lambda n: rewards.feet_air_time(torch.rand(n, FEET) < 0.3, 0.3 * torch.rand(n, FEET), torch.randn(n, 3)),
+    "feet_air_time": lambda n: rewards.feet_air_time(torch.rand(n, FEET) < 0.3, 0.3 * torch.rand(n, FEET), torch.randn(n, 3), AIR_TIME_THRESHOLD_S),
     "undesired_contacts": lambda n: rewards.undesired_contacts(torch.rand(n, NONFOOT_PARTS, SUBSTEPS, 3)),
 }
 PENALTIES = ["lin_vel_z", "ang_vel_xy", "orientation", "base_height", "torques", "joint_acc", "action_rate", "undesired_contacts"]
@@ -231,7 +234,35 @@ def test_feet_air_time_is_zero_without_a_touchdown():
     first_contact = torch.zeros(3, FEET, dtype=torch.bool)  # (3, 4), no foot lands this step
     last_air_time = torch.tensor([[0.0, 0.1, 0.3, 0.6]]).repeat(3, 1)  # (3, 4) s, earlier swings
     command = torch.tensor([WALK_COMMAND, STAND_COMMAND, (0.0, 0.0, 0.5)])  # (3, 3)
-    assert torch.equal(rewards.feet_air_time(first_contact, last_air_time, command), torch.zeros(3))
+    assert torch.equal(rewards.feet_air_time(first_contact, last_air_time, command, AIR_TIME_THRESHOLD_S), torch.zeros(3))
+
+
+def _one_touchdown(air_time_s: float, command) -> torch.Tensor:
+    """(1,) feet_air_time for one dog whose fl foot lands this step after an `air_time_s` swing."""
+    first_contact = torch.zeros(1, FEET, dtype=torch.bool)  # (1, 4)
+    first_contact[0, 0] = True  # fl touches down
+    last_air_time = torch.full((1, FEET), air_time_s)  # (1, 4) s
+    return rewards.feet_air_time(first_contact, last_air_time, torch.tensor([command]), AIR_TIME_THRESHOLD_S)  # (1,)
+
+
+def test_feet_air_time_flicker_touchdown_pays_negative():
+    assert _one_touchdown(FLICKER_S, WALK_COMMAND)[0] < 0
+
+
+def test_feet_air_time_real_swing_touchdown_pays_positive():
+    assert _one_touchdown(SWING_S, WALK_COMMAND)[0] > 0
+
+
+@pytest.mark.parametrize("air_time_s", [FLICKER_S, SWING_S, 0.5])
+def test_feet_air_time_is_zero_on_a_zero_command_even_with_touchdowns(air_time_s):
+    first_contact = torch.ones(2, FEET, dtype=torch.bool)  # (2, 4), every foot lands
+    last_air_time = torch.full((2, FEET), air_time_s)  # (2, 4) s
+    command = torch.tensor([STAND_COMMAND, STAND_COMMAND])  # (2, 3)
+    assert torch.equal(rewards.feet_air_time(first_contact, last_air_time, command, AIR_TIME_THRESHOLD_S), torch.zeros(2))
+
+
+def test_feet_air_time_pays_for_steps_when_turning_in_place():
+    assert _one_touchdown(SWING_S, TURN_IN_PLACE_COMMAND)[0] > 0
 
 
 def test_undesired_contacts_is_zero_when_only_feet_touch():
@@ -251,7 +282,8 @@ N_DOGS = 1000  # touchdowns spread over many dogs at the measured rate, so the b
 
 def _require_config() -> None:
     missing = [f"WEIGHTS['{k}']" for k, w in cfg.WEIGHTS.items() if w is None]
-    missing += [n for n in ("TRACK_LIN_VEL_WIDTH", "TRACK_ANG_VEL_WIDTH", "BASE_HEIGHT_TARGET_M") if getattr(cfg, n) is None]
+    missing += [n for n in ("TRACK_LIN_VEL_WIDTH", "TRACK_ANG_VEL_WIDTH", "FEET_AIR_TIME_THRESHOLD_S", "BASE_HEIGHT_TARGET_M")
+                if getattr(cfg, n) is None]
     if missing:
         pytest.fail("set these in ironbark_rl/brian/reward_config.py first: " + ", ".join(missing))
 
@@ -306,10 +338,16 @@ def _total(s: dict) -> float:
         "torques": rewards.torques(s["applied"], s["requested"], SERVO_LIMIT_NM),
         "joint_acc": rewards.joint_acc(s["joint_vel"], s["prev_joint_vel"], DT),
         "action_rate": rewards.action_rate(s["targets"], s["prev_targets"]),
-        "feet_air_time": rewards.feet_air_time(s["first_contact"], s["last_air_time"], s["command"]),
+        "feet_air_time": rewards.feet_air_time(s["first_contact"], s["last_air_time"], s["command"], cfg.FEET_AIR_TIME_THRESHOLD_S),
         "undesired_contacts": rewards.undesired_contacts(s["contact_forces"]),
     }  # each (n,)
     return float(sum(cfg.WEIGHTS[name] * value for name, value in values.items()).mean())
+
+
+def test_air_time_threshold_sits_between_flicker_and_a_typical_swing():
+    if cfg.FEET_AIR_TIME_THRESHOLD_S is None:
+        pytest.fail("set FEET_AIR_TIME_THRESHOLD_S in ironbark_rl/brian/reward_config.py first")
+    assert FLICKER_S < cfg.FEET_AIR_TIME_THRESHOLD_S < SWING_S, "flickers must pay negative and a typical swing positive"
 
 
 def test_normal_walking_step_pays_more_than_zero():
