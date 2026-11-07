@@ -1,6 +1,6 @@
 # EXP-002: baseline on env v2: 50 deg tilt, 1.4 N contact, all collisions
 
-**Status:** training · **Parent:** EXP-000
+**Status:** trained 2026-11-07 (seed 42), verdict pending (Brian) · **Parent:** EXP-000
 
 ## Hypothesis (Brian, before the run)
 
@@ -31,6 +31,26 @@ The scoreboard runs with terminations off, so changes 1–2 only affect training
 ## Results (scoreboard: `metrics.py`)
 
 _Pending. Filled by the evaluation harness once training finishes._
+
+**2026-11-07, scoreboard v1.** Run `2026-11-06_22-53-42_EXP-002`, checkpoint `model_1499.pt` (iteration 1499), 32 dogs × 10 s per command, seed 0, mass 0.972 kg. Smoothness and CoT use only episodes that never fell; CoT is NaN by design where there's no ground speed (standing, turning in place).
+
+| Command (vx, vy, wz) | Fall rate | Planar err [m/s] | Yaw err [rad/s] | Joint-target rate [rad/s] | CoT |
+|---|---|---|---|---|---|
+| (+0.0, +0.0, +0.0) | 0.000 | 0.001 | 0.003 | 0.33 | nan |
+| (+0.2, +0.0, +0.0) | 0.000 | 0.041 | 0.070 | 2.36 | 1.04 |
+| (+0.4, +0.0, +0.0) | 0.000 | 0.088 | 0.141 | 3.35 | 1.42 |
+| (-0.2, +0.0, +0.0) | 0.000 | 0.033 | 0.079 | 2.11 | 0.92 |
+| (+0.0, +0.2, +0.0) | 0.000 | 0.039 | 0.127 | 2.76 | 1.80 |
+| (+0.0, -0.2, +0.0) | 0.000 | 0.039 | 0.106 | 2.62 | 1.60 |
+| (+0.0, +0.0, +0.5) | 0.000 | 0.021 | 0.116 | 1.77 | nan |
+| (+0.0, +0.0, -0.5) | 0.000 | 0.023 | 0.096 | 1.86 | nan |
+| **overall (mean of rows)** | 0.000 | 0.036 | 0.092 | 2.14 | 1.36 |
+
+**2026-11-07, gait diagnostics (not scoreboard).** Run `2026-11-06_22-53-42_EXP-002`, checkpoint `model_1499.pt`, 32 dogs × 10 s per command (first 1 s skipped), seed 0. Saturation: requested torque above the 0.43 N·m cap.
+
+| Servo saturation | Swing p10 [s] | Swing median [s] | Swing p90 [s] | Flicker touchdowns (< 0.02 s) | Touchdowns / foot / s |
+|---|---|---|---|---|---|
+| 0.79% | 0.008 | 0.144 | 0.196 | 22.5% | 2.62 |
 
 ## What I saw (Brian: viewer, curves)
 
