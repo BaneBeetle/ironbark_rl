@@ -14,6 +14,8 @@ Run it only while nothing is training.
 """
 
 import argparse
+import contextlib
+import io
 import sys
 from pathlib import Path
 
@@ -43,7 +45,8 @@ def main() -> None:
     flagged = False
 
     standing = np.zeros((STANDING_DOGS, 3))
-    env, _ = evaluation.make_pinned_command_env(args.task, standing, args.seed)
+    with contextlib.redirect_stdout(io.StringIO()):  # mjlab's startup tables
+        env, _ = evaluation.make_pinned_command_env(args.task, standing, args.seed)
     zero_action = lambda obs: torch.zeros(env.unwrapped.action_space.shape, device=env.unwrapped.device)  # (N, J)
     means, _ = reward_audit.mean_contributions(env, standing, zero_action, args.seconds)
     env.close()
@@ -53,8 +56,9 @@ def main() -> None:
     if args.checkpoint is not None:
         grid = np.asarray(metrics.COMMAND_GRID, dtype=float)  # (C, 3)
         commands = np.repeat(grid, args.episodes_per_command, axis=0)  # (C * E, 3)
-        env, _ = evaluation.make_pinned_command_env(args.task, commands, args.seed)
-        policy = evaluation.load_policy(args.task, env, args.checkpoint)
+        with contextlib.redirect_stdout(io.StringIO()):  # mjlab's startup tables, the network printout
+            env, _ = evaluation.make_pinned_command_env(args.task, commands, args.seed)
+            policy = evaluation.load_policy(args.task, env, args.checkpoint)
         means, per_dog_total = reward_audit.mean_contributions(env, commands, policy, args.seconds)
         env.close()
         report(f"{args.task} (b) {args.checkpoint} on the command grid: {len(commands)} dogs x {args.seconds:.0f} s", means)
