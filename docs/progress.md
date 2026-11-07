@@ -168,6 +168,14 @@
 - **`reward_check` with the EXP-002 policy** on Brian's reward: +0.0273 per step on the grid, every command positive (+0.0234 to +0.0292), tracking 95%, torques 2.1%. Not flagged.
 - **EXP-003 started** (Brian's reward, parent EXP-002, seed 42), with his hypothesis in its file verbatim. Brian watched EXP-002 mid-training with a CPU-only playback (`tools/run.py play … --device cpu`), which costs training no measurable speed.
 
+- **EXP-003 trained** (Brian's reward, seed 42, 1500 iterations, no errors). Scoreboard v1, EXP-002 → EXP-003: falls 0 → 0, planar 0.036 → 0.039 m/s, yaw 0.092 → 0.084 rad/s, joint-target rate 2.14 → 2.53 rad/s, CoT 1.36 → 1.47. EXP-000's seed noise floor: ~3–5% for tracking, ~7–9% for smoothness and CoT. One seed each so far.
+  - Gait diagnostics, EXP-002 → EXP-003: saturation 0.79% → 1.04%, swing p10 0.008 → 0.008 s, median 0.144 → 0.168 s, flicker touchdowns 22.5% → 24.8%, touchdowns 2.62 → 2.65 per foot per s.
+  - Training curves at iteration 1499: episode length 983 (EXP-002) vs 961 (EXP-003) of 1000.
+    - Endings by cause: EXP-002 is 1.4% tilt, 2.1% non-foot contact; EXP-003 is 0.9% tilt, 6.8% non-foot contact.
+    - EXP-003 per-step contributions: total +0.0172 (−0.0032 at iteration 0, positive from ~50 on); tracking +0.0167 / +0.0065; torques −0.0030 (largest penalty); action_rate −0.0015; lin_vel_z −0.0007; `undesired_contacts` ≈ 0.
+  - Training-metric planar error at iterations 100 / 200: EXP-000 0.618 / 0.290, EXP-002 0.569 / 0.275, EXP-003 0.399 / 0.265. These are Luwu's command metrics, under training conditions, not the scoreboard.
+  - Interpretation and verdicts are Brian's (his read first, per the learning protocol).
+
 ### Next session (open it on `C:\Users\lolly\dev\ironbark_rl`)
 1. (Done 2026-11-07) Let EXP-002 finish (`~/dev/ironbark_runs/logs/rsl_rl/ironbark_s2_walk/*_EXP-002`). Then, with nothing else training: `tools/eval.py IronBark-S2-Walk-Flat --exp EXP-002`, and `tools/reward_check.py IronBark-S2-Walk-Flat-Brian --checkpoint <EXP-002>/model_1499.pt`.
 2. EXP-003: `tools/new_experiment.py "..." --parent EXP-002 --task IronBark-S2-Walk-Flat-Brian --experiment-name ironbark_s2_walk_brian`, paste Brian's hypothesis (above), train, eval. Report saturation % and swing-time p10 next to the scoreboard.
