@@ -1,5 +1,13 @@
 # Progress
 
+## 2026-11-07 (later): Phase 1 joint-control probe written, not run
+
+- `feet_air_time` confirmed at **3.0** (EXP-005) in `reward_config.py`.
+- **Probe:** `pi/joint_control_probe.py` (commit `791c3c5`), tests `tests/test_joint_control_probe.py` (fake link, no hardware; 103 pass). Subcommands `read`, `passive`, `step`, `sine`, `rate`, `gait`; JSONL per sample; lengths in samples, clock only logged. **Gated:** it refuses to open the port until Claude fills its xgolib block (`API_VERIFIED_FOR`, `READ_ORDER`, `LIMIT_ROW`, `GAIT_PROBE_STEP`) from the Pi's source.
+- **Blocked on the Pi being reachable.** At ~this session the Pi was offline: `raspberrypi.local` didn't resolve and nothing on 192.168.68.0/24 had port 22 open.
+- **SSH on native Windows isn't set up:** no `pi` alias (`~/.ssh/config` has only `Host 192.168.68.56`, `User pi`); the Windows key `lolly@PcBeetle` was probably never authorized on the Pi; Windows `known_hosts` holds keys for `raspberrypi` (`SHA256:WgPZ/…`) and `192.168.68.56` (`SHA256:BO5+U2…`) that **don't match** the verified `SHA256:wqOZO9…`. WSL's `known_hosts` has the matching key, and WSL's `ironbark-pc` key is the one authorized.
+- Proposed safety envelope / stimulus sizes (Brian's call, not yet confirmed): ±15° max from the measured start pose, 3° inside `MOTOR_LIMIT`, abort if commanding the start pose moves anything > 3°; step and sine 10°, `rate` 3° on all 12 joints, `motor_speed` 255.
+
 ## Verdict, 2026-11-07: EXP-005 (`feet_air_time` 3.0) is the current best (Brian)
 
 **Brian's read, after seeds 42–44 (verbatim):**
