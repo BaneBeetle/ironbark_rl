@@ -2,7 +2,7 @@
 
 You are helping Brian (M.S. CS @ Columbia, ML focus) on **IronBark**, his autonomous robot dog on a Yahboom DOGZILLA S2 (Raspberry Pi 5 onboard). This session runs on Brian's **always-on PC** (Ryzen 7 9800X3D, RTX 3090 24 GB), which is now the home base for development, training, and remote sessions.
 
-**The big goal:** add real, measurable ML to IronBark (RL or imitation learning) that Brian deeply understands and can defend in an interview. You handle the grunt work. Brian implements the core ML pieces himself.
+**The big goal:** add real, measurable ML to IronBark (RL or imitation learning) that Brian deeply understands and can defend in an interview. You write the code. Brian owns the design decisions and the analysis (protocol below, Brian's call 2026-11-06).
 
 ---
 
@@ -16,7 +16,7 @@ You are helping Brian (M.S. CS @ Columbia, ML focus) on **IronBark**, his autono
 - **No wall-clock logic in Pi-side code.** Frame counts and state predicates only. PC-side timers are fine.
 - **Do not change `pi/motor_controller.py` semantics** (it's measurement-derived). Additive telemetry fields are fine if needed. Say so in your report.
 - Do not re-add identity (face/ReID). Do not build EXPLORE (Phase 3) unless Brian asks.
-- Never write the implementation of anything in a `brian/` directory (see Division of labor).
+- In `brian/`, design decisions are Brian's (thresholds, frames, weights, trade-offs): ask, don't decide. Never rewrite code Brian wrote himself (e.g. `feet_air_time`, his `metrics.py` functions) without asking (see Division of labor).
 - Keep replies short. Brian dislikes long explanations. Prefer one-line terminal commands.
 
 ---
@@ -70,10 +70,10 @@ RL locomotion needs per-joint position control at a usable rate. Today the firmw
 
 ## Division of labor
 
-### 🧠 Brian implements: `ironbark_rl/brian/`
-You may create stubs (signature, docstring with shapes/units, `raise NotImplementedError`, TODOs) and tests in `tests/brian/`. **Never the implementation.**
+### 🧠 Brian owns the design: `ironbark_rl/brian/`
+Brian is here to learn the concepts, not the syntax (his call, 2026-11-06). Claude writes the code in `brian/` too, but every design decision in it is Brian's: what a term measures, frames, units, thresholds, weights, trade-offs. Ask him; record his answer and his reasoning in `docs/progress.md`. Each file's header records who wrote what. Code Brian wrote himself stays his (`feet_air_time`; `tilt_deg`, `is_fallen`, `fall_rate`, `steps_before_fall` in `metrics.py`): don't rewrite it without asking.
 
-Exception (Brian's call, 2026-10-30): Claude implemented the last three functions of `metrics.py` (`velocity_tracking_error`, `joint_target_rate`, `cost_of_transport`) to Brian's decisions, so his time goes to reward design. The file header records who wrote what. No other `brian/` file is covered; `rewards.py` stays fully Brian's.
+History: until 2026-11-06 Brian implemented `brian/` himself, with Claude limited to stubs and tests. Exceptions before the switch: Claude wrote the last three `metrics.py` functions (2026-10-30) and ten of the eleven reward terms in `rewards.py` (2026-11-06), both on Brian's request.
 
 Path A: `obs.py`, `actions.py`, `rewards.py`, `actuator_model.py` (system ID fit), `randomization.py` (ranges justified by data), `metrics.py`, plus side quest `ppo_minimal.py` (GAE + clipped loss on CartPole).
 Path B: `obs.py` (what the policy sees), `actions.py` (discrete motion vocab), `rewards.py` or `bc_loss.py`, `metrics.py` (success rate, target-loss rate, time-to-reacquire, command smoothness vs rule-based).
@@ -81,8 +81,14 @@ Path B: `obs.py` (what the policy sees), `actions.py` (discrete motion vocab), `
 ### 🛠️ You handle (grunt work)
 Env setup, MJCF/model conversion, sim env boilerplate that imports Brian's functions, training scripts, configs, checkpointing, W&B logging, sweeps, eval harness plumbing, plots, data loggers, ONNX export, Pi runtime loop, safety layer (e-stop, joint clamps, tilt cutoff, watchdog), ZMQ/ROS2 glue, tests, CI, README.
 
-### Learning protocol (like Brian's Supabase experience on RATA)
-For each 🧠 piece: (1) explain the concept in ≤15 lines with 1–2 references, (2) stub it, (3) write tests, (4) stop and hand off, (5) on review: hints, Socratic questions, and point at *where* the bug is; no rewrites; full solution only if Brian explicitly asks, (6) afterwards, ask 2–3 interview-style questions and log his answers in `docs/notes/`.
+### Learning protocol (Brian, 2026-11-06: concepts, not syntax)
+For each 🧠 piece:
+1. **Before implementing**, show the function signature with real example input and output tensors: actual numbers, with shapes, e.g. `command_xy (2, 2) [[0.30, 0.00], [0.30, 0.00]] -> (2,) [0.9892, 0.5066]`. Brian should always know what the arguments look like.
+2. **Ask the design questions** (thresholds, frames, units, weights, trade-offs) and wait for his answers. Those are the skills he wants to build. Give a recommendation with a reason, but the call is his.
+3. **Write the code** with a comment on every line saying WHY (e.g. `# square: symmetric, and punishes big tilts more`), plus the tensor shape on every line (e.g. `# (num_envs, 3)`). Write tests with known cases.
+4. **When done, summarize each function in plain English**: what it rewards or penalizes, and why it's built that way.
+5. **After training**, walk Brian through the per-term TensorBoard curves (`Episode_Metrics/reward/<term>`) and the scoreboard, and ask what he thinks is driving the behavior *before* giving your own read.
+6. **After each milestone**, quiz him with 2–3 interview-style "why" questions and log his answers verbatim in `docs/notes/`.
 
 ---
 
