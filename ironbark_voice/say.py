@@ -3,38 +3,50 @@
 Run from the worktree root with the voice venv:
   .venv\\Scripts\\python -m ironbark_voice.say devices
   .venv\\Scripts\\python -m ironbark_voice.say account
-  .venv\\Scripts\\python -m ironbark_voice.say compare "Yo, found you, bro!"
-  .venv\\Scripts\\python -m ironbark_voice.say line "Yo, found you, bro!" --voice Warren
-  .venv\\Scripts\\python -m ironbark_voice.say haiku target_reacquired --state "behavior=FOLLOW battery=62%" --voice Warren
+  .venv\\Scripts\\python -m ironbark_voice.say line "Yo, there's my guy. Let's roll." --wav samples/found.wav
+  .venv\\Scripts\\python -m ironbark_voice.say haiku behavior_changed --state "behavior=FOLLOW battery=62%"
   .venv\\Scripts\\python -m ironbark_voice.say summary
 
-Speaks only through the PC's audio device. Nothing here talks to the dog.
+The voice is config.VOICE_ID unless --voice gives another id. Speaks only through the PC's
+audio device. Nothing here talks to the dog.
 """
 
 import argparse
 import json
 import sys
 import time
+from datetime import datetime
 
 from ironbark_voice import config, latency_log
 from ironbark_voice.latency_log import LineTiming
-from ironbark_voice.player import PcmPlayer, list_output_devices
+from ironbark_voice.player import PcmPlayer, list_output_devices, write_wav
 
 
-def resolve_voice(name_or_id: str | None) -> str:
-    """Accept a shortlist name ("Warren") or a raw voice_id; fall back to config.VOICE_ID."""
-    value = name_or_id or config.VOICE_ID
+def resolve_voice(voice_id: str | None) -> str:
+    """--voice wins; otherwise the configured voice."""
+    value = voice_id or config.VOICE_ID
     if not value:
-        raise SystemExit("No voice picked yet: pass --voice <name or id> (shortlist: " + ", ".join(config.VOICE_SHORTLIST) + ")")
-    return config.VOICE_SHORTLIST.get(value, value)
+        raise SystemExit("No voice set: pass --voice <voice_id> or set config.VOICE_ID.")
+    return value
 
 
-def speak(text: str, voice_id: str, event: str, source: str, event_s: float, text_ready_s: float, **haiku_usage) -> dict:
-    """TTS -> speakers, then log the timing. Returns the latency record."""
+def tee(chunks, sink: list):
+    """Pass chunks through to the player while keeping a copy, so a clip can be saved as it plays."""
+    for chunk in chunks:
+        sink.append(chunk)
+        yield chunk
+
+
+def speak(text: str, voice_id: str, event: str, source: str, event_s: float, text_ready_s: float,
+          wav_path: str | None = None, **haiku_usage) -> dict:
+    """TTS -> speakers (and optionally a WAV file), then log the timing. Returns the latency record."""
     from ironbark_voice.tts import ElevenLabsTTS
 
     tts = ElevenLabsTTS(voice_id=voice_id)
-    playback = PcmPlayer().play(tts.stream_pcm(text))  # plays while it streams
+    kept: list[bytes] = []
+    playback = PcmPlayer().play(tee(tts.stream_pcm(text), kept))  # plays while it streams
+    if wav_path:
+        write_wav(wav_path, b"".join(kept))
     timing = LineTiming(event=event, source=source, text=text, event_s=event_s, text_ready_s=text_ready_s,
                         playback=playback, voice_id=voice_id, tts_model=tts.model_id, **haiku_usage)
     return latency_log.append(timing)
@@ -55,31 +67,30 @@ def cmd_devices(args) -> None:
     print('\nTo pick one, set config.OUTPUT_DEVICE to part of its name, e.g. "Realtek Digital Output" (None = system default).')
 
 
-def cmd_account(_args) -> None:
+def cmd_account(args) -> None:
     from elevenlabs.client import ElevenLabs
 
     client = ElevenLabs(api_key=config.require_env("ELEVENLABS_API_KEY"))
     sub = client.user.subscription.get()
-    print(f"tier {sub.tier} | characters used {sub.character_count} of {sub.character_limit} this period")
-    for name, voice_id in config.VOICE_SHORTLIST.items():
-        try:
-            v = client.voices.get(voice_id)
-            print(f"  {name:<7} ok: {v.name} (category {v.category}, tiers {v.available_for_tiers}, labels {v.labels})")
-        except Exception as e:  # report and keep going: one unusable voice shouldn't hide the others
-            print(f"  {name:<7} NOT usable with this key: {type(e).__name__}: {e}")
-
-
-def cmd_compare(args) -> None:
-    for name, voice_id in config.VOICE_SHORTLIST.items():
-        print(f"\n--- {name} ---")
-        now = time.perf_counter()
-        print_record(speak(args.text, voice_id, event="voice_compare", source="tts", event_s=now, text_ready_s=now))
-        time.sleep(0.8)  # a short gap so the voices don't run together
+    reset = (f"{datetime.fromtimestamp(sub.next_character_count_reset_unix):%Y-%m-%d}"
+             if sub.next_character_count_reset_unix else "unknown")
+    print(f"tier {sub.tier} | credits used {sub.character_count} of {sub.character_limit} | "
+          f"left {sub.character_limit - sub.character_count} | resets {reset}")
+    voice_id = resolve_voice(args.voice)
+    try:
+        v = client.voices.get(voice_id)
+    except Exception as e:  # show the reason instead of a traceback
+        raise SystemExit(f"voice {voice_id} NOT usable with this key: {type(e).__name__}: {e}")
+    print(f"voice {v.name} ({voice_id}) | category {v.category} | labels {v.labels}")
+    if v.sharing is not None:  # Voice Library voices: their owner can set a custom rate, and live moderation adds latency
+        s = v.sharing
+        print(f"  library: rate {s.rate} | live moderation {s.live_moderation_enabled} | notice period {s.notice_period} days")
 
 
 def cmd_line(args) -> None:
     now = time.perf_counter()  # a typed line is "ready" the moment it's sent
-    print_record(speak(args.text, resolve_voice(args.voice), event="manual", source="tts", event_s=now, text_ready_s=now))
+    print_record(speak(args.text, resolve_voice(args.voice), event=args.event, source="tts",
+                       event_s=now, text_ready_s=now, wav_path=args.wav))
 
 
 def cmd_haiku(args) -> None:
@@ -94,7 +105,7 @@ def cmd_haiku(args) -> None:
     if result.over_limit:
         print(f"note: {result.words} words, over the {config.MAX_WORDS_PER_LINE}-word cap")
     print_record(speak(result.text, voice_id, event=args.event, source="haiku", event_s=event_s, text_ready_s=text_ready_s,
-                       haiku_input_tokens=result.input_tokens, haiku_output_tokens=result.output_tokens))
+                       wav_path=args.wav, haiku_input_tokens=result.input_tokens, haiku_output_tokens=result.output_tokens))
 
 
 def cmd_summary(args) -> None:
@@ -107,18 +118,20 @@ def main(argv=None) -> None:
     p = sub.add_parser("devices", help="list audio output devices")
     p.add_argument("--all", action="store_true", help="show every Windows audio API, not just the default's")
     p.set_defaults(func=cmd_devices)
-    sub.add_parser("account", help="ElevenLabs tier, quota, and which shortlisted voices this key can use").set_defaults(func=cmd_account)
-    p = sub.add_parser("compare", help="speak one line in each shortlisted voice")
-    p.add_argument("text")
-    p.set_defaults(func=cmd_compare)
+    p = sub.add_parser("account", help="ElevenLabs tier, credits left, and whether this key can use the voice")
+    p.add_argument("--voice")
+    p.set_defaults(func=cmd_account)
     p = sub.add_parser("line", help="speak a typed line")
     p.add_argument("text")
+    p.add_argument("--event", default="manual", help="label for the latency log")
     p.add_argument("--voice")
+    p.add_argument("--wav", help="also save the clip as a WAV file")
     p.set_defaults(func=cmd_line)
     p = sub.add_parser("haiku", help="have Haiku write a line for an event, then speak it")
     p.add_argument("event")
     p.add_argument("--state", default="", help='e.g. "behavior=FOLLOW target=visible battery=62%%"')
     p.add_argument("--voice")
+    p.add_argument("--wav", help="also save the clip as a WAV file")
     p.set_defaults(func=cmd_haiku)
     p = sub.add_parser("summary", help="median event->first-sound from a latency log")
     p.add_argument("path", nargs="?")

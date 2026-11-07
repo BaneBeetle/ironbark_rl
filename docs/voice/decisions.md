@@ -29,6 +29,21 @@ from the Mac).
 Claude's recommendation that Brian accepted in (4): keys stay on the PC, one code path, and
 the Pi stays a thin player.
 
+## 2026-11-07: voice and persona v2 (Brian)
+
+- **Voice:** "use Tilly from the Voice Library, voice ID MkTSSXNgnBULS6ek4pon. I'm on the
+  ElevenLabs Creator plan (not free tier), so Voice Library voices work via the API."
+  (`config.VOICE_ID`). This replaces Claude's shortlist (Warren, Eddie, Caleb).
+- **Persona v2, to match the voice:** "a tiny dog with big-bro energy. Chill, supportive,
+  honest friend vibes, casual slang, ≤12 words, first person. The comedy is a small squeaky
+  voice acting like a big laid-back bro." (`brain.PERSONA`)
+  - Claude's reading, for Brian to confirm: the lines play it straight, as big-bro swagger
+    that never mentions the voice, so the contrast is all in the sound. A size joke now and
+    then is allowed.
+- **Cooldown:** Brian asked to recompute the line budget from his real monthly credits
+  (`say account`) and to shorten the cooldown if the budget allows. Claude proposes a
+  number; the call is Brian's.
+
 ## Context Claude found (for reference, not decisions)
 
 - **RemBeetle reuse.** Its ElevenLabs module (`tts/elevenlabs_tts.py`) is not in git; it
