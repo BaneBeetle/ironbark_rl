@@ -27,6 +27,7 @@ Fall-on-purpose guard before training (`tools/reward_check.py`, new weight): +0.
 ### Seed replicates (same setup, different seed: measures the noise floor, rule 4)
 
 - **Seed 43**, started 2026-11-07 07:26 at commit `923a51b` (Brian: check the noise, 2026-11-07): `python tools/run.py train IronBark-S2-Walk-Flat-Brian --env.scene.num-envs 4096 --agent.max-iterations 1500 --agent.seed 43 --agent.run-name EXP-005-s43`. Run folder `~/dev/ironbark_runs/logs/rsl_rl/ironbark_s2_walk_brian/*_EXP-005-s43`. Tests: 88 passed, 1 deselected, 35 warnings in 5.07s. Guard: +0.02924 per step standing, +0.02792 for the EXP-005 seed-42 policy on the grid, commands +0.0252 to +0.0292; not flagged.
+- **Seed 44**, started 2026-11-07 08:16 at commit `3b58ca6` (Brian: check the noise, 2026-11-07): `python tools/run.py train IronBark-S2-Walk-Flat-Brian --env.scene.num-envs 4096 --agent.max-iterations 1500 --agent.seed 44 --agent.run-name EXP-005-s44`. Run folder `~/dev/ironbark_runs/logs/rsl_rl/ironbark_s2_walk_brian/*_EXP-005-s44`. Tests: 88 passed, 1 deselected, 35 warnings in 5.27s. Guard: +0.02924 per step standing, +0.02792 for the EXP-005 seed-42 policy on the grid, commands +0.0252 to +0.0292; not flagged.
 
 ## Results (scoreboard: `metrics.py`)
 
