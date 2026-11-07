@@ -31,6 +31,10 @@ TRACK_ANG_VEL_WIDTH: float | None = None
 # both EXP-000 on env v2; tests/brian/test_rewards.py checks both.
 FEET_AIR_TIME_THRESHOLD_S: float | None = 0.07
 
+# undesired_contacts: a non-foot part counts as touching only above this force, so contact-solver
+# noise isn't penalized. Anything over 1.43 N already ends the episode.
+UNDESIRED_CONTACT_MIN_FORCE_N: float | None = None
+
 # MEASURE: real S2 standing height of the sim's `base` frame origin, m. Brian measures it:
 #   dog standing in its default pose on a flat floor, ruler from the floor to the centre of
 #   each thigh (upper-leg) pivot, mean of the 4 legs, plus 0.021 m (the sim's offset from

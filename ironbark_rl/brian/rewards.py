@@ -1,8 +1,11 @@
-"""Brian's legged_gym-style reward (Rudin et al. 2021): one function per term. Brian's implementation.
+"""Brian's legged_gym-style reward (Rudin et al. 2021): one function per term.
 
-Claude wrote only the signatures, docstrings and the tests (tests/brian/test_rewards.py,
-run: python -m pytest tests/brian -q -k reward). Every function body is Brian's. Weights and
-tunable parameters live in reward_config.py (Brian edits it); nothing is hardcoded here.
+Who wrote what: Brian designed every term (frames, units, what each one penalizes) and wrote
+feet_air_time. Claude wrote the other ten bodies on Brian's explicit request (2026-11-06,
+overriding CLAUDE.md's "never write brian/" rule for these terms), with a WHY comment on
+every line, plus the signatures, docstrings and tests (tests/brian/test_rewards.py, run:
+python -m pytest tests/brian -q -k reward). Weights and tunable parameters live in
+reward_config.py (Brian edits it); nothing is hardcoded here.
 
 Conventions:
 - Inputs are torch tensors for num_envs dogs at ONE policy step (0.02 s); there's no time axis.
@@ -46,8 +49,15 @@ def track_lin_vel_xy(command_xy: torch.Tensor, lin_vel_xy: torch.Tensor, width: 
 
     Returns:
       (num_envs,) in (0, 1]: exactly 1 when lin_vel_xy == command_xy, smaller as the error grows.
+
+    Example (row 0: a typical walking step; row 1: lagging and drifting sideways), width 0.0625:
+      command_xy (2, 2) [[0.30, 0.00], [0.30, 0.00]]
+      lin_vel_xy (2, 2) [[0.274, 0.00], [0.10, 0.05]]
+      ->         (2,)   [0.9892, 0.5066]
     """
-    raise NotImplementedError
+    error = command_xy - lin_vel_xy  # (num_envs, 2) how far off we are in x and y, m/s
+    squared_error = (error**2).sum(dim=-1)  # (num_envs,) squared length: any direction counts the same, big misses count more
+    return torch.exp(-squared_error / width)  # (num_envs,) exp kernel: exactly 1 at zero error, fades smoothly toward 0, never negative
 
 
 def track_ang_vel_z(command_wz: torch.Tensor, ang_vel_z: torch.Tensor, width: float) -> torch.Tensor:
@@ -60,8 +70,14 @@ def track_ang_vel_z(command_wz: torch.Tensor, ang_vel_z: torch.Tensor, width: fl
 
     Returns:
       (num_envs,) in (0, 1]: exactly 1 when ang_vel_z == command_wz, smaller as the error grows.
+
+    Example (row 0: typical; row 1: ordered to turn but not turning), width 0.16:
+      command_wz (2,) [0.5, 0.5]
+      ang_vel_z  (2,) [0.433, 0.0]
+      ->         (2,) [0.9723, 0.2096]
     """
-    raise NotImplementedError
+    squared_error = (command_wz - ang_vel_z) ** 2  # (num_envs,) square: over- and under-turning cost the same
+    return torch.exp(-squared_error / width)  # (num_envs,) same kernel as planar tracking: 1 when perfect, in (0, 1]
 
 
 def lin_vel_z(lin_vel_z_b: torch.Tensor) -> torch.Tensor:
@@ -72,8 +88,12 @@ def lin_vel_z(lin_vel_z_b: torch.Tensor) -> torch.Tensor:
 
     Returns:
       (num_envs,) >= 0, exactly 0 when the body isn't moving along its z axis.
+
+    Example (row 0: typical walking; row 1: a hop):
+      lin_vel_z_b (2,) [0.009, -0.05]
+      ->          (2,) [8.1e-05, 0.0025]
     """
-    raise NotImplementedError
+    return lin_vel_z_b**2  # (num_envs,) square: bouncing up or down costs the same, and a big bounce costs far more than a tiny one
 
 
 def ang_vel_xy(ang_vel_xy_b: torch.Tensor) -> torch.Tensor:
@@ -84,8 +104,12 @@ def ang_vel_xy(ang_vel_xy_b: torch.Tensor) -> torch.Tensor:
 
     Returns:
       (num_envs,) >= 0, exactly 0 when not rolling or pitching.
+
+    Example (row 0: typical walking; row 1: wobbling):
+      ang_vel_xy_b (2, 2) [[0.15, 0.0], [0.3, -0.2]]
+      ->           (2,)   [0.0225, 0.13]
     """
-    raise NotImplementedError
+    return (ang_vel_xy_b**2).sum(dim=-1)  # (num_envs,) square each rate (sign-free, big wobbles dominate), then add roll + pitch
 
 
 def orientation(projected_gravity_b: torch.Tensor) -> torch.Tensor:
@@ -97,8 +121,13 @@ def orientation(projected_gravity_b: torch.Tensor) -> torch.Tensor:
 
     Returns:
       (num_envs,) >= 0, exactly 0 when level.
+
+    Example (row 0: 1.5 deg pitch, typical walking; row 1: 20 deg roll):
+      projected_gravity_b (2, 3) [[0.0262, 0.0, -0.9997], [0.0, 0.342, -0.9397]]
+      ->                  (2,)   [0.000685, 0.117]
     """
-    raise NotImplementedError
+    tilt_xy = projected_gravity_b[:, :2]  # (num_envs, 2) gravity leaking into body x (pitch) and y (roll); (0, 0) only when level
+    return (tilt_xy**2).sum(dim=-1)  # (num_envs,) equals sin^2(tilt): 0 when level, grows with tilt, same for left/right and fore/aft
 
 
 def base_height(base_z: torch.Tensor, target_m: float) -> torch.Tensor:
@@ -110,8 +139,12 @@ def base_height(base_z: torch.Tensor, target_m: float) -> torch.Tensor:
 
     Returns:
       (num_envs,) >= 0, exactly 0 at target_m, > 0 above or below it.
+
+    Example (row 0: typical walking spread; row 1: 2 cm sag), target_m 0.128:
+      base_z (2,) [0.1303, 0.108]
+      ->     (2,) [5.29e-06, 0.0004]
     """
-    raise NotImplementedError
+    return (base_z - target_m) ** 2  # (num_envs,) square: too low and too high both cost, and a 2 cm sag costs 4x a 1 cm one
 
 
 def torques(applied: torch.Tensor, requested: torch.Tensor, servo_limit_nm: float) -> torch.Tensor:
@@ -125,10 +158,17 @@ def torques(applied: torch.Tensor, requested: torch.Tensor, servo_limit_nm: floa
       servo_limit_nm: the clamp, 0.43 N*m (a Mini2S placeholder, MEASURE in Phase 1).
 
     Returns:
-      (num_envs,) >= 0, exactly 0 when no servo pushes. Yours: penalize applied, requested,
-      the excess over the cap, or a mix.
+      (num_envs,) >= 0, exactly 0 when no servo pushes. Penalizes the requested torque (Brian
+      offered requested or the excess over the cap; requested also costs normal effort).
+
+    Example (row 0: typical walking, 0.141 N*m on every joint; row 1: same, but one thigh
+    requests 0.86 N*m, twice the cap), servo_limit_nm 0.43:
+      requested (2, 12) [[0.141] * 12, [0.141] * 4 + [0.86] + [0.141] * 7]
+      applied   (2, 12) requested clamped to +/- 0.43 (row 1's thigh delivers 0.43)
+      ->        (2,)    [0.2386, 0.9583]
     """
-    raise NotImplementedError
+    # `applied` and `servo_limit_nm` go unused on purpose: applied is clamped at the cap, so it can't see a servo pushing past it.
+    return (requested**2).sum(dim=-1)  # (num_envs,) square the pre-clip request (legged_gym's effort cost); pushing past 0.43 N*m keeps costing more
 
 
 def joint_acc(joint_vel: torch.Tensor, prev_joint_vel: torch.Tensor, dt: float) -> torch.Tensor:
@@ -143,8 +183,14 @@ def joint_acc(joint_vel: torch.Tensor, prev_joint_vel: torch.Tensor, dt: float) 
     Returns:
       (num_envs,) >= 0, exactly 0 when no joint velocity changed (even if the joints move).
       Based on rad/s^2, so it doesn't depend on the policy rate.
+
+    Example (row 0: typical walking, 36 rad/s^2 per joint; row 1: a jerk, 100 rad/s^2), dt 0.02:
+      joint_vel      (2, 12) [[0.72] * 12, [2.0] * 12]
+      prev_joint_vel (2, 12) zeros
+      ->             (2,)    [15550, 120000]
     """
-    raise NotImplementedError
+    acceleration = (joint_vel - prev_joint_vel) / dt  # (num_envs, 12) rad/s^2: velocity change per second, so it doesn't depend on the policy rate
+    return (acceleration**2).sum(dim=-1)  # (num_envs,) square (sign-free, jerks dominate), then add all 12 joints
 
 
 def action_rate(joint_targets: torch.Tensor, prev_joint_targets: torch.Tensor) -> torch.Tensor:
@@ -158,8 +204,14 @@ def action_rate(joint_targets: torch.Tensor, prev_joint_targets: torch.Tensor) -
 
     Returns:
       (num_envs,) >= 0, exactly 0 when the targets don't change.
+
+    Example (row 0: typical walking step, 0.042 rad per joint; row 1: a 0.2 rad jump):
+      joint_targets      (2, 12) [[0.542] * 12, [0.7] * 12]
+      prev_joint_targets (2, 12) [[0.5] * 12, [0.5] * 12]
+      ->                 (2,)    [0.02117, 0.48]
     """
-    raise NotImplementedError
+    change = joint_targets - prev_joint_targets  # (num_envs, 12) rad each joint target moved since the last policy step
+    return (change**2).sum(dim=-1)  # (num_envs,) square (sign-free, big jumps dominate), then add all 12 joints
 
 
 def feet_air_time(first_contact: torch.Tensor, last_air_time: torch.Tensor, command: torch.Tensor,
@@ -189,7 +241,7 @@ def feet_air_time(first_contact: torch.Tensor, last_air_time: torch.Tensor, comm
     return total * moving
 
 
-def undesired_contacts(contact_forces: torch.Tensor) -> torch.Tensor:
+def undesired_contacts(contact_forces: torch.Tensor, min_force_n: float) -> torch.Tensor:
     """Penalty for non-foot parts brushing the ground (anything over 1.43 N already ends the episode).
 
     Args:
@@ -197,8 +249,16 @@ def undesired_contacts(contact_forces: torch.Tensor) -> torch.Tensor:
         Axis 1, the 9 parts: base, fl_hip, fl_thigh, fr_hip, fr_thigh, br_hip, br_thigh,
         bl_hip, bl_thigh. Axis 2: the last 4 physics substeps (4 ms each), index 0 newest.
         Axis 3: the force vector in the contact frame (use its length).
+      min_force_n: reward_config.UNDESIRED_CONTACT_MIN_FORCE_N, below which a contact counts as solver noise.
 
     Returns:
-      (num_envs,) >= 0, exactly 0 when nothing but the feet touches the ground.
+      (num_envs,) >= 0, the number of non-foot parts touching; exactly 0 when only the feet touch.
+
+    Example (row 0: only feet touch; row 1: fl_thigh brushes the floor at 1 N), min_force_n 0.1:
+      contact_forces (2, 9, 4, 3) zeros, except [1, 2, 0] = (0, 0, 1.0)
+      ->             (2,)         [0, 1]
     """
-    raise NotImplementedError
+    force = torch.linalg.norm(contact_forces, dim=-1)  # (num_envs, 9, 4) N: force size; its contact-frame direction doesn't matter
+    peak = force.amax(dim=-1)  # (num_envs, 9) N: hardest push over the last 4 substeps, so a brush between policy steps isn't missed
+    touching = peak > min_force_n  # (num_envs, 9) bool: a real touch, not solver noise
+    return touching.float().sum(dim=-1)  # (num_envs,) count of parts touching: a light, bounded cost per brush (big hits end the episode)

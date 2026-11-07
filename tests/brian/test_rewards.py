@@ -30,6 +30,7 @@ SUBSTEPS = 4
 ANY_WIDTH = 0.25  # the known cases hold for any positive kernel width
 ANY_TARGET_M = 0.13  # likewise for any base-height target
 SERVO_LIMIT_NM = 0.43
+CONTACT_NOISE_N = 0.1  # legged_gym's contact threshold; the contact cases hold for any value below 1 N
 AIR_TIME_THRESHOLD_S = 0.1  # Brian's example; the feet_air_time cases hold for any value in (FLICKER_S, SWING_S)
 
 # Measured typical walking step: EXP-000 policy on env v2, 256 dogs x 9 s, 2026-11-06 (medians).
@@ -77,7 +78,7 @@ SHAPE_CASES = {
     "joint_acc": lambda n: rewards.joint_acc(torch.randn(n, J), torch.randn(n, J), DT),
     "action_rate": lambda n: rewards.action_rate(torch.randn(n, J), torch.randn(n, J)),
     "feet_air_time": lambda n: rewards.feet_air_time(torch.rand(n, FEET) < 0.3, 0.3 * torch.rand(n, FEET), torch.randn(n, 3), AIR_TIME_THRESHOLD_S),
-    "undesired_contacts": lambda n: rewards.undesired_contacts(torch.rand(n, NONFOOT_PARTS, SUBSTEPS, 3)),
+    "undesired_contacts": lambda n: rewards.undesired_contacts(torch.rand(n, NONFOOT_PARTS, SUBSTEPS, 3), CONTACT_NOISE_N),
 }
 PENALTIES = ["lin_vel_z", "ang_vel_xy", "orientation", "base_height", "torques", "joint_acc", "action_rate", "undesired_contacts"]
 
@@ -266,13 +267,13 @@ def test_feet_air_time_pays_for_steps_when_turning_in_place():
 
 
 def test_undesired_contacts_is_zero_when_only_feet_touch():
-    assert torch.equal(rewards.undesired_contacts(torch.zeros(3, NONFOOT_PARTS, SUBSTEPS, 3)), torch.zeros(3))
+    assert torch.equal(rewards.undesired_contacts(torch.zeros(3, NONFOOT_PARTS, SUBSTEPS, 3), CONTACT_NOISE_N), torch.zeros(3))
 
 
 def test_undesired_contacts_sees_a_thigh_brush():
     forces = torch.zeros(1, NONFOOT_PARTS, SUBSTEPS, 3)  # (1, 9, 4, 3)
     forces[0, 2, 0] = torch.tensor([0.0, 0.0, 1.0])  # fl_thigh, newest substep: 1 N, under the 1.43 N termination
-    assert rewards.undesired_contacts(forces)[0] > 0
+    assert rewards.undesired_contacts(forces, CONTACT_NOISE_N)[0] > 0
 
 
 # ---------------------------------------------------------------- scenario rules (need reward_config.py)
@@ -282,7 +283,8 @@ N_DOGS = 1000  # touchdowns spread over many dogs at the measured rate, so the b
 
 def _require_config() -> None:
     missing = [f"WEIGHTS['{k}']" for k, w in cfg.WEIGHTS.items() if w is None]
-    missing += [n for n in ("TRACK_LIN_VEL_WIDTH", "TRACK_ANG_VEL_WIDTH", "FEET_AIR_TIME_THRESHOLD_S", "BASE_HEIGHT_TARGET_M")
+    missing += [n for n in ("TRACK_LIN_VEL_WIDTH", "TRACK_ANG_VEL_WIDTH", "FEET_AIR_TIME_THRESHOLD_S",
+                                    "UNDESIRED_CONTACT_MIN_FORCE_N", "BASE_HEIGHT_TARGET_M")
                 if getattr(cfg, n) is None]
     if missing:
         pytest.fail("set these in ironbark_rl/brian/reward_config.py first: " + ", ".join(missing))
@@ -339,7 +341,7 @@ def _total(s: dict) -> float:
         "joint_acc": rewards.joint_acc(s["joint_vel"], s["prev_joint_vel"], DT),
         "action_rate": rewards.action_rate(s["targets"], s["prev_targets"]),
         "feet_air_time": rewards.feet_air_time(s["first_contact"], s["last_air_time"], s["command"], cfg.FEET_AIR_TIME_THRESHOLD_S),
-        "undesired_contacts": rewards.undesired_contacts(s["contact_forces"]),
+        "undesired_contacts": rewards.undesired_contacts(s["contact_forces"], cfg.UNDESIRED_CONTACT_MIN_FORCE_N),
     }  # each (n,)
     return float(sum(cfg.WEIGHTS[name] * value for name, value in values.items()).mean())
 
