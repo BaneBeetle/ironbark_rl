@@ -56,4 +56,6 @@ _Pending. Filled by the evaluation harness once training finishes._
 
 ## Why / next (Brian)
 
+(2026-11-07) EXP-002 early learning: at iter 100 its error (0.569) beat EXP-000 (0.618), so my "slower early learning" prediction was wrong (one seed).
+
 ## Verdict

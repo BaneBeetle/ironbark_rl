@@ -176,6 +176,15 @@
   - Training-metric planar error at iterations 100 / 200: EXP-000 0.618 / 0.290, EXP-002 0.569 / 0.275, EXP-003 0.399 / 0.265. These are Luwu's command metrics, under training conditions, not the scoreboard.
   - Interpretation and verdicts are Brian's (his read first, per the learning protocol).
 
+- **Brian's reads (verbatim in the experiment files):**
+  - EXP-002: the "slower early learning" prediction was wrong (iteration 100: 0.569 vs EXP-000's 0.618, one seed).
+  - EXP-003: only `torques` (~18% of tracking) and `action_rate` (~9%) are big enough to steer the policy; `feet_air_time` (~1.2%) is too small to cut flickers. Future fix: raise its weight ~7.5×.
+  - He suspected `undesired_contacts` was broken ("reads exactly 0 while 6.8% of episodes end on contact") and held extra seeds until it's sorted.
+- **`undesired_contacts`: not a bug.** "Exactly 0" was Claude's error: the results table rounded −2e-6 to −0.00000 and called it 0. TensorBoard has 1492 of 1500 points nonzero.
+  - Reproduction (EXP-003 policy, training conditions, 1024 dogs × 20 s): the penalty fired on 16 of 16 contact-termination steps and on 0 other steps. Sensor slots, the reward-before-reset order and the force/threshold math all check out.
+  - Cause: any contact over 1.43 N ends the episode in the same step, and no light brushes (0.1–1.43 N) happened. So the term pays only once per contact ending (≈ −0.005), and its per-step average is ~1e-6. What that leaves the term for is Brian's design call.
+  - `tests/test_brian_task_sim.py` (opt-in `pytest -m sim`, ~16 s, GPU) drops dogs on their backs and asserts the contact-termination step is penalized. It fails, as it should, when the noise floor is set too high for any contact to count. The default `pytest` run deselects it (`addopts = -m 'not sim'`).
+
 ### Next session (open it on `C:\Users\lolly\dev\ironbark_rl`)
 1. (Done 2026-11-07) Let EXP-002 finish (`~/dev/ironbark_runs/logs/rsl_rl/ironbark_s2_walk/*_EXP-002`). Then, with nothing else training: `tools/eval.py IronBark-S2-Walk-Flat --exp EXP-002`, and `tools/reward_check.py IronBark-S2-Walk-Flat-Brian --checkpoint <EXP-002>/model_1499.pt`.
 2. EXP-003: `tools/new_experiment.py "..." --parent EXP-002 --task IronBark-S2-Walk-Flat-Brian --experiment-name ironbark_s2_walk_brian`, paste Brian's hypothesis (above), train, eval. Report saturation % and swing-time p10 next to the scoreboard.

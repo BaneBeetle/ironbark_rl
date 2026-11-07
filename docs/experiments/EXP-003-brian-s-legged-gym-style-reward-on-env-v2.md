@@ -50,8 +50,16 @@ _Pending. Filled by the evaluation harness once training finishes._
 |---|---|---|---|---|---|
 | 1.04% | 0.008 | 0.168 | 0.208 | 24.8% | 2.65 |
 
+**2026-11-07, Claude: `undesired_contacts` check.** TensorBoard's `Episode_Metrics/reward/undesired_contacts` isn't 0: 1492 of 1500 points are nonzero, mean −2.0e-6 per step. (Claude's results table had rounded it to −0.00000 and called it 0.) Reproduction, EXP-003 policy under training conditions, 1024 dogs × 20 s: the penalty fired on 16 of 16 contact-termination steps (1.06 parts on average) and on 0 other steps (no light brushes between 0.1 and 1.43 N). Sensor slots and the reward-before-reset order are correct. A contact over 1.43 N ends the episode in the same step, so the term pays once per contact ending, −0.25 × ~1 part × 0.02 s ≈ −0.005, and averages to ~1e-7 to 1e-6 per step. Pinned by `tests/test_brian_task_sim.py` (`pytest -m sim`).
+
 ## What I saw (Brian: viewer, curves)
 
 ## Why / next (Brian)
+
+(2026-11-07) Q1: feet_air_time contributes ~1.2% of tracking (0.0002 vs 0.0167), too small to shape anything, which explains why flickers didn't drop. Only torques (~18%) and action_rate (~9%) were big enough to steer the policy. Future fix: raise feet_air_time's weight ~7.5x so it lands around action_rate's size.
+
+(2026-11-07) Q2: Likely a bug. 6.8% of episodes end on non-foot contact (>1.43 N), which is also above undesired_contacts' 0.1 N floor, so the penalty should fire at least on those steps, yet it reads exactly 0 all run. Investigate before any new training. → Claude's check (Results above): not a bug; it fires on those steps, and "exactly 0" was Claude's rounding.
+
+Hold off on extra seeds until the bug's sorted.
 
 ## Verdict
