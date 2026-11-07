@@ -120,9 +120,16 @@
   - feet: 2.7 touchdowns per foot per second, swing time at touchdown 0.136 s.
   - EXP-000 still walks on env v2: 0 falls, no non-foot contact. Swing p10 is 0.008 s, which is contact flicker rather than real steps.
 
+- **`feet_air_time` hypothesis (Brian):** paying raw air time at touchdown can't tell a 0.008 s flicker from a real step, since both just pay time airborne. So it gives no push toward real steps, and buzzing feet are bad for hobby servos that likely can't track them on the real dog. Paying (air_time − threshold) at touchdown makes flickers negative (0.008 − 0.1 = −0.092) while a normal 0.136 s swing still pays +0.036. The threshold must sit below the typical 0.136 s swing. → `FEET_AIR_TIME_THRESHOLD_S` in `reward_config.py`, passed to `feet_air_time(…, air_time_threshold_s)`.
+- **Gating decision (Brian):** `feet_air_time` pays 0 without a real command, or the dog learns to step in place. Turning in place needs lifted feet too, so yaw commands count: `moving = (‖cmd_xy‖ > 0.1) | (|wz| > 0.1)`, Brian's own mask. Brian implements the function.
+- Tests added: a flicker touchdown pays < 0, a 0.136 s swing pays > 0, a zero command pays exactly 0 even with every foot landing (flicker, typical and 0.5 s swings), and turning in place (0, 0, 0.5) still pays. Also: the configured threshold must sit between 0.008 and 0.136 s. The existing "no touchdown → 0" case stays.
+- Command facts for the gate (Luwu's command class, unchanged):
+  - The env zeroes a resampled command when the norm of the whole (vx, vy, wz) vector is ≤ 0.1 (mixed units). A command can survive that and still fail both halves of Brian's mask, e.g. (0.08, 0, 0.08). That's about 0.2% of samples, from the uniform ranges.
+  - With `rel_standing_envs = 0`, zero commands come only from that zeroing, about 0.4% of training samples, while the scoreboard weights the stand command at 1/8.
+
 ### Next session (open it on `C:\Users\lolly\dev\ironbark_rl`)
 1. Brian writes the EXP-002 hypothesis → train it (command in the file, ~1 h; seed 43 too for the env-v2 noise floor) → `tools/eval.py --exp EXP-002`. Nothing else on the GPU during eval.
-2. Brian implements `rewards.py` (`python -m pytest tests/brian -q -k reward`), fills `reward_config.py`, and measures the thigh pivots → `BASE_HEIGHT_TARGET_M`.
+2. Brian implements `rewards.py` (`python -m pytest tests/brian -q -k reward`), fills `reward_config.py` (weights, widths, `FEET_AIR_TIME_THRESHOLD_S`), and measures the thigh pivots → `BASE_HEIGHT_TARGET_M`.
 3. Claude, step 4: register `IronBark-S2-Walk-Flat-Brian` with the glue (previous joint velocity, joint targets in rad, requested torque, the 9 non-foot contact parts, per-step reward metrics). Then `tools/reward_check.py IronBark-S2-Walk-Flat-Brian --checkpoint <EXP-002>` → numbers to Brian, who tunes.
 4. Step 5: a new experiment vs EXP-002 (Brian's hypothesis first). Plus the `docs/roadmap.md` cerebellum/brain note.
 5. Then items 3–4 of the 2026-10-30 list.
