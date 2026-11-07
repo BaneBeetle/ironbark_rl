@@ -52,6 +52,26 @@ _Pending. Filled by the evaluation harness once training finishes._
 
 **2026-11-07, Claude: `undesired_contacts` check.** TensorBoard's `Episode_Metrics/reward/undesired_contacts` isn't 0: 1492 of 1500 points are nonzero, mean −2.0e-6 per step. (Claude's results table had rounded it to −0.00000 and called it 0.) Reproduction, EXP-003 policy under training conditions, 1024 dogs × 20 s: the penalty fired on 16 of 16 contact-termination steps (1.06 parts on average) and on 0 other steps (no light brushes between 0.1 and 1.43 N). Sensor slots and the reward-before-reset order are correct. A contact over 1.43 N ends the episode in the same step, so the term pays once per contact ending, −0.25 × ~1 part × 0.02 s ≈ −0.005, and averages to ~1e-7 to 1e-6 per step. Pinned by `tests/test_brian_task_sim.py` (`pytest -m sim`).
 
+**2026-11-07, training curves (TensorBoard).** Run `2026-11-07_00-08-25_EXP-003`. Reward rows: each term's per-step contribution (weight × value × dt), mean over ±10 iterations.
+
+| | iter 0 | iter 100 | iter 400 | iter 1499 |
+|---|---|---|---|---|
+| total | -0.00315 | +0.01063 | +0.01623 | +0.01719 |
+| track_lin_vel_xy | +0.00503 | +0.01264 | +0.01622 | +0.01670 |
+| track_ang_vel_z | +0.00352 | +0.00562 | +0.00634 | +0.00653 |
+| torques | -0.00297 | -0.00342 | -0.00308 | -0.00303 |
+| action_rate | -0.00234 | -0.00194 | -0.00155 | -0.00152 |
+| lin_vel_z | -0.00434 | -0.00098 | -0.00077 | -0.00068 |
+| orientation | -0.00090 | -0.00069 | -0.00056 | -0.00047 |
+| ang_vel_xy | -0.00049 | -0.00060 | -0.00046 | -0.00042 |
+| feet_air_time | -0.00023 | +0.00012 | +0.00020 | +0.00020 |
+| joint_acc | -4.9e-05 | -0.00006 | -0.00006 | -0.00006 |
+| base_height | -0.00037 | -0.00006 | -0.00006 | -0.00006 |
+| undesired_contacts | -1.2e-06 | -2.9e-06 | -2.6e-06 | -1.8e-06 |
+| episode length (steps) | 132 | 921 | 937 | 961 |
+
+Episode endings near iteration 1499: fell_over 0.9%, illegal_contact 6.7%, time_out 92.4%.
+
 ## What I saw (Brian: viewer, curves)
 
 ## Why / next (Brian)
