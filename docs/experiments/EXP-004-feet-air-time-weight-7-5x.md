@@ -117,6 +117,46 @@ Episode endings near iteration 1499: fell_over 0.7%, illegal_contact 5.3%, time_
 
 Episode endings near iteration 1499: fell_over 0.5%, illegal_contact 5.6%, time_out 93.9%.
 
+**2026-11-07, scoreboard v1.** Run `2026-11-07_06-38-18_EXP-004-s44`, checkpoint `model_1499.pt` (iteration 1499), 32 dogs × 10 s per command, seed 0, mass 0.972 kg. Smoothness and CoT use only episodes that never fell; CoT is NaN by design where there's no ground speed (standing, turning in place).
+
+| Command (vx, vy, wz) | Fall rate | Planar err [m/s] | Yaw err [rad/s] | Joint-target rate [rad/s] | CoT |
+|---|---|---|---|---|---|
+| (+0.0, +0.0, +0.0) | 0.000 | 0.012 | 0.046 | 0.61 | 0.66 |
+| (+0.2, +0.0, +0.0) | 0.000 | 0.040 | 0.087 | 3.91 | 1.64 |
+| (+0.4, +0.0, +0.0) | 0.000 | 0.053 | 0.146 | 4.52 | 1.55 |
+| (-0.2, +0.0, +0.0) | 0.000 | 0.048 | 0.121 | 3.88 | 1.68 |
+| (+0.0, +0.2, +0.0) | 0.000 | 0.047 | 0.128 | 3.87 | 2.17 |
+| (+0.0, -0.2, +0.0) | 0.000 | 0.043 | 0.112 | 4.15 | 2.35 |
+| (+0.0, +0.0, +0.5) | 0.000 | 0.028 | 0.109 | 3.52 | nan |
+| (+0.0, +0.0, -0.5) | 0.000 | 0.034 | 0.131 | 3.59 | 4.39 |
+| **overall (mean of rows)** | 0.000 | 0.038 | 0.110 | 3.51 | 2.06 |
+
+**2026-11-07, gait diagnostics (not scoreboard).** Run `2026-11-07_06-38-18_EXP-004-s44`, checkpoint `model_1499.pt`, 32 dogs × 10 s per command (first 1 s skipped), seed 0. Saturation: requested torque above the 0.43 N·m cap.
+
+| Servo saturation | Swing p10 [s] | Swing median [s] | Swing p90 [s] | Flicker touchdowns (< 0.02 s) | Touchdowns / foot / s |
+|---|---|---|---|---|---|
+| 0.75% | 0.008 | 0.192 | 0.216 | 15.6% | 2.38 |
+
+**2026-11-07, training curves (TensorBoard).** Run `2026-11-07_06-38-18_EXP-004-s44`. Reward rows: each term's per-step contribution (weight × value × dt), mean over ±10 iterations.
+
+| | iter 0 | iter 100 | iter 400 | iter 1499 |
+|---|---|---|---|---|
+| total | -0.00416 | +0.01253 | +0.01788 | +0.01901 |
+| track_lin_vel_xy | +0.00525 | +0.01320 | +0.01606 | +0.01648 |
+| track_ang_vel_z | +0.00353 | +0.00566 | +0.00643 | +0.00660 |
+| torques | -0.00294 | -0.00357 | -0.00324 | -0.00319 |
+| feet_air_time | -0.00155 | +0.00222 | +0.00235 | +0.00265 |
+| action_rate | -0.00233 | -0.00201 | -0.00166 | -0.00151 |
+| lin_vel_z | -0.00436 | -0.00126 | -0.00083 | -0.00081 |
+| orientation | -0.00082 | -0.00088 | -0.00056 | -0.00056 |
+| ang_vel_xy | -0.00051 | -0.00069 | -0.00051 | -0.00052 |
+| joint_acc | -4.9e-05 | -0.00007 | -0.00007 | -0.00007 |
+| base_height | -0.00038 | -0.00008 | -0.00009 | -0.00006 |
+| undesired_contacts | -1.7e-06 | -4.0e-06 | -1.7e-06 | -1.4e-06 |
+| episode length (steps) | 132 | 901 | 959 | 972 |
+
+Episode endings near iteration 1499: fell_over 1.3%, illegal_contact 4.9%, time_out 93.9%.
+
 ## What I saw (Brian: viewer, curves)
 
 ## Why / next (Brian)
