@@ -1,10 +1,12 @@
 # EXP-002: baseline on env v2: 50 deg tilt, 1.4 N contact, all collisions
 
-**Status:** planned · **Parent:** EXP-000
+**Status:** training · **Parent:** EXP-000
 
 ## Hypothesis (Brian, before the run)
 
 > What will change on the scoreboard compared to the parent, and why?
+
+(2026-11-06) With all collisions on and stricter terminations (50° tilt, 1.43 N contact), the baseline still learns to walk. Tracking error similar to EXP-000, possibly slower early learning since the trunk can no longer sink through the floor. Measured with metrics.py on the command grid.
 
 ## Change (one variable)
 
@@ -24,6 +26,7 @@ The scoreboard runs with terminations off, so changes 1–2 only affect training
 - Seed: 42 · Iterations: 1500 · Envs: 4096
 - Train: `python tools/run.py train IronBark-S2-Walk-Flat --env.scene.num-envs 4096 --agent.max-iterations 1500 --agent.seed 42 --agent.run-name EXP-002`
 - Run folder: `~/dev/ironbark_runs/logs/rsl_rl/ironbark_s2_walk/*_EXP-002`
+- Trained at commit `ef8fde1` (the baseline env is unchanged since `347a788`), 2026-11-06.
 
 ## Results (scoreboard: `metrics.py`)
 
