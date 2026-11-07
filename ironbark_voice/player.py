@@ -4,10 +4,24 @@ Dev mode only: later the same PCM goes to the Pi over ZMQ (Brian's option (a)).
 """
 
 import time
+import wave
 from collections.abc import Iterable, Iterator
 from dataclasses import dataclass
+from pathlib import Path
 
 from ironbark_voice import config
+
+
+def write_wav(path, pcm: bytes, sample_rate_hz: int = config.TTS_SAMPLE_RATE_HZ) -> Path:
+    """Wrap raw 16-bit mono PCM in a WAV header so any player (phone included) can open it."""
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(1)  # ElevenLabs PCM is mono
+        w.setsampwidth(config.TTS_SAMPLE_WIDTH_BYTES)  # 16-bit
+        w.setframerate(sample_rate_hz)
+        w.writeframes(pcm[: len(pcm) - len(pcm) % config.TTS_SAMPLE_WIDTH_BYTES])  # whole samples only
+    return path
 
 
 def align_to_samples(chunks: Iterable[bytes], sample_width: int = config.TTS_SAMPLE_WIDTH_BYTES) -> Iterator[bytes]:

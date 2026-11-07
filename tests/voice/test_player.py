@@ -11,6 +11,17 @@ DEVICES = [  # what list_output_devices() returns: default audio API only
 ]
 
 
+def test_write_wav_round_trip(tmp_path):
+    import wave
+
+    from ironbark_voice.player import write_wav
+
+    path = write_wav(tmp_path / "clip.wav", b"\x01\x00\x02\x00\x03", sample_rate_hz=24_000)  # odd byte dropped
+    with wave.open(str(path), "rb") as w:
+        assert (w.getnchannels(), w.getsampwidth(), w.getframerate(), w.getnframes()) == (1, 2, 24_000, 2)
+        assert w.readframes(2) == b"\x01\x00\x02\x00"
+
+
 def test_resolve_device_by_name_fragment():
     assert resolve_output_device("realtek digital", DEVICES) == 9  # case-insensitive fragment
     assert resolve_output_device(None, DEVICES) is None  # system default
