@@ -21,7 +21,7 @@ WEIGHTS: dict[str, float | None] = {
     "joint_acc": -6e-8,  # legged_gym -2.5e-7, /4: joint accelerations ~2x an A1's; a light regularizer
     "action_rate": -0.08,  # legged_gym -0.01 on raw actions = -0.16 on targets (/0.25^2), x0.5 for faster joints
     "feet_air_time": 1.0,  # legged_gym 1.0; time-based, so it doesn't change with body size
-    "undesired_contacts": -0.25,  # Brian's small weight: a brushing part costs a quarter of the planar tracking bonus
+    "undesired_contacts": -0.25,  # Brian's small weight: a brushing part costs a quarter of the planar tracking bonus. Dormant on flat ground (Brian, 2026-11-07): contacts over 1.43 N end the episode first, and lighter brushes never occur
 }
 
 # Exp-kernel widths of the two tracking bonuses (units follow your kernel).

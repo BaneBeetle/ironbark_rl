@@ -183,6 +183,7 @@
 - **`undesired_contacts`: not a bug.** "Exactly 0" was Claude's error: the results table rounded −2e-6 to −0.00000 and called it 0. TensorBoard has 1492 of 1500 points nonzero.
   - Reproduction (EXP-003 policy, training conditions, 1024 dogs × 20 s): the penalty fired on 16 of 16 contact-termination steps and on 0 other steps. Sensor slots, the reward-before-reset order and the force/threshold math all check out.
   - Cause: any contact over 1.43 N ends the episode in the same step, and no light brushes (0.1–1.43 N) happened. So the term pays only once per contact ending (≈ −0.005), and its per-step average is ~1e-6. What that leaves the term for is Brian's design call.
+  - **Verdict (Brian): `undesired_contacts` is dormant on flat ground; keep it unchanged.** The termination already costs ~300 steps × 0.017 ≈ 5 per contact fall, so the −0.005 penalty adds ~0.1%. The only range where it could teach anything (0.1–1.43 N light brushes) never occurs (0 in ~1M steps). It's harmless, and may matter on rough terrain or if the contact termination threshold changes.
   - `tests/test_brian_task_sim.py` (opt-in `pytest -m sim`, ~16 s, GPU) drops dogs on their backs and asserts the contact-termination step is penalized. It fails, as it should, when the noise floor is set too high for any contact to count. The default `pytest` run deselects it (`addopts = -m 'not sim'`).
 
 ### Next session (open it on `C:\Users\lolly\dev\ironbark_rl`)

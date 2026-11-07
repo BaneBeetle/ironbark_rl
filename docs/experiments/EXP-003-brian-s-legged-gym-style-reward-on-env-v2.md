@@ -62,4 +62,6 @@ _Pending. Filled by the evaluation harness once training finishes._
 
 Hold off on extra seeds until the bug's sorted.
 
+(2026-11-07) undesired_contacts: the termination already costs ~300 steps × 0.017 ≈ 5 per contact fall, so the −0.005 penalty adds ~0.1% on top. The only range where it could teach anything (0.1–1.43 N light brushes) never occurs (0 in ~1M steps). Verdict: undesired_contacts is dormant on flat ground. Keep it unchanged (harmless, may matter on rough terrain or if the contact termination threshold changes).
+
 ## Verdict
