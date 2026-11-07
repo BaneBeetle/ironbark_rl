@@ -1,6 +1,6 @@
 # EXP-005: sweep: feet_air_time weight 3
 
-**Status:** trained 2026-11-07 (seed 42), verdict pending (Brian) · **Parent:** EXP-004
+**Status:** trained 2026-11-07 (seeds 42–44), **winner, current best** (Brian, 2026-11-07) · **Parent:** EXP-004
 
 ## Hypothesis (Brian, before the run)
 
@@ -160,3 +160,10 @@ Episode endings near iteration 1499: fell_over 0.3%, illegal_contact 5.0%, time_
 ## Verdict
 
 (2026-11-07) **Provisional winner** (Brian), pending seeds 43 and 44. "My read: real-world priority is servo strain first (a dead servo makes everything else pointless), then tracking, then flickers. Under that ranking, EXP-005 (weight 3.0) wins: lowest saturation (0.52%), best planar tracking (0.0345), and flickers still down from 24.9% to 17.7%. Weights 15 and 30 cut flickers further but blow up saturation (5.3%, 11.7%) and tracking, so they're out."
+
+(2026-11-07, after seeds 43 and 44) **Winner, current best** (Brian). Config set to 3.0 (commit `e520970`).
+
+> My read: EXP-005 (weight 3.0) is the winner.
+> - vs EXP-004: saturation is a real win (ranges don't overlap: 0.39–0.53 vs 0.75–1.15); tracking is a tie (ranges overlap).
+> - vs Luwu baseline EXP-002: saturation is a tie but EXP-005 is more consistent (±0.08 vs ±0.20); tracking is a tie (overlap, EXP-005's mean slightly better); flicker is a real win, 23.6% → 17.2% (~27% fewer), no overlap.
+> Headline: my reward matches the baseline on servo strain and tracking while cutting flickers ~27% across 3 seeds.

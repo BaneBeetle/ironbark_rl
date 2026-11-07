@@ -1,5 +1,16 @@
 # Progress
 
+## Verdict, 2026-11-07: EXP-005 (`feet_air_time` 3.0) is the current best (Brian)
+
+**Brian's read, after seeds 42–44 (verbatim):**
+
+> My read: EXP-005 (weight 3.0) is the winner.
+> - vs EXP-004: saturation is a real win (ranges don't overlap: 0.39–0.53 vs 0.75–1.15); tracking is a tie (ranges overlap).
+> - vs Luwu baseline EXP-002: saturation is a tie but EXP-005 is more consistent (±0.08 vs ±0.20); tracking is a tie (overlap, EXP-005's mean slightly better); flicker is a real win, 23.6% → 17.2% (~27% fewer), no overlap.
+> Headline: my reward matches the baseline on servo strain and tracking while cutting flickers ~27% across 3 seeds.
+
+**Config:** `WEIGHTS["feet_air_time"]` 7.5 → **3.0** (commit `e520970`). That is the exact config EXP-005 trained with (commit `3c18e65`), apart from the comment; 88/88 tests pass. EXP-005's file and the index now say winner, current best. Verdicts in the other experiment files (EXP-002, -003, -004, -006, -007, -008) still read "pending".
+
 ## Seed-replicate summary, 2026-11-07 (Brian reads first; no interpretation here)
 
 **What finished:** all 7 queued runs, each 1500 iterations, with no crash and no resume. Each was scored into its experiment file (scoreboard v1, `gait_check`, training curves); replicates are listed under "Seed replicates" in their experiment's file.
