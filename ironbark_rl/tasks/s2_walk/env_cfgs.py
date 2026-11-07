@@ -3,7 +3,8 @@
 Luwu's Mini2S walking task (rewards, observations, commands, randomization, latency)
 with the S2 robot swapped in. Luwu's reward is the baseline Brian's reward gets compared
 against, so nothing here tunes the reward. Env changes since EXP-000 (Brian, 2026-11-06,
-baselined in EXP-002): the fall-tilt and non-foot-contact terminations below.
+baselined in EXP-002): the fall-tilt and non-foot-contact terminations below, and
+non-foot ground collisions (S2_WALK_COLLISION in ironbark_rl/assets/s2.py).
 """
 
 import math

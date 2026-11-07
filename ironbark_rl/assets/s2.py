@@ -23,7 +23,7 @@ import numpy as np
 from mjlab.entity import EntityCfg
 from src.assets.robots.mini2s.mini2s_constants import (
     MINI2S_ARTICULATION,
-    MINI2S_WALK_COLLISION,
+    MINI2S_TURN_COLLISION,
     get_spec as get_mini2s_spec,
 )
 
@@ -144,11 +144,18 @@ S2_INIT_STATE = EntityCfg.InitialStateCfg(
 )
 
 
+# Every collision mesh touches the ground (trunk, hips, thighs, calves), with no
+# self-collision; the calf "feet" keep the Mini2S walk friction, solimp and condim. Luwu's
+# walk setup let only the calves collide, so a fallen trunk sank through the floor and
+# non-foot contact could never be sensed (Brian's call to enable, 2026-11-06).
+S2_WALK_COLLISION = MINI2S_TURN_COLLISION
+
+
 def get_s2_walk_robot_cfg() -> EntityCfg:
-    """S2 for walking tasks: only the calf feet touch the ground (Mini2S walk setup)."""
+    """S2 for walking tasks: all collision meshes touch the ground, no self-collision."""
     return EntityCfg(
         init_state=S2_INIT_STATE,
-        collisions=(MINI2S_WALK_COLLISION,),
+        collisions=(S2_WALK_COLLISION,),
         spec_fn=get_s2_spec,
         articulation=MINI2S_ARTICULATION,
     )
