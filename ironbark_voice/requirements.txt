@@ -1,0 +1,10 @@
+# Voice runs in its own venv (C:\Users\lolly\dev\ironbark_voice\.venv), separate from the
+# luwu_mjlab RL env, so the RL env stays untouched. Versions are what was installed and
+# tested on 2026-11-07.
+anthropic==2.6.0
+elevenlabs==2.77.0
+sounddevice==0.5.6
+numpy==2.5.4
+pyzmq==27.3.0
+python-dotenv==1.2.4
+pytest==9.2.0
