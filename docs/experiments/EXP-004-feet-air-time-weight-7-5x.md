@@ -77,3 +77,5 @@ Episode endings near iteration 1499: fell_over 0.7%, illegal_contact 5.3%, time_
 ## Why / next (Brian)
 
 ## Verdict
+
+(2026-11-07) Finalist against EXP-005 (Brian); seeds 43 and 44 will check whether the saturation gap (0.97% vs 0.52%) is noise.

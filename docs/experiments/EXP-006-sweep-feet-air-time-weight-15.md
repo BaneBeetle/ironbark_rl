@@ -73,3 +73,5 @@ Episode endings near iteration 1499: fell_over 1.5%, illegal_contact 12.9%, time
 ## Why / next (Brian)
 
 ## Verdict
+
+(2026-11-07) Out (Brian): "Weights 15 and 30 cut flickers further but blow up saturation (5.3%, 11.7%) and tracking, so they're out."

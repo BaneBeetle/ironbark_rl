@@ -73,3 +73,5 @@ Episode endings near iteration 1499: fell_over 0.8%, illegal_contact 5.6%, time_
 ## Why / next (Brian)
 
 ## Verdict
+
+(2026-11-07) **Provisional winner** (Brian), pending seeds 43 and 44. "My read: real-world priority is servo strain first (a dead servo makes everything else pointless), then tracking, then flickers. Under that ranking, EXP-005 (weight 3.0) wins: lowest saturation (0.52%), best planar tracking (0.0345), and flickers still down from 24.9% to 17.7%. Weights 15 and 30 cut flickers further but blow up saturation (5.3%, 11.7%) and tracking, so they're out."

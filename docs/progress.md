@@ -13,7 +13,19 @@
 
 Only `WEIGHTS["feet_air_time"]` changed, one commit per run. Before each run: 88/88 tests and the fall-on-purpose guard (`tools/reward_check.py`, standing + the EXP-004 policy under the new weight), never flagged. Afterwards the config was restored to EXP-004's **7.5** (commit `4fdea7b`); each run's own commit records its weight.
 
-**Ranked** (Brian's objective):
+**Brian's read (2026-11-07, verbatim):** "My read: real-world priority is servo strain first (a dead servo makes everything else pointless), then tracking, then flickers. Under that ranking, EXP-005 (weight 3.0) wins: lowest saturation (0.52%), best planar tracking (0.0345), and flickers still down from 24.9% to 17.7%. Weights 15 and 30 cut flickers further but blow up saturation (5.3%, 11.7%) and tracking, so they're out."
+
+**Ranking objective, revised (Brian, 2026-11-07):** servo saturation first, then planar tracking error, then flicker share; 0 falls required. It replaces the overnight objective (flicker first, under a planar cap). **Provisional winner: EXP-005 (weight 3.0).** EXP-004 and EXP-005 get seeds 43 and 44 to check the saturation gap isn't noise. Re-ranked, seed 42 only:
+
+| Rank | Run | weight | Servo saturation | Planar err [m/s] | Flicker | Falls |
+|---|---|---|---|---|---|---|
+| 1 | EXP-005 | 3 | 0.52% | 0.0345 | 17.7% | 0.000 |
+| 2 | EXP-004 | 7.5 | 0.97% | 0.0364 | 15.7% | 0.000 |
+| 3 | EXP-003 | 1 | 1.03% | 0.0389 | 24.9% | 0.000 |
+| 4 | EXP-006 | 15 | 5.34% | 0.0664 | 9.9% | 0.000 |
+| 5 | EXP-007 | 30 | 11.72% | 0.1087 | 7.4% | 0.000 |
+
+**Ranked under the overnight objective** (superseded, kept for the record):
 
 Planar cap = EXP-002's 0.0355 m/s + 10% = **0.0391 m/s**. Ranked by flicker share (swings < 0.02 s at touchdown) among runs with 0 falls and planar error ≤ cap; runs missing a constraint follow, unranked. All seed 42, one seed each. Scoreboard v1 + `gait_check` diagnostics, command grid, eval seed 0.
 
