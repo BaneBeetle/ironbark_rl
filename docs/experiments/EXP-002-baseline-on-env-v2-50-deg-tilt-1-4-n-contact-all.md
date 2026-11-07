@@ -56,6 +56,34 @@ _Pending. Filled by the evaluation harness once training finishes._
 |---|---|---|---|---|---|
 | 0.79% | 0.008 | 0.144 | 0.196 | 22.5% | 2.62 |
 
+**2026-11-07, scoreboard v1.** Run `2026-11-07_09-04-47_EXP-002-s43`, checkpoint `model_1499.pt` (iteration 1499), 32 dogs × 10 s per command, seed 0, mass 0.972 kg. Smoothness and CoT use only episodes that never fell; CoT is NaN by design where there's no ground speed (standing, turning in place).
+
+| Command (vx, vy, wz) | Fall rate | Planar err [m/s] | Yaw err [rad/s] | Joint-target rate [rad/s] | CoT |
+|---|---|---|---|---|---|
+| (+0.0, +0.0, +0.0) | 0.000 | 0.001 | 0.003 | 0.33 | nan |
+| (+0.2, +0.0, +0.0) | 0.000 | 0.050 | 0.103 | 2.38 | 1.06 |
+| (+0.4, +0.0, +0.0) | 0.000 | 0.071 | 0.132 | 3.24 | 1.29 |
+| (-0.2, +0.0, +0.0) | 0.000 | 0.037 | 0.065 | 2.08 | 0.90 |
+| (+0.0, +0.2, +0.0) | 0.000 | 0.045 | 0.135 | 2.57 | 1.61 |
+| (+0.0, -0.2, +0.0) | 0.000 | 0.038 | 0.128 | 2.63 | 1.63 |
+| (+0.0, +0.0, +0.5) | 0.000 | 0.019 | 0.118 | 1.84 | nan |
+| (+0.0, +0.0, -0.5) | 0.000 | 0.022 | 0.113 | 1.88 | nan |
+| **overall (mean of rows)** | 0.000 | 0.035 | 0.100 | 2.12 | 1.30 |
+
+**2026-11-07, gait diagnostics (not scoreboard).** Run `2026-11-07_09-04-47_EXP-002-s43`, checkpoint `model_1499.pt`, 32 dogs × 10 s per command (first 1 s skipped), seed 0. Saturation: requested torque above the 0.43 N·m cap.
+
+| Servo saturation | Swing p10 [s] | Swing median [s] | Swing p90 [s] | Flicker touchdowns (< 0.02 s) | Touchdowns / foot / s |
+|---|---|---|---|---|---|
+| 0.40% | 0.008 | 0.132 | 0.192 | 25.0% | 2.74 |
+
+**2026-11-07, training curves (TensorBoard).** Run `2026-11-07_09-04-47_EXP-002-s43`. Reward rows: each term's per-step contribution (weight × value × dt), mean over ±10 iterations.
+
+| | iter 0 | iter 100 | iter 400 | iter 1499 |
+|---|---|---|---|---|
+| episode length (steps) | 132 | 975 | 958 | 973 |
+
+Episode endings near iteration 1499: fell_over 1.5%, illegal_contact 3.8%, time_out 94.8%.
+
 ## What I saw (Brian: viewer, curves)
 
 ## Why / next (Brian)
