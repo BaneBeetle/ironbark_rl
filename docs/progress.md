@@ -79,10 +79,33 @@
   - `action_rate`: `env.action_manager.action` and `.prev_action`, both (num_envs, 12), the raw policy output (unitless). Joint target = `default_joint_pos` + 0.25 × action, no clip. `prev_prev_action` also exists. On reset mjlab zeroes all three, so an episode's first step compares against 0.
   - Timing: the reward runs once per 20 ms policy step, after 5 physics substeps of 4 ms. `actuator_force` and `joint_acc` are the last substep's values, not averages.
 
+- **Real S2 standing (Brian, tape + photo, hard floor):** body plate bottom ≈ 11 cm, top ≈ 15 cm, centre ≈ 13 cm (±0.7 cm). This isn't directly comparable to the sim's 0.1228 m. The sim `base` origin isn't the plate centre: in the standing pose the trunk mesh spans z 0.079–0.136 m, with `base` 1.3 cm below its top. And that mesh is Mini2S's. The thigh pivot is the landmark both share (leg kinematics match Yahboom's URDF to < 1 mm); Brian measures it next.
+- **Decisions (Brian): fall handling → env v2, re-baselined as EXP-002.**
+  1. Scoreboard fall line stays `FALL_TILT_DEG = 46` (sim recovery fails past it). The training tilt termination drops 70° → **50°**, so an episode ends just past the point the scoreboard calls a fall, instead of running on through 24° of tilt it can't recover from. Recheck 46° once Brian's policy is trained.
+  2. Non-foot contact termination 10 N → **15% of body weight = 1.43 N**, because 10 N exceeded the S2's whole weight (9.54 N), so a resting trunk never tripped it.
+  3. Found while checking 2: in Luwu's walk setup **only the 4 calves collide with the ground**, so the contact termination could never fire, `undesired_contacts` would always be 0, and a fallen trunk sank through the floor. Brian's call: **every collision mesh touches the ground** (no self-collision). Random actions, 4096 dogs × 5 s, before → after: contact terminations 0 → 2888, tilt terminations 4271 → 1745, lowest base z −0.018 → +0.060 m. Standing env step 58.3 → 57.7 ms (no speed cost), and no contact-buffer warnings.
+  4. These are env changes, so they go into the baseline task `IronBark-S2-Walk-Flat` itself. Luwu's reward is retrained on env v2 as **EXP-002**, and Brian's reward is compared against EXP-002, not EXP-000. The scoreboard runs with terminations off, so 1–2 affect only training, but 3 also changes the physics during evaluation.
+- **Decisions (Brian): glue for step 4.** Not built yet; it lands with the `-Brian` task.
+  - `joint_acc` across policy steps: (vel_t − vel_{t−1}) / 0.02 s. The glue keeps the previous `joint_vel` (num_envs, 12), as a class-based mjlab reward term. On reset it copies the post-reset `joint_vel`, which is already correct at that point (reset events run before `reward_manager.reset`, and `joint_vel` reads `qvel` directly), so an episode's first step has no fake spike.
+  - `action_rate` on joint targets (rad), `default_joint_pos + 0.25 × action` for both `action` and `prev_action`. Why: radians are physical units and stay correct if the action scale changes.
+  - Requested (pre-clip) servo torque (num_envs, 12) for a saturation penalty. How MuJoCo computes it, as confirmed in mjlab's code and checked numerically:
+    - Servo force = kp·(clamp(ctrl, ±1.57 rad) − q) − kv·q̇, then clamped to ±0.43 N·m, and that clamped value is `actuator_force`. kp = 1.15 in every env; kv = 0, so the servo has no damping term.
+    - `ctrl` is the **delayed** target, 1–2 physics steps (4–8 ms) behind the policy's, so the glue reads `sim.data.ctrl`, not `default + 0.25·action`.
+    - Joint damping (0.04 N·m·s/rad), armature (0.0025) and frictionloss (0.001) are passive and act outside the servo cap.
+    - Check: the clamped request matches `actuator_force` to 7e-8 N·m. Under random actions (σ = 3), 62% of servo-steps saturate.
+- **Step 1, batch 3 (contacts)**, on env v2:
+  - `feet_air_time`: `feet = env.scene["feet_ground_contact"]` covers the 4 calf collision geoms, in the order fl, fr, br, bl (same as the joints).
+    - `feet.data.found` (num_envs, 4): the number of contact points, 0 = in the air (standing reads 2–4, not 1).
+    - `feet.data.current_air_time`, `last_air_time`, `current_contact_time`, `last_contact_time`: (num_envs, 4), s.
+    - `feet.compute_first_contact(env.step_dt)` (num_envs, 4) bool: touchdown within the last policy step.
+    - `feet.data.force` (num_envs, 4, 3): net force, world frame. z sums to −9.54 N standing (the whole weight; the sign points down).
+  - `undesired_contacts`: `nonfoot = env.scene["nonfoot_ground_touch"]`, with `found` (num_envs, 22) and `force_history` (num_envs, 22, 4, 3), N, over the last 4 physics substeps (index 0 = newest), in the contact frame. The 22 slots are every robot geom except the 4 calf collisions; 13 are visual geoms that never touch. The 9 that can touch: `base_collision` and the 4 `*_hip_collision` and 4 `*_thigh_collision` geoms. It's the same sensor the 1.43 N contact termination reads.
+
 ### Next session (open it on `C:\Users\lolly\dev\ironbark_rl`)
-1. Brian reviews batch 2 and the two termination questions (46° vs 70°, the 10 N contact threshold). Then step 1, batch 3 (contacts: `feet_air_time`, `undesired_contacts`), waiting for Brian.
-2. Steps 2–5: stubs + known-case tests (replacing v1's), weights in `reward_config.py`, register `IronBark-S2-Walk-Flat-Brian` (drop `-BrianReward`), a new experiment entry (Brian's hypothesis first), eval vs EXP-000 on `metrics.py`. Plus the `docs/roadmap.md` cerebellum/brain note.
-3. Then items 3–4 of the 2026-10-30 list.
+1. Brian writes the EXP-002 hypothesis → train it (command in the file, ~1 h; seed 43 too for the env-v2 noise floor) → `tools/eval.py --exp EXP-002`. Nothing else on the GPU during eval.
+2. Brian reviews batch 3 and measures the thigh pivots → `BASE_HEIGHT_TARGET_M`.
+3. Steps 2–5: stubs + known-case tests (replacing v1's), weights in `reward_config.py`, the `IronBark-S2-Walk-Flat-Brian` task with the glue above (drop `-BrianReward`), a new experiment entry vs EXP-002 (Brian's hypothesis first). Plus the `docs/roadmap.md` cerebellum/brain note.
+4. Then items 3–4 of the 2026-10-30 list.
 
 ### Open: Brian
 - [ ] Ruler: real S2 standing thigh-pivot height → `BASE_HEIGHT_TARGET_M` (how: `ironbark_rl/brian/reward_config.py`)
