@@ -186,6 +186,9 @@
   - **Verdict (Brian): `undesired_contacts` is dormant on flat ground; keep it unchanged.** The termination already costs ~300 steps × 0.017 ≈ 5 per contact fall, so the −0.005 penalty adds ~0.1%. The only range where it could teach anything (0.1–1.43 N light brushes) never occurs (0 in ~1M steps). It's harmless, and may matter on rough terrain or if the contact termination threshold changes.
   - `tests/test_brian_task_sim.py` (opt-in `pytest -m sim`, ~16 s, GPU) drops dogs on their backs and asserts the contact-termination step is penalized. It fails, as it should, when the noise floor is set too high for any contact to count. The default `pytest` run deselects it (`addopts = -m 'not sim'`).
 
+- **EXP-004 started** (Brian): EXP-003 with only `feet_air_time`'s weight raised 1.0 → 7.5, seed 42. Hypothesis (verbatim in its file): flicker touchdowns drop well below 24.8%, `feet_air_time` rises to ~0.0015 per step, tracking roughly unchanged; risk of exaggerated high-stepping. Guard before training, with the new weight: +0.0292 standing, +0.0290 for the EXP-003 policy on the grid, every command positive. 88/88 tests pass.
+- **After EXP-004:** `tools/eval.py IronBark-S2-Walk-Flat-Brian --exp EXP-004`, `tools/gait_check.py … --exp EXP-004`, the per-term curves (Brian's read first), then Brian decides on the seed replicates.
+
 ### Next session (open it on `C:\Users\lolly\dev\ironbark_rl`)
 1. (Done 2026-11-07) Let EXP-002 finish (`~/dev/ironbark_runs/logs/rsl_rl/ironbark_s2_walk/*_EXP-002`). Then, with nothing else training: `tools/eval.py IronBark-S2-Walk-Flat --exp EXP-002`, and `tools/reward_check.py IronBark-S2-Walk-Flat-Brian --checkpoint <EXP-002>/model_1499.pt`.
 2. EXP-003: `tools/new_experiment.py "..." --parent EXP-002 --task IronBark-S2-Walk-Flat-Brian --experiment-name ironbark_s2_walk_brian`, paste Brian's hypothesis (above), train, eval. Report saturation % and swing-time p10 next to the scoreboard.
