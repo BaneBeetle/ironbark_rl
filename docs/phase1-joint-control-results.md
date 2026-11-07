@@ -83,10 +83,14 @@ All 12 joints together, 3° at 0.556 Hz (the `--read-every 1` run): gain 0.92–
 - Re-run `sine` with the fixed probe if Brian wants joints 12 and 13. The Pi went offline before the fixed probe could be deployed (it still has `8e1cab7`).
 - The real servo response is hidden under the 105 ms refresh. Seeing it needs an external measurement (`# MEASURE:` e.g. high-speed video of a leg against a protractor) or a faster readback path.
 
-## Brian's read
+## Brian's read (2026-11-07, verbatim)
 
-_(pending)_
+> My Phase 1 read: Path A is conditionally alive. Command rate (102 Hz) is fine, but servos lag ~100 ms (tracking falls off above ~2 Hz) and joint readback refreshes only every ~105 ms round-robin, while the sim models 4–8 ms of delay. Servo spec is 0.1 s/60° (a 10° move ≈ 17 ms unloaded) and 4.5 kg·cm ≈ 0.44 N·m (matches our 0.43 cap), so the motors are fast: the lag is mostly the motion board firmware and bus polling. Model it as command-pipeline delay + readback staleness, not slow motors.
 
-## Decision (Brian)
+## Decision (Brian, 2026-11-07, verbatim)
 
-_(pending: Path A, Path B, or a hybrid)_
+> Two experiments, both from EXP-005's config (feet_air_time 3.0), seed 42, one at a time:
+> - EXP-009: add ~100 ms actuator/command delay (based on Phase 1 data). Nothing else changes.
+> - EXP-010: EXP-009 + joint-position observations that refresh round-robin every ~105 ms (stale between refreshes).
+>
+> Hypothesis: both still walk, but slower and less precisely: higher tracking error, lower step frequency, more falls than EXP-005, with EXP-010 worse than EXP-009. If either can't walk or falls go high, next experiment adds the last ~5 actions to the observation (action history) so the policy knows what's in flight. If that fails too, we go Path B.
