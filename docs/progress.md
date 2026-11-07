@@ -1,5 +1,38 @@
 # Progress
 
+## Morning summary, 2026-11-07: overnight `feet_air_time` sweep (Brian reads first; no interpretation here)
+
+**What finished:** all four runs, each 1500 iterations, seed 42, with no crash and no resume. Each was scored into its experiment file (scoreboard v1, `tools/gait_check.py`, per-term curves via `tools/term_curves.py`) and indexed in `docs/experiments/README.md`.
+
+| Run | weight | trained | file |
+|---|---|---|---|
+| EXP-004 | 7.5 | 01:42–02:44 | [EXP-004](experiments/EXP-004-feet-air-time-weight-7-5x.md) |
+| EXP-005 | 3.0 | 02:47–03:39 | [EXP-005](experiments/EXP-005-sweep-feet-air-time-weight-3.md) |
+| EXP-006 | 15.0 | 03:41–04:29 | [EXP-006](experiments/EXP-006-sweep-feet-air-time-weight-15.md) |
+| EXP-007 | 30.0 | 04:31–05:18 | [EXP-007](experiments/EXP-007-sweep-feet-air-time-weight-30.md) |
+
+Only `WEIGHTS["feet_air_time"]` changed, one commit per run. Before each run: 88/88 tests and the fall-on-purpose guard (`tools/reward_check.py`, standing + the EXP-004 policy under the new weight), never flagged. Afterwards the config was restored to EXP-004's **7.5** (commit `4fdea7b`); each run's own commit records its weight.
+
+**Ranked** (Brian's objective):
+
+Planar cap = EXP-002's 0.0355 m/s + 10% = **0.0391 m/s**. Ranked by flicker share (swings < 0.02 s at touchdown) among runs with 0 falls and planar error ≤ cap; runs missing a constraint follow, unranked. All seed 42, one seed each. Scoreboard v1 + `gait_check` diagnostics, command grid, eval seed 0.
+
+| Rank | Run | feet_air_time weight | Flicker | Falls | Planar err [m/s] | Yaw err [rad/s] | Joint-target rate [rad/s] | CoT | Swing median [s] | Swing p10 [s] | Servo saturation | feet_air_time per step (end of training) |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | EXP-004 | 7.5 | 15.7% | 0.000 | 0.0364 | 0.096 | 3.44 | 2.39 | 0.192 | 0.008 | 0.97% | +0.00257 |
+| 2 | EXP-005 | 3 | 17.7% | 0.000 | 0.0345 | 0.095 | 2.82 | 1.82 | 0.188 | 0.008 | 0.52% | +0.00083 |
+| 3 | EXP-003 | 1 | 24.9% | 0.000 | 0.0389 | 0.084 | 2.53 | 1.47 | 0.168 | 0.008 | 1.03% | +0.00020 |
+| — (planar 0.1087 > cap 0.0391) | EXP-007 | 30 | 7.4% | 0.000 | 0.1087 | 0.151 | 7.65 | 4.57 | 0.228 | 0.144 | 11.72% | +0.01928 |
+| — (planar 0.0664 > cap 0.0391) | EXP-006 | 15 | 9.9% | 0.000 | 0.0664 | 0.124 | 5.66 | 4.20 | 0.220 | 0.128 | 5.34% | +0.00770 |
+
+**What broke / notes:**
+- No crashes, so the resume-once rule never triggered.
+- `aws_api_mcp_server` workers: stopped at 01:56 (Brian's request), checked at every stage (02:44, 03:39, 04:29, 05:18), **not back**.
+- EXP-004's iteration time swung 1.9–5.2 s early on from other load on the PC (GPU at 73% / 7.6 GB with other apps). The run still finished.
+- EXP-003's row comes from a `gait_check` re-run made only to save its JSON (24.9% flicker / 1.03% saturation vs 24.8% / 1.04% in its file): GPU run-to-run variation on the same eval seed.
+- Tooling added overnight: `tools/term_curves.py` (prints tiny values in scientific notation, so nothing rounds to 0) and `gait_check` now saves `gait_<checkpoint>.json`. The sweep helpers lived in Claude's scratch folder, not the repo.
+- Not done (Brian's call): seed replicates, verdicts, any change besides this one weight.
+
 ## 2026-10-30: Phase 0 (move to PC), in progress
 
 **Decision:** Path A, locomotion RL with MuJoCo Playground/MJX + Brax PPO. Brian chose it before the Phase 1 gate ran. Phase 1 now decides *how* the policy deploys on the real dog (joint-level commands vs. a lower-rate action space), not A vs. B.
