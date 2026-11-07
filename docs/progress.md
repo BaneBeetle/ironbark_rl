@@ -132,8 +132,31 @@
 - **Learning protocol changed (Brian):** "I'm here to learn the concepts, not syntax." Claude writes the code (WHY comment on every line, example tensors before implementing, a plain-English summary after). Brian owns design decisions and analysis. After training, Claude walks him through the per-term TensorBoard curves and asks his read first. After each milestone, a 2–3 question "why" quiz, logged in `docs/notes/`. Now in CLAUDE.md and the project memory.
 - **EXP-002 status:** not trained (no run folder; it needs Brian's hypothesis first). EXP-003 (Brian's reward) is compared against it.
 
+- **Weights approved (Brian), as proposed.** All are in `reward_config.py` with a one-line reason each. The method is legged_gym's recipe rescaled by dynamic similarity (Froude) for the S2, which is ~0.5× an A1's height and ~0.08× its mass:
+
+  | term | weight | term | weight |
+  |---|---|---|---|
+  | track_lin_vel_xy | 1.0 | torques (requested) | −0.125 |
+  | track_ang_vel_z | 0.5 | joint_acc | −6e-8 |
+  | lin_vel_z | −4.0 | action_rate (rad) | −0.08 |
+  | ang_vel_xy | −0.025 | feet_air_time | 1.0 |
+  | orientation | −5.0 | undesired_contacts | −0.25 |
+  | base_height | −50 | | |
+
+  Widths: 0.0625 (m/s)² planar, 0.16 (rad/s)² yaw. Contact noise floor 0.1 N.
+  - Brian's answers: the interim `BASE_HEIGHT_TARGET_M = 0.123` (sim standing) is fine until the ruler number. Keep penalizing the requested torque. Keep `lin_vel_z`, `ang_vel_xy` and `joint_acc` weak; he'll raise each one if TensorBoard or the eval shows bouncing or wobble.
+- **`IronBark-S2-Walk-Flat-Brian` registered** (`ironbark_rl/tasks/s2_walk_brian/`). The glue covers: body-frame tensors; requested torque from the delayed `ctrl`; previous joint velocity in a class term that reloads the post-reset velocity; joint targets in rad; the 9 non-foot collision slots by name; and the 12 `Episode_Metrics/reward/*` metrics. A `None` in `reward_config.py` fails loudly, because a None can't safely become 0: mjlab silently skips 0-weight terms.
+  - Checked: the config equals the baseline except rewards/metrics (only two function addresses differ), and the rl config except `experiment_name`. Random actions, 64 dogs × 3 s: all terms finite, previous velocity = post-reset velocity on all 36 reset steps, metrics reach `extras["log"]`. All 88 tests pass.
+- **`reward_check` on Brian's reward:**
+  - (a) standing still on a zero command: **+0.0292** per step. Tracking is 98%. `lin_vel_z` is the largest penalty, from the drop off the spawn height.
+  - (b) the EXP-000 policy (EXP-002 isn't trained yet) on the grid: **+0.0272** per step, every command positive (+0.0236 at 0.4 m/s, up to +0.0292 standing). Tracking 95%, torques 2.3%, `lin_vel_z` 1.4%. Not flagged.
+- **EXP-002** hypothesis recorded (Brian, verbatim in its file). **Training started** 2026-11-06, seed 42. Then EXP-003 (Brian's reward, parent EXP-002), with his hypothesis recorded when it starts.
+- **EXP-003 hypothesis (Brian, before the run):** "similar tracking error, but smoother and gentler: lower action rate, lower servo saturation %, and fewer flicker touchdowns (p10 swing time well above 0.008 s) thanks to the 0.07 s air-time threshold and requested-torque penalty. Risk: slightly worse tracking from the extra regularization."
+  - Saturation % and swing-time p10 aren't on the frozen scoreboard. They'll be reported next to it as diagnostics; a new scoreboard metric would be Brian's call.
+
 ### Next session (open it on `C:\Users\lolly\dev\ironbark_rl`)
-0. Brian approves or edits the weight proposal, plus `TRACK_*_WIDTH`, `UNDESIRED_CONTACT_MIN_FORCE_N` and an interim `BASE_HEIGHT_TARGET_M`. Then: all reward tests, register `IronBark-S2-Walk-Flat-Brian`, `tools/reward_check.py`, EXP-002 then EXP-003 (hypotheses first).
+0. Done 2026-11-06: weights approved, `-Brian` task, `reward_check`, EXP-002 training. Next: EXP-002 eval + `reward_check` (b) with the EXP-002 policy → train EXP-003 → eval → Brian's TensorBoard walkthrough (his read first) → quiz.
+00. (Superseded) Brian approves or edits the weight proposal, plus `TRACK_*_WIDTH`, `UNDESIRED_CONTACT_MIN_FORCE_N` and an interim `BASE_HEIGHT_TARGET_M`. Then: all reward tests, register `IronBark-S2-Walk-Flat-Brian`, `tools/reward_check.py`, EXP-002 then EXP-003 (hypotheses first).
 1. Brian writes the EXP-002 hypothesis → train it (command in the file, ~1 h; seed 43 too for the env-v2 noise floor) → `tools/eval.py --exp EXP-002`. Nothing else on the GPU during eval.
 2. Brian implements `rewards.py` (`python -m pytest tests/brian -q -k reward`), fills `reward_config.py` (weights, widths, `FEET_AIR_TIME_THRESHOLD_S`), and measures the thigh pivots → `BASE_HEIGHT_TARGET_M`.
 3. Claude, step 4: register `IronBark-S2-Walk-Flat-Brian` with the glue (previous joint velocity, joint targets in rad, requested torque, the 9 non-foot contact parts, per-step reward metrics). Then `tools/reward_check.py IronBark-S2-Walk-Flat-Brian --checkpoint <EXP-002>` → numbers to Brian, who tunes.
