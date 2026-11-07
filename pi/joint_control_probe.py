@@ -25,7 +25,9 @@ The clock is only logged: time.perf_counter_ns() before and after every write an
 The date in the file name and header is a label.
 
 Safety: nothing is commanded until the IMU has finished its power-on gyro-bias sampling (yaw reads
-exactly 0.0 until then; moving the dog during it corrupts the bias, V2 smoke log). Every command is
+exactly 0.0 until then; moving the dog during it corrupts the bias, V2 smoke log). The first joint
+command sends all 12 leg joints their measured angles (otherwise unsent joints jump to their last
+joint-mode setpoints, measured 2026-11-07). Every command is
 clamped to the joint's measured start pose +- MAX_EXCURSION_DEG and to xgolib's MOTOR_LIMIT minus
 LIMIT_MARGIN_DEG. The probe aborts if a command at the start pose moves anything
 (HOLD_DRIFT_ABORT_DEG), or if a step moves a joint other than the one commanded (READ_ORDER wrong).
@@ -296,6 +298,17 @@ class Session:
         if mover != jid:
             raise ProbeError(f"commanded joint {jid}, but joint {mover} moved most: READ_ORDER is wrong")
 
+    def adopt(self):
+        """Send every leg joint its measured angle, before any single-joint command.
+
+        Measured 2026-11-07 (gait test): the first motor() call puts the firmware in joint mode, and
+        every joint then drives to its *last* joint-mode setpoint, so joints not in that call can jump
+        (~8 deg seen). Sending all 12 at their current angles first makes that switch a no-op.
+        The 12 packets take ~9.7 ms on the wire; joints later in the burst can still twitch in between.
+        """
+        reads = self.segment("adopt", {j: self.hold[j] for j in LEG_IDS}, PRE_SAMPLES, clamp=False)
+        self.check_still(reads, "adopting the start pose")
+
     def restore(self):
         if self.touched:
             self.segment("restore", {j: self.hold[j] for j in sorted(self.touched)}, PRE_SAMPLES, clamp=False)
@@ -328,6 +341,7 @@ def run_passive(s, args, ui):
 
 def run_step(s, args, ui):
     try:
+        s.adopt()
         for speed in args.speeds:
             s.event("motor_speed", speed=speed)
             s.link.speed(speed)
@@ -348,6 +362,7 @@ def run_step(s, args, ui):
 
 def run_sine(s, args, ui):
     try:
+        s.adopt()
         s.event("motor_speed", speed=args.speed)
         s.link.speed(args.speed)
         for jid in args.joints:
@@ -389,6 +404,7 @@ def run_gait(s, args, ui):
         s.link.reset()
         s.segment("reset_settle", None, args.samples)
         s.measure_hold("hold_after_reset")
+        s.adopt()  # without it the other 11 joints jump to their old joint-mode setpoints (2026-11-07)
         sign = s.step_sign(jid, args.amp_deg)
         if sign is None:
             raise ProbeError(f"joint {jid}: no room for a {args.amp_deg} deg step after reset()")

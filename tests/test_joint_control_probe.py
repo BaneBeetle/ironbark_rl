@@ -114,31 +114,32 @@ def test_step_flips_direction_near_the_upper_limit(tmp_path):
     assert max(sent(link, 11)) == pytest.approx(30.0)
 
 
-def test_joint_already_inside_the_limit_margin_is_never_commanded(tmp_path):
+def test_joint_already_inside_the_limit_margin_is_never_stepped(tmp_path):
     link = FakeLink(start={11: 38.5})  # beyond 40 - 3: the hold pose itself is in the margin
     code, rows = run(tmp_path, ["step", "--joints", "11", "--amp-deg", "5"], link)
-    assert code == 0 and sent(link, 11) == []
+    assert code == 0 and set(sent(link, 11)) == {38.5}  # only ever told to stay where it is
     assert any(r["type"] == "event" and r["name"] == "skip" for r in rows)
 
 
 def test_ctrl_c_restores_the_hold_pose(tmp_path):
-    link = FakeLink(start={11: 5.0}, interrupt_on_write=3)  # hold, step up, then Ctrl+C on step down
+    link = FakeLink(start={11: 5.0}, interrupt_on_write=4)  # adopt, hold, step up, then Ctrl+C on step down
     code, rows = run(tmp_path, ["step", "--joints", "11"], link)
     assert rows[-1]["interrupted"] is True
-    assert link.writes[-1] == ([11], [5.0])  # last thing sent: the measured start pose
+    ids, deg = link.writes[-1]  # last thing sent: every touched joint at its measured start pose
+    assert ids == probe.LEG_IDS and dict(zip(ids, deg))[11] == 5.0 and set(deg) == {0.0, 5.0}
 
 
 def test_wrong_read_order_aborts_after_one_step(tmp_path):
     link = FakeLink(swap=(11, 12))
     code, rows = run(tmp_path, ["step", "--joints", "leg1"], link)
     assert code == 1 and "READ_ORDER is wrong" in rows[-1]["error"]
-    assert link.writes[-1] == ([11], [0.0])  # restored after the abort
+    assert link.writes[-1] == (probe.LEG_IDS, [0.0] * 12)  # restored after the abort
 
 
 def test_sine_amplitude_and_room_check(tmp_path):
     link = FakeLink(start={12: 34.0})  # 3 deg of room up: joint 12 must be skipped
     code, _ = run(tmp_path, ["sine", "--joints", "11,12", "--amp-deg", "10", "--periods", "8", "--cycles", "1"], link)
-    assert code == 0 and sent(link, 12) == []
+    assert code == 0 and set(sent(link, 12)) == {34.0}  # adopt/restore only: never driven
     assert max(abs(d) for d in sent(link, 11)) <= 10.0 + 1e-9
 
 
@@ -148,6 +149,16 @@ def test_stale_readback_of_the_previous_joint_does_not_abort(tmp_path):
     link = FakeLink(refresh_every=28, slew_per_read=0.25, delay_reads=28)
     code, rows = run(tmp_path, ["sine", "--joints", "11,12", "--periods", "100", "--cycles", "3"], link)
     assert code == 0, rows[-1]["error"]
+
+
+@pytest.mark.parametrize("test_args", [["step", "--joints", "11"], ["sine", "--joints", "11", "--periods", "8"],
+                                       ["gait", "--joint", "12", "--samples", "20"]])
+def test_first_joint_command_adopts_all_12(tmp_path, test_args):
+    # 2026-11-07 gait run: a motor() call for one joint made the others jump to old joint-mode setpoints.
+    start = {j: float(j % 10) for j in probe.LEG_IDS}
+    link = FakeLink(start=start)
+    run(tmp_path, test_args, link)
+    assert link.writes[0] == (probe.LEG_IDS, [start[j] for j in probe.LEG_IDS])
 
 
 @pytest.mark.parametrize("read_every, reads", [(1, 40), (0, 0), (4, 10)])
