@@ -78,6 +78,23 @@ the key, or read the number off the subscription page. Lines per month = allowan
 got you"; "Got you in sight, following along, keeping pace with you"). One option, Brian's
 call: add a few of the cached lines to `PERSONA` as style examples.
 
+## 2026-11-07 (night): budget, pacing, persona v3
+
+**Done:**
+- Brian's allowance (121k credits/month) and pacing (4 s / 30 s / urgent skips) recorded in
+  config and `decisions.md`.
+- Persona versions kept side by side; v3 = v2 + 3 cached lines as style examples (now live).
+- `persona_ab` harness: 5 fixed novel events, identical settings, JSONL + one WAV per version.
+
+**v2 vs v3, first run** (`docs/voice/persona_ab/2026-11-07_1911_v2_vs_v3.jsonl`, one line per
+event, so Haiku's randomness alone could explain any difference). Counts only; the judgment is
+Brian's:
+- All 10 lines ≤ 12 words. Neither version copied a style example.
+- "Alright" opens 5 of 10 lines (v2: 3, v3: 2). "bro" appears in 4 of 5 v2 lines and 3 of 5
+  v3 lines.
+- Battery % is read out in 4 of 10 lines (as words, e.g. "forty-seven").
+- Haiku latency 0.62–0.93 s per line. Rendering cost 59 (v2) / 58 (v3) credits for 5 lines.
+
 **Interview talking point:** split the latency budget into parts (LLM → text, TTS → first
 audio byte, device buffer) and measure each one separately. Caching the common lines removes
 both network hops for the lines that matter most. That's precomputation, traded against
