@@ -12,6 +12,12 @@ Brian's decisions and verdicts, dated, in his words. Newest first. Numbers and r
 >
 > Hypothesis: both still walk, but slower and less precisely: higher tracking error, lower step frequency, more falls than EXP-005, with EXP-010 worse than EXP-009. If either can't walk or falls go high, next experiment adds the last ~5 actions to the observation (action history) so the policy knows what's in flight. If that fails too, we go Path B.
 
+Design answers (2026-11-07, Brian chose each recommended option; reasons as they were put to him):
+- **Command delay 40 ms**, fixed, replacing the sim's 4-8 ms (not ~100 ms): the earliest of 18 step responses moved 50 ms after the command, and sine lag minus mean readback age is ~36 ms; the rest of the ~100 ms is readback staleness, which EXP-010 adds.
+- **Joint readback cycle 130 ms** (measured with all 12 joints commanded at 55 Hz, like a policy; 105 ms with single-joint commands), polled in ID order with ~3 empty arm slots, random phase per env.
+- **Actor joint velocity dropped** in EXP-010 (the dog has no velocity readback); the critic keeps the true joint state.
+- **Scoring with the delays on**, plus EXP-005's policy re-scored under the same conditions as the reference.
+
 Evidence: [phase1-joint-control-results.md](phase1-joint-control-results.md). Path A goes ahead only if EXP-009/010 (or the action-history follow-up) still walk; otherwise Path B.
 
 ## 2026-11-07: EXP-005 wins; `feet_air_time` weight 3.0 is the current best
