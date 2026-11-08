@@ -14,7 +14,7 @@ You are helping Brian (M.S. CS @ Columbia, ML focus) on **IronBark**, his autono
 - **Name thresholds by semantic role**, not magic numbers.
 - **Single-variable commits.** One work item = at least one commit; never bundle two work items. Match the existing message style.
 - **No wall-clock logic in Pi-side code.** Frame counts and state predicates only. PC-side timers are fine.
-- **Do not change `pi/motor_controller.py` semantics** (it's measurement-derived). Additive telemetry fields are fine if needed. Say so in your report.
+- **Do not change the Pi's `~/ironbark/motor_controller.py` semantics** (it's measurement-derived; read-only reference copy: `docs/v2-archive/reference/motor_controller.py`). Additive telemetry fields are fine if needed. Say so in your report.
 - Do not re-add identity (face/ReID). Do not build EXPLORE (Phase 3) unless Brian asks.
 - In `brian/`, design decisions are Brian's (thresholds, frames, weights, trade-offs): ask, don't decide. Never rewrite code Brian wrote himself (e.g. `feet_air_time`, his `metrics.py` functions) without asking (see Division of labor).
 - Keep replies short. Brian dislikes long explanations. Prefer one-line terminal commands.
@@ -23,15 +23,17 @@ You are helping Brian (M.S. CS @ Columbia, ML focus) on **IronBark**, his autono
 
 ## Ground truth (read before coding)
 
-1. `docs/migration-notes.md` — every measured fact. Treat as ground truth.
-2. `docs/measurements/*.jsonl` — the data behind those facts.
-3. `pi/motor_controller.py` — header + code. The PC-side code talks to this.
-4. `docs/phase1-briefing.md` — especially §5 (target-lock design).
-5. `docs/handoffs/follow-bringup.md` — the previous FOLLOW bring-up handoff (W1–W5). It's old: **audit before trusting it.**
+The V2 material lives in `docs/v2-archive/` (reference only; start with its `README.md`).
+1. `docs/v2-archive/MEASURED_FACTS.md` — every V2 measured constant and protocol fact, sourced, plus what was never measured. `docs/v2-archive/migration-notes.md` — the dated log behind it. Treat as ground truth.
+2. `docs/v2-archive/measurements/` — the V2 data behind those facts. V3's own probe logs are in `docs/measurements/`.
+3. `docs/v2-archive/reference/motor_controller.py` (+ `reference/config.py` for its constants) — header + code; a read-only copy of the controller on the Pi. The PC-side code talks to it.
+4. `docs/v2-archive/phase1-briefing.md` — especially §5 (target-lock design).
+5. `docs/v2-archive/handoffs/coding-handoff-follow-bringup.md` — the previous FOLLOW bring-up handoff (W1–W5); its report is `docs/v2-archive/bringup-report.md`. It's old: **audit before trusting it.**
+6. `docs/v2-archive/LESSONS.md` and `findings/` — what made V2 finicky and what V3 should do differently.
 
 Known facts from the previous handoff (verify against the repo; **if the repo disagrees, the repo wins**, so flag it):
 - Wire protocol: commands as JSON on PUB `PC_IP:5556` (Pi subscribes); telemetry JSON PUB'd by the Pi on `:5558` with fields `action, yaw, roll, pitch, battery_pct, imu_ready, seq, fw`.
-- Camera stream: ZMQ PUB on 50505. Lidar scans: ZMQ PUB on 50507 (V1 schema).
+- Camera stream: ZMQ **PUSH (Pi, connects) → PULL (PC, binds)** on 50505; message = `<qI` header (int64 capture µs, uint32 JPEG length) + JPEG. Lidar scans: **PUSH → PULL** on 50507 (V1 schema). Not PUB: a PUB sender never reaches a PULL receiver (`docs/v2-archive/MEASURED_FACTS.md`).
 - motor_controller motion vocabulary: `stop | forward | backward | turn_left | turn_right | strafe_left | strafe_right` (+ `head_pitch`). `turn_*` runs at a fixed `V2_TURN_RATE_DPS`.
 - Camera: USB 2MP wide-angle at `/dev/video0` (not the OAK-D).
 - MS200 lidar UART port: unknown until Brian traces the cable (`# MEASURE:`).
@@ -52,7 +54,7 @@ Some steps are Brian-only (keys, firewall, router). For those, give him exact on
 
 ## Phase 0.5 — Audit + finish FOLLOW bring-up
 
-- [ ] Compare the repo to `docs/handoffs/follow-bringup.md` W1–W5. Write `docs/status.md` with each item marked **done / partial / not started**, plus evidence (file, commit).
+- [ ] Compare the repo to `docs/v2-archive/handoffs/coding-handoff-follow-bringup.md` W1–W5. Write `docs/status.md` with each item marked **done / partial / not started**, plus evidence (file, commit).
 - [ ] Finish the remaining items per that spec (adapting anything Mac-specific: the webcam dev mode uses the PC's webcam if present; W5's deadman can use real key-held detection on this OS).
 - [ ] Write `docs/bringup-report.md` (what shipped, measured numbers, open `# MEASURE:` items, exact commands for Brian's next motion sessions: teleop first, then supervised FOLLOW).
 
