@@ -34,6 +34,50 @@ doesn't touch RL files.
 3. First latency measurement: cached path vs. Haiku path, against the 1.5 s median.
 4. Later: stream PCM to the Pi over a new ZMQ port (option a), once V2 is on the PC.
 
+## 2026-11-07 (evening): Tilly, persona v2, first measurements
+
+**Done:**
+- Voice set to Tilly (Brian's pick); persona v2 and the cached lines redrafted.
+- Credits per line are now logged from ElevenLabs' `character-cost` response header.
+- Samples go to a gitignored `samples/` folder.
+
+**Measured** (`docs/measurements/voice_latency_2026-11-07.jsonl`; n is tiny, so these are first readings, not results):
+
+| Path | Event → text | Text → first audio | Device buffer | **Event → first sound** |
+|---|---|---|---|---|
+| Line sent straight to TTS (n=2) | 0 | 0.20–0.21 s | 0.18 s | **0.38–0.40 s** |
+| Haiku → TTS (n=1) | 0.81 s | 0.21 s | 0.18 s | **1.20 s** (target 1.5) |
+
+- **Haiku alone, warm, 4 calls in one process:** 0.67–0.93 s; 306 input and ~21 output
+  tokens, about $0.00004 a line.
+- **ElevenLabs time to first byte, one process, 3 requests:** 0.23 s cold (TLS handshake),
+  then 0.15 and 0.16 s warm.
+- **Cached lines** (local audio, no network) should land near the 0.18 s device buffer.
+  That's untested until the cache exists.
+- **Measurement bug, found and fixed:** the first CLI run reported 1.43 s (TTS) and 6.5 s
+  (Haiku). It had counted the SDK imports as latency: `import anthropic` ~3.7 s and
+  `import elevenlabs.client` ~0.8 s in a fresh process. That log was set aside, not committed.
+- **Cost:** 7 credits per 30–34 character line (≈0.22 credits/character; "Yo." cost 1). That
+  includes any custom rate on Tilly. Building all 15 cached lines once is ~527 characters
+  ≈ 120 credits.
+- **Concurrency:** the TTS response reports a 10-request limit, which matches the Creator
+  tier in ElevenLabs' docs.
+
+**Blocked:** the monthly credit allowance. The ElevenLabs key is scoped and lacks `user_read`
+(and `voices_read`), so `say account` can't read the balance. Brian can add "User: Read" to
+the key, or read the number off the subscription page. Lines per month = allowance / 7.
+
+**Cooldown proposal (Claude, for Brian):** 4 s of quiet after a line ends.
+- Lines are ~1.9–2.3 s long (measured), so 4 s keeps the dog quieter than it talks.
+- Worst case, every event is uncached and fires as soon as allowed: one line every ~6 s,
+  600 lines/hour, ~4,200 credits/hour.
+- Cached events are free, so real use costs far less.
+- The allowance only binds if the dog chatters nonstop for allowance/4,200 hours.
+
+**Persona v2 check:** Haiku's lines are on-voice but often plain ("Following you now, bro, I
+got you"; "Got you in sight, following along, keeping pace with you"). One option, Brian's
+call: add a few of the cached lines to `PERSONA` as style examples.
+
 **Interview talking point:** split the latency budget into parts (LLM → text, TTS → first
 audio byte, device buffer) and measure each one separately. Caching the common lines removes
 both network hops for the lines that matter most. That's precomputation, traded against
