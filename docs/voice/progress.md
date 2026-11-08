@@ -122,6 +122,34 @@ rest good." The live persona is back to v2.
   settings for those takes. Listen for whether C still sounds like Tilly.
 - WAVs are in `samples/pitch_fix/` (gitignored). Which fix to adopt is Brian's call.
 
+## 2026-11-07 (late night): triggers, pacing and cache built; first full replay
+
+**Done:**
+- `triggers` (T1–T4, using Brian's `is_fallen`).
+- `speech_policy` (4 s / 30 s / urgent interrupts / P4 staleness).
+- `line_cache` (15 lines, keyed by voice + model + format + text).
+- Interruptible playback.
+- `run` loop (`python -m ironbark_voice.run`), which logs every decision and spoken line.
+- 68 tests, including a threaded fall-interrupt test.
+- Claude's unasked choices are listed in `decisions.md` for Brian to veto. The main one:
+  `battery_low` interrupts too, not just falls.
+
+**First full replay** (`follow_demo.jsonl`, real APIs, PC speakers; logs:
+`docs/measurements/voice_decisions_2026-11-07.jsonl`, `voice_latency_2026-11-07.jsonl`):
+
+| Frame | Event | Outcome |
+|---|---|---|
+| 10 | target_found | spoken (cache), first sound **0.21 s** after the event |
+| 10 | behavior_changed | dropped: busy (P3) |
+| 47 | target_lost | spoken (cache), **0.19 s** |
+| 80 | target_reacquired | dropped: cooldown, 3.9 s of 4.0 s |
+| 105 | battery_low | spoken (cache, urgent), then **cut off** by the fall |
+| 110 | fell | spoken (cache, urgent, interrupt), **0.25 s** |
+| 145 | behavior_changed | spoken (Haiku), **1.29 s**: "Battery's at nineteen percent, but I'm chill, bro. Got this." |
+
+- Building the cache cost 116 credits, once. Cached lines cost nothing after that.
+- n is small: 4 cached lines and 1 Haiku line in one run.
+
 **Interview talking point:** split the latency budget into parts (LLM → text, TTS → first
 audio byte, device buffer) and measure each one separately. Caching the common lines removes
 both network hops for the lines that matter most. That's precomputation, traded against
