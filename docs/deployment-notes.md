@@ -23,6 +23,24 @@ Requirements found so far for the runtime that runs a trained policy on the dog.
 - **Build `XGO_DOG(port, 115200, version="xgomini")` directly.** The `XGO()` factory (which `motor_controller.py` uses) calls `reset()`, which moves the dog.
 - **`motor()` stops the firmware gait; `stop()` hands control back.** The runtime and `motor_controller.py` can't both drive the dog.
 
+## Safety: if the Pi hangs (Brian, 2026-11-07)
+
+Source: `v2-archive/findings/2026-09-30-pi-hang.md`. On 2026-09-30 the Pi dropped off the network mid-session (no mDNS, ping or SSH; steady green LED; cause never found: brownout, Wi-Fi drop or kernel hang). **The motion board keeps executing the last command** (V2 smoke Q1: `forward()` ran the whole 8 s window), and the watchdog that sends `stop()` runs on the Pi, so it can't stop the dog. A PC-side deadman can't either: its stops go through the Pi.
+
+Brian's requirements before any policy deployment:
+
+1. **Test what the board does when the Pi stops sending mid-motion, in joint mode and in gait mode, dog on the stand.** Not built yet. Open questions it answers: does a joint-mode setpoint just hold (expected) and does the gait keep walking (V2 says yes)? Does the board have any timeout of its own (none is documented)?
+2. **Every motion session has a physical kill switch within reach:** the power switch or a battery disconnect.
+3. **Log enough before and during each session that a hang leaves evidence.** From the finding:
+   - make the Pi's journal persistent (`/var/log/journal` exists), so `journalctl -b -1` after recovery shows the previous boot;
+   - log `vcgencmd get_throttled` periodically during the session (its undervoltage bits clear on reboot);
+   - log Wi-Fi state (`iw wlan0 get power_save`, signal strength);
+   - reserve DHCP addresses or use hostnames for both hosts (`raspberrypi.local` worked).
+
+Notes:
+- xgolib's timed commands (`move_x(step, runtime=…)` and the like) don't survive a Pi hang: they `time.sleep(runtime)` on the Pi and then send 0 (read in `xgolib_dog.py`). Only a board-side timeout would, and none is known.
+- On 2026-11-07 the Pi was unreachable twice (at the start of the session and right after the Phase 1 probe run); whether it hung or was switched off wasn't recorded.
+
 ## Sessions
 
 - **Battery:** 99% -> 79% in ~3 min of intermittent motion in V2; the dog locks out at <= 9%, so a full charge lasts roughly 13 min of that use. Plugging in the charger cuts power (no tethered runs). Log `battery_pct` in every run (the probe does). (V2 archive LESSONS A5.)

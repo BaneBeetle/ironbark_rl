@@ -2,6 +2,12 @@
 
 Brian's decisions and verdicts, dated, in his words. Newest first. Numbers and run details are in [progress.md](progress.md) and the [experiment files](experiments/README.md).
 
+## 2026-11-07: Pi-hang safety requirements before any policy deployment
+
+> Add to the V3 safety plan (from docs/v2-archive/findings/2026-09-30-pi-hang.md): if the Pi hangs, the motion board keeps executing the last command, and the Pi-side watchdog can't stop it. Before any policy deployment: (1) test what the board does if the Pi stops sending mid-motion in joint mode vs gait mode, dog on the stand; (2) every motion session needs a physical kill switch within reach (power switch or battery disconnect); (3) log enough before each session that a hang leaves evidence. Add this to docs/deployment-notes.md.
+
+Logged in [deployment-notes.md](deployment-notes.md), "Safety: if the Pi hangs".
+
 ## 2026-11-07: IMU freezes: no new hardware yet; read-only tests, then model them in sim if they persist
 
 > I don't want new hardware yet. Run the read-only tests (read 0x61, read_imu_int16 alongside read_imu, slow-read at ~100 ms). Only if 0x61 shows stabilization on, send imu(0) and rerun the still test. If freezes persist, the plan is to model them in sim: IMU sample-and-hold freezes matching our logs plus an "IMU age/fresh" observation for the actor, as a future experiment after EXP-010.
