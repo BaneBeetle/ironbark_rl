@@ -2,6 +2,12 @@
 
 Brian's decisions and verdicts, dated, in his words. Newest first. Numbers and run details are in [progress.md](progress.md) and the [experiment files](experiments/README.md).
 
+## 2026-11-07: IMU freezes: no new hardware yet; read-only tests, then model them in sim if they persist
+
+> I don't want new hardware yet. Run the read-only tests (read 0x61, read_imu_int16 alongside read_imu, slow-read at ~100 ms). Only if 0x61 shows stabilization on, send imu(0) and rerun the still test. If freezes persist, the plan is to model them in sim: IMU sample-and-hold freezes matching our logs plus an "IMU age/fresh" observation for the actor, as a future experiment after EXP-010.
+
+Context: no public firmware update for `M-4.0.1-Y`, xgolib 1.1.10 is the newest, and `0x61` (self-stabilization) is the only IMU setting ([phase1-xgolib-api.md](phase1-xgolib-api.md)).
+
 ## 2026-11-07: IMU reruns, and an IMU sanity filter for deployment
 
 > Agreed, I'll run both: dog still first, then the policy-like loop. Add a note for deployment: the runtime needs an IMU sanity filter (reject zeroed/impossible vectors, detect freezes). If the onboard IMU proves unusable, the fallback is a separate I2C IMU wired directly to the Pi; log that as an option.
