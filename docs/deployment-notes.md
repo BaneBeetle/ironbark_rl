@@ -17,7 +17,6 @@ Requirements found so far for the runtime that runs a trained policy on the dog.
 ## Joints
 
 - **Never call `calibration()`**: it's the servo calibration register and can corrupt servo zeros (V2 archive, vendor).
-
 - **Joint map:** verified by Brian (`ironbark_rl/assets/s2_joint_map.py`). `# MEASURE:` each joint's sign and zero offset vs. the sim before deployment (rerun the probe's `map` answering foot directions; command 0° against the MJCF default pose).
 - **Command all 12 joints together, starting from their measured angles.** The first `motor()` call puts the firmware in joint mode, and every joint then drives to its last joint-mode setpoint, so unsent joints jump (~8° seen). Source: Phase 1 `gait` run.
 - **Round commands to the nearest byte:** xgolib's `conver2u8` truncates (up to 0.62° low). The probe adds half a byte step first (Brian, 2026-11-07).
