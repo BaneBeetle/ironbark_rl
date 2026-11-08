@@ -174,3 +174,60 @@ def test_guard_line_goes_in_setup_before_the_run_folder():
     lines = text.split("\n")
     i = next(k for k, line in enumerate(lines) if line.startswith("- Guard: "))
     assert lines[i + 1].startswith("- Run folder:") and lines[i - 1].startswith("- Train:")
+
+
+def test_replicate_train_args_carry_the_seed_and_run_name():
+    w = {"feet_air_time": 3.52921, "action_rate": -0.32, "torques": -0.25}
+    args = " ".join(rs.train_args("EXP-017-s43", w, 43))
+    assert "--agent.seed 43 --agent.run-name EXP-017-s43" in args and "--env.rewards.torques.weight -0.25" in args
+    assert "--agent.seed 42 --agent.run-name EXP-017 " in " ".join(rs.train_args("EXP-017", w))
+
+
+def test_seed_table_mean_sd_and_range():
+    per_seed = {42: metrics(sat=0.008, planar=0.034), 43: metrics(sat=0.010, planar=0.035), 44: metrics(sat=0.012, planar=0.036)}
+    st = rs.seed_stats(per_seed)
+    assert st["saturated_share"] == pytest.approx((0.010, 0.002, 0.008, 0.012))
+    table = rs.seed_table(per_seed).split("\n")
+    assert table[0].startswith("**Seeds 42/43/44, mean ± sample SD [min–max]**")
+    assert table[-1].startswith("| **mean ± SD [min–max]** | 0.000 ± 0.000 [0.000–0.000] | 0.0350 ± 0.0010 [0.0340–0.0360] |")
+    assert "| 1.00% ± 0.20% [0.80%–1.20%] |" in table[-1]
+    assert rs.seed_summary(per_seed).startswith("Seeds 42/43/44 (mean ± SD): planar 0.0350 ± 0.0010 · ")
+    assert rs.seed_summary(per_seed).endswith("saturation 1.00% ± 0.20%; falls 0.000 all")
+
+
+def test_seed_block_goes_before_results_and_fills_in_order():
+    text = template_entry()
+    line = lambda seed, state: rs.seed_line(seed, f"python x --agent.seed {seed}", f"EXP-099-s{seed}", state)
+    text = rs.set_seed_line(text, 43, line(43, "training"))
+    text = rs.set_seed_line(text, 43, line(43, "trained and scored"))
+    text = rs.set_seed_line(text, 44, line(44, "training"))
+    lines = text.split("\n")
+    h = lines.index(rs.REPLICATE_HEADING)
+    r = lines.index(rs.RESULTS_HEADING)
+    block = lines[h:r]
+    assert [b[:16] for b in block if b.startswith("- **Seed")] == ["- **Seed 43** (t", "- **Seed 44** (t"]
+    assert "(trained and scored)" in block[[i for i, b in enumerate(block) if b.startswith("- **Seed 43")][0]]
+    assert lines[h - 1] == "" and lines[r - 1] == ""
+    text = rs.add_seed_table(text, "TABLE ROW 1\nTABLE ROW 2")
+    lines = text.split("\n")
+    i = next(k for k, b in enumerate(lines) if b.startswith("- **Seed 44"))
+    assert lines[i + 1:i + 4] == ["", "TABLE ROW 1", "TABLE ROW 2"] and lines[i + 4] == ""
+    assert lines.index(rs.RESULTS_HEADING) > i + 4
+
+
+def test_status_and_index_get_the_seed_summary():
+    text = rs.set_status(template_entry(), "search trial 6 (Optuna); trained; constraints pass; verdict pending (Brian)")
+    text = rs.add_to_status(text, "seeds 43/44 trained and scored 2026-11-08 (Brian's pick)")
+    assert ("**Status:** search trial 6 (Optuna); trained; constraints pass; seeds 43/44 trained and scored 2026-11-08 "
+            "(Brian's pick); verdict pending (Brian) · **Parent:** EXP-010") in text
+    index = "| [EXP-099](y.md) | d | t | vs. EXP-010: x | v1 ...; constraints pass. Verdict pending (Brian) |\n"
+    assert rs.fill_index_seeds(index, "EXP-099", "Seeds 42/43/44 (mean ± SD): s").endswith(
+        "constraints pass. Seeds 42/43/44 (mean ± SD): s. Verdict pending (Brian) |\n")
+
+
+def test_search_page_lists_replicates_only_for_scored_trials():
+    trials = [{"exp": "EXP-099", "metrics": metrics(sat=0.008)}, {"exp": "EXP-098", "metrics": metrics()}]
+    assert rs.replicate_section(trials, {}) == []
+    lines = rs.replicate_section(trials, {"EXP-099": {"43": metrics(sat=0.010), "44": metrics(sat=0.012)}, "EXP-123": {"43": metrics()}})
+    rows_ = [line for line in lines if line.startswith("| [")]
+    assert len(rows_) == 1 and rows_[0].startswith("| [EXP-099](") and "| 42/43/44 | " in rows_[0] and "1.00% ± 0.20%" in rows_[0]

@@ -6,6 +6,7 @@ scored like EXP-010. The study lives in ~/dev/ironbark_runs/optuna/; the ranked 
 
   python tools/reward_search.py run      # loop until STOP: ask -> entry -> train -> score -> tell -> table
   python tools/reward_search.py table    # rewrite the search page from the study (CPU only)
+  python tools/reward_search.py replicate EXP-017 EXP-018 EXP-015 --seeds 43 44   # Brian's picks, other seeds
 
 Control files in the study folder, checked between trials only (a running trial always finishes):
   PAUSE   wait with the GPU free until the file is removed (e.g. while another session renders)
@@ -17,6 +18,11 @@ per-step total is flagged in the entry, the index and the table; the trial train
 
 The driver commits each trial's entry before training and its results after scoring
 (only the files it wrote), and stops at the first failed trial.
+
+replicate: re-trains search trials Brian picked with other seeds (same weights, task and scoring),
+one run at a time, honoring PAUSE and STOP; results go into each trial's entry (a Seed replicates
+block, then a mean ± SD table once every seed is in), the index, the search page, and
+optuna/replicates.json. The study itself stays seed 42 only.
 """
 
 import argparse
@@ -25,6 +31,7 @@ import importlib.util
 import json
 import os
 import re
+import statistics
 import subprocess
 import sys
 import time
@@ -37,6 +44,7 @@ STUDY_DIR = RUNS_DIR / "optuna"
 STUDY_NAME = "exp010_reward_weights"
 STORAGE = f"sqlite:///{(STUDY_DIR / (STUDY_NAME + '.db')).as_posix()}"
 PAUSE_FILE, STOP_FILE = STUDY_DIR / "PAUSE", STUDY_DIR / "STOP"
+REPLICATES = STUDY_DIR / "replicates.json"  # {exp: {seed: metrics + run, minutes}}: Brian's picks re-run with other seeds
 EXPERIMENTS = REPO / "docs" / "experiments"
 INDEX = EXPERIMENTS / "README.md"
 SEARCH_DOC = EXPERIMENTS / "SEARCH-exp010-reward-weights.md"
@@ -70,6 +78,12 @@ PLANAR_ERROR_MAX_MPS = 0.035  # planar tracking <= 0.035 m/s (scoreboard v1 over
 LOG_SCALE = True  # the ranges are multiples, so sample ratios evenly
 N_STARTUP_TRIALS = 4  # random trials before the GP takes over, EXP-010 included (Optuna's default 10 = ~11 h of random)
 SAMPLER_SEED = 42
+
+# Brian, 2026-11-08, verbatim (the part about seeds; the rest of the message is in docs/journal.md).
+REPLICATE_REQUEST = ("Run seeds 43 and 44 for EXP-017, EXP-018 and EXP-015 (my top 3; I rank by saturation first, "
+                     "then tracking, then flicker).")
+REPLICATE_HEADING = "### Seed replicates (same setup, different seed: measures the noise floor, rule 4)"
+RESULTS_HEADING = "## Results (scoreboard: `metrics.py`)"
 
 TUNED = ("feet_air_time", "action_rate", "torques")
 EVAL_KEYS = ("fall_rate", "planar_error_mps", "yaw_rate_error_radps", "joint_target_rate_radps", "cost_of_transport")
@@ -117,9 +131,9 @@ def override_args(weights: dict[str, float]) -> list[str]:
     return args
 
 
-def train_args(exp_id: str, weights: dict[str, float]) -> list[str]:
+def train_args(run_name: str, weights: dict[str, float], seed: int = SEED) -> list[str]:
     return ["tools/run.py", "train", TASK, "--env.scene.num-envs", str(ENVS), "--agent.max-iterations", str(ITERATIONS),
-            "--agent.seed", str(SEED), "--agent.run-name", exp_id, *override_args(weights)]
+            "--agent.seed", str(seed), "--agent.run-name", run_name, *override_args(weights)]
 
 
 def constraint_values(m: dict[str, float]) -> tuple[float, float]:
@@ -282,6 +296,100 @@ def read_metrics(run: Path) -> dict[str, float]:
     return {**{k: float(e[k]) for k in EVAL_KEYS}, **{k: float(g[k]) for k in GAIT_KEYS}}
 
 
+SEED_TABLE_COLUMNS = (("fall_rate", "Falls", "{:.3f}"), ("planar_error_mps", "Planar err [m/s]", "{:.4f}"),
+                      ("yaw_rate_error_radps", "Yaw err [rad/s]", "{:.4f}"), ("joint_target_rate_radps", "Joint-target rate [rad/s]", "{:.3f}"),
+                      ("cost_of_transport", "CoT", "{:.3f}"), ("saturated_share", "Saturation", "pct"),
+                      ("flicker_share", "Flicker", "pct"), ("swing_median_s", "Swing median [s]", "{:.4f}"))
+
+
+def _fmt(fmt: str, x: float) -> str:
+    return f"{100 * x:.2f}%" if fmt == "pct" else fmt.format(x)
+
+
+def seed_stats(per_seed: dict[int, dict]) -> dict[str, tuple[float, float, float, float]]:
+    """metric -> (mean, sample SD, min, max) over the seeds."""
+    out = {}
+    for key, _, _ in SEED_TABLE_COLUMNS:
+        v = [per_seed[s][key] for s in sorted(per_seed)]
+        out[key] = (statistics.mean(v), statistics.stdev(v), min(v), max(v))
+    return out
+
+
+def seed_table(per_seed: dict[int, dict]) -> str:
+    seeds = sorted(per_seed)
+    lines = [f"**Seeds {'/'.join(map(str, seeds))}, mean ± sample SD [min–max]** (scoreboard v1 overall + gait diagnostics, "
+             f"`{CHECKPOINT}`, staleness and delay on):", "",
+             "| Seed | " + " | ".join(c[1] for c in SEED_TABLE_COLUMNS) + " |", "|---|" + "---|" * len(SEED_TABLE_COLUMNS)]
+    for s in seeds:
+        lines.append(f"| {s} | " + " | ".join(_fmt(fmt, per_seed[s][key]) for key, _, fmt in SEED_TABLE_COLUMNS) + " |")
+    st = seed_stats(per_seed)
+    lines.append("| **mean ± SD [min–max]** | " + " | ".join(
+        f"{_fmt(fmt, st[key][0])} ± {_fmt(fmt, st[key][1])} [{_fmt(fmt, st[key][2])}–{_fmt(fmt, st[key][3])}]"
+        for key, _, fmt in SEED_TABLE_COLUMNS) + " |")
+    return "\n".join(lines)
+
+
+def seed_summary(per_seed: dict[int, dict]) -> str:
+    """One line for the index row (as EXP-010's)."""
+    st = seed_stats(per_seed)
+    ms = lambda key, fmt: f"{_fmt(fmt, st[key][0])} ± {_fmt(fmt, st[key][1])}"
+    falls = f"falls {st['fall_rate'][0]:.3f} ± {st['fall_rate'][1]:.3f}" if st["fall_rate"][3] > 0 else "falls 0.000 all"
+    return (f"Seeds {'/'.join(map(str, sorted(per_seed)))} (mean ± SD): planar {ms('planar_error_mps', '{:.4f}')} · "
+            f"yaw {ms('yaw_rate_error_radps', '{:.4f}')} · smooth {ms('joint_target_rate_radps', '{:.3f}')} · "
+            f"CoT {ms('cost_of_transport', '{:.3f}')}; flicker {ms('flicker_share', 'pct')} · saturation {ms('saturated_share', 'pct')}; {falls}")
+
+
+def seed_line(seed: int, cmd: str, run_name: str, state: str) -> str:
+    return (f"- **Seed {seed}** ({state}): `{cmd}`. Run folder `~/dev/ironbark_runs/logs/rsl_rl/{EXPERIMENT_NAME}/*_{run_name}`, "
+            f"console log `~/dev/ironbark_runs/{run_name}.log`.")
+
+
+def set_seed_line(text: str, seed: int, line: str) -> str:
+    """Add or replace this seed's line in the entry's Seed replicates block (made before Results on first use)."""
+    if REPLICATE_HEADING not in text:
+        old = "\n" + RESULTS_HEADING
+        if text.count(old) != 1:
+            raise ValueError("no Results heading")
+        block = (f"\n{REPLICATE_HEADING}\n\nBrian (2026-11-08): \"{REPLICATE_REQUEST}\" Same weights, task and scoring "
+                 f"as seed {SEED}; one run at a time.\n\n{line}\n")
+        return text.replace(old, block + old, 1)
+    lines = text.split("\n")
+    h = lines.index(REPLICATE_HEADING)
+    end = next(i for i in range(h + 1, len(lines)) if lines[i].startswith("## "))
+    mine = [i for i in range(h, end) if lines[i].startswith(f"- **Seed {seed}** (")]
+    if mine:
+        lines[mine[0]] = line
+    else:
+        seeds = [i for i in range(h, end) if lines[i].startswith("- **Seed ")]
+        lines.insert(seeds[-1] + 1, line)
+    return "\n".join(lines)
+
+
+def add_seed_table(text: str, table: str) -> str:
+    """The mean ± SD table goes after the block's seed lines."""
+    lines = text.split("\n")
+    h = lines.index(REPLICATE_HEADING)
+    end = next(i for i in range(h + 1, len(lines)) if lines[i].startswith("## "))
+    last = max(i for i in range(h, end) if lines[i].startswith("- **Seed "))
+    lines[last + 1:last + 1] = ["", *table.split("\n")]
+    return "\n".join(lines)
+
+
+def add_to_status(text: str, extra: str) -> str:
+    m = re.search(r"^\*\*Status:\*\* (.*?) · \*\*Parent:\*\*", text, flags=re.M)
+    if not m:
+        raise ValueError("no Status line")
+    status = m.group(1)
+    tail = "; verdict pending (Brian)"
+    status = (status.removesuffix(tail) + f"; {extra}" + tail) if status.endswith(tail) else f"{status}; {extra}"
+    return set_status(text, status)
+
+
+def fill_index_seeds(index: str, exp_id: str, text: str) -> str:
+    old = "Verdict pending (Brian) |"
+    return _edit_row(index, exp_id, old, f"{text}. {old}")
+
+
 # ---------- study ----------
 
 def make_sampler():
@@ -326,7 +434,7 @@ def other_trials(study) -> list[dict]:
     return [{"number": t.number, "state": t.state.name, **t.user_attrs} for t in study.trials if t.state != TrialState.COMPLETE]
 
 
-def search_doc(study, now: str) -> str:
+def search_doc(study, now: str, replicates: dict | None = None) -> str:
     start = study.user_attrs["start_weights"]
     lines = [
         "# Search: three reward weights under EXP-010's latency (Optuna)",
@@ -384,7 +492,26 @@ def search_doc(study, now: str) -> str:
         lines += ["", "Trials without scores:", ""]
         lines += [f"- trial {o['number']} ({o.get('exp', 'no entry')}): {o['state'].lower()}" + (f", {o['reason']}" if o.get("reason") else "")
                   for o in others]
+    lines += replicate_section(rows(study), replicates or {})
     return "\n".join(lines) + "\n"
+
+
+def replicate_section(trials: list[dict], replicates: dict) -> list[str]:
+    """Brian's picks with their other seeds: mean ± sample SD over every seed scored so far (seed 42 included)."""
+    by_exp = {r["exp"]: r for r in trials}
+    done = [(exp, reps) for exp, reps in replicates.items() if exp in by_exp and reps]
+    if not done:
+        return []
+    keys = [c for c in SEED_TABLE_COLUMNS if c[0] != "fall_rate"] + [SEED_TABLE_COLUMNS[0]]
+    lines = ["", "## Seed replicates (Brian's picks)", "", f"> {REPLICATE_REQUEST}", "",
+             "Mean ± sample SD over the seeds scored so far (per-seed rows and ranges are in each entry).", "",
+             "| Exp | Seeds | " + " | ".join(c[1] for c in keys) + " |", "|---|---|" + "---|" * len(keys)]
+    for exp, reps in done:
+        per_seed = {SEED: by_exp[exp]["metrics"], **{int(s): m for s, m in reps.items()}}
+        st = seed_stats(per_seed)
+        lines.append(f"| [{exp}]({_entry_name(exp)}) | {'/'.join(map(str, sorted(per_seed)))} | "
+                     + " | ".join(f"{_fmt(fmt, st[key][0])} ± {_fmt(fmt, st[key][1])}" for key, _, fmt in keys) + " |")
+    return lines
 
 
 def _entry_name(exp_id: str) -> str:
@@ -435,13 +562,13 @@ def create_entry(number: int, weights: dict[str, float], start: dict[str, float]
     return exp_id, path
 
 
-def train(exp_id: str, weights: dict[str, float]) -> tuple[Path, int]:
-    log = RUNS_DIR / f"{exp_id}.log"
+def train(run_name: str, weights: dict[str, float], seed: int = SEED) -> tuple[Path, int]:
+    log = RUNS_DIR / f"{run_name}.log"
     t0 = time.time()
     with log.open("w", encoding="utf-8") as f:
-        rc = subprocess.run([PY, *train_args(exp_id, weights)], cwd=REPO, stdout=f, stderr=subprocess.STDOUT).returncode
+        rc = subprocess.run([PY, *train_args(run_name, weights, seed)], cwd=REPO, stdout=f, stderr=subprocess.STDOUT).returncode
     minutes = round((time.time() - t0) / 60)
-    runs = sorted((RUNS_DIR / "logs/rsl_rl" / EXPERIMENT_NAME).glob(f"*_{exp_id}"))
+    runs = sorted((RUNS_DIR / "logs/rsl_rl" / EXPERIMENT_NAME).glob(f"*_{run_name}"))
     text = log.read_text(encoding="utf-8", errors="replace")
     if rc or "Traceback" in text or not runs or not (runs[-1] / CHECKPOINT).exists():
         raise TrialFailed(f"training: exit {rc}, traceback {'Traceback' in text}, run {runs[-1] if runs else None} (log {log})")
@@ -452,10 +579,11 @@ def train(exp_id: str, weights: dict[str, float]) -> tuple[Path, int]:
     return run, minutes
 
 
-def score(exp_id: str, run: Path) -> dict[str, float]:
+def score(exp_id: str, run: Path, log_name: str | None = None) -> dict[str, float]:
+    """Score a run and append the results to exp_id's entry."""
     ck = str(run / CHECKPOINT)
     for tool, args in (("eval", [TASK, "--checkpoint", ck]), ("gait_check", [TASK, "--checkpoint", ck]), ("term_curves", [str(run)])):
-        log = RUNS_DIR / f"{exp_id}.{tool}.log"
+        log = RUNS_DIR / f"{log_name or exp_id}.{tool}.log"
         with log.open("w", encoding="utf-8") as f:
             rc = subprocess.run([PY, f"tools/{tool}.py", *args, "--exp", exp_id], cwd=REPO, stdout=f, stderr=subprocess.STDOUT).returncode
         if rc:
@@ -485,8 +613,12 @@ def wait_while_paused() -> None:
         print(f"RESUMED {datetime.datetime.now():%F %T}", flush=True)
 
 
+def load_replicates() -> dict:
+    return json.loads(REPLICATES.read_text(encoding="utf-8")) if REPLICATES.exists() else {}
+
+
 def refresh_doc(study) -> None:
-    write(SEARCH_DOC, search_doc(study, f"{datetime.datetime.now():%Y-%m-%d %H:%M}"))
+    write(SEARCH_DOC, search_doc(study, f"{datetime.datetime.now():%Y-%m-%d %H:%M}", load_replicates()))
 
 
 def run_loop() -> int:
@@ -556,9 +688,63 @@ def run_loop() -> int:
               f"{constraints_text(m)} {datetime.datetime.now():%F %T}", flush=True)
 
 
+def replicate_loop(exp_ids: list[str], seeds: list[int]) -> int:
+    """Brian's picks, re-trained with other seeds one at a time (same weights, task and scoring); resumable."""
+    STUDY_DIR.mkdir(parents=True, exist_ok=True)
+    study = load_study()
+    by_exp = {r["exp"]: r for r in rows(study)}
+    missing = [e for e in exp_ids if e not in by_exp or e == PARENT]
+    if missing or not seeds or SEED in seeds:
+        print(f"FAIL not scored search trials: {missing}; seeds {seeds} (seed {SEED} is the search's own)", flush=True)
+        return 1
+    for exp in exp_ids:
+        weights, path = by_exp[exp]["weights"], EXPERIMENTS / _entry_name(exp)
+        for seed in seeds:
+            if str(seed) in load_replicates().get(exp, {}):
+                continue  # done before a restart
+            wait_while_paused()
+            if STOP_FILE.exists():
+                print(f"STOPPED {datetime.datetime.now():%F %T}", flush=True)
+                return 0
+            name, today = f"{exp}-s{seed}", datetime.date.today()
+            cmd = "python " + " ".join(train_args(name, weights, seed))
+            write(path, set_seed_line(path.read_text(encoding="utf-8"), seed, seed_line(seed, cmd, name, f"training {today}")))
+            commit([path], f"{exp}: seed {seed} training (Brian's pick for seeds {'/'.join(map(str, seeds))})")
+            print(f"START {name} {weights} {datetime.datetime.now():%F %T}", flush=True)
+            try:
+                run, minutes = train(name, weights, seed)
+                print(f"TRAINED {name} {minutes} min {run.name}", flush=True)
+                m = score(exp, run, name)
+            except TrialFailed as e:
+                write(path, set_seed_line(path.read_text(encoding="utf-8"), seed, seed_line(seed, cmd, name, f"failed {today}: {e}")))
+                commit([path], f"{name}: seed replicate failed")
+                print(f"FAIL {name} {e}", flush=True)
+                return 1
+            reps = load_replicates()
+            reps.setdefault(exp, {})[str(seed)] = {**m, "run": run.name, "minutes": minutes}
+            write(REPLICATES, json.dumps(reps, indent=1))
+            text = set_seed_line(path.read_text(encoding="utf-8"), seed,
+                                 seed_line(seed, cmd, name, f"trained and scored {today}, {minutes} min, no crash"))
+            if all(str(s) in reps[exp] for s in seeds):
+                per_seed = {SEED: by_exp[exp]["metrics"], **{int(s): v for s, v in reps[exp].items()}}
+                text = add_seed_table(text, seed_table(per_seed))
+                text = add_to_status(text, f"seeds {'/'.join(map(str, seeds))} trained and scored {today} (Brian's pick)")
+                write(INDEX, fill_index_seeds(INDEX.read_text(encoding="utf-8"), exp, seed_summary(per_seed)))
+            write(path, text)
+            refresh_doc(study)
+            commit([path, INDEX, SEARCH_DOC], f"Score {name} (seed replicate, Brian's pick): flicker {m['flicker_share']:.1%}, "
+                                              f"saturation {m['saturated_share']:.2%}, planar {m['planar_error_mps']:.3f}")
+            print(f"SCORED {name} flicker {m['flicker_share']:.4f} sat {m['saturated_share']:.4f} planar {m['planar_error_mps']:.4f} "
+                  f"{datetime.datetime.now():%F %T}", flush=True)
+    print(f"ALL DONE {datetime.datetime.now():%F %T}", flush=True)
+    return 0
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument("mode", choices=("run", "table"))
+    p.add_argument("mode", choices=("run", "table", "replicate"))
+    p.add_argument("exps", nargs="*", help="replicate: the search trials to re-run, e.g. EXP-017 EXP-018 EXP-015")
+    p.add_argument("--seeds", type=int, nargs="+", default=[43, 44], help="replicate: the other seeds")
     args = p.parse_args()
     for stream in (sys.stdout, sys.stderr):
         stream.reconfigure(encoding="utf-8", errors="replace")
@@ -567,6 +753,8 @@ def main() -> None:
         refresh_doc(load_study())
         print(f"wrote {SEARCH_DOC.relative_to(REPO)}")
         return
+    if args.mode == "replicate":
+        sys.exit(replicate_loop(args.exps, args.seeds))
     sys.exit(run_loop())
 
 
