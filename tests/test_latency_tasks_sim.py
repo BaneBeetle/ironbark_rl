@@ -113,3 +113,16 @@ def test_imu_freeze_holds_the_actor_imu_terms():
             base.close()
     finally:
         env.close()
+
+
+def test_exp011_actor_matches_exp010():
+    luwu = build("IronBark-S2-Walk-Flat-StaleJoints")
+    try:
+        brian = build("IronBark-S2-Walk-Flat-Brian-StaleJoints")
+        try:
+            assert actor_dim(luwu) == actor_dim(brian)
+            assert luwu.observation_manager.group_obs_dim["critic"] == brian.observation_manager.group_obs_dim["critic"]
+        finally:
+            brian.close()
+    finally:
+        luwu.close()

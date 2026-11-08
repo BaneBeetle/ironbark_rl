@@ -10,11 +10,14 @@ from .env_cfgs import (
     s2_flat_walk_brian_stale_joints_env_cfg,
     s2_flat_walk_brian_stale_joints_imu_freeze_env_cfg,
     s2_flat_walk_brian_stale_joints_vel_ref_env_cfg,
+    s2_flat_walk_luwu_stale_joints_env_cfg,
 )
 
 _TASKS = (
     ("IronBark-S2-Walk-Flat-Brian-CmdDelay", s2_flat_walk_brian_cmd_delay_env_cfg, "ironbark_s2_walk_brian_cmd_delay"),
     ("IronBark-S2-Walk-Flat-Brian-StaleJoints", s2_flat_walk_brian_stale_joints_env_cfg, "ironbark_s2_walk_brian_stale_joints"),
+    # EXP-011: Luwu's reward under EXP-010's conditions.
+    ("IronBark-S2-Walk-Flat-StaleJoints", s2_flat_walk_luwu_stale_joints_env_cfg, "ironbark_s2_walk_stale_joints"),
     # Scoring only (EXP-005 under EXP-010's conditions); never trained.
     ("IronBark-S2-Walk-Flat-Brian-StaleJoints-VelRef", s2_flat_walk_brian_stale_joints_vel_ref_env_cfg,
      "ironbark_s2_walk_brian_stale_joints_vel_ref"),

@@ -75,3 +75,22 @@ def test_imu_freeze_task_wraps_only_the_imu_terms(play):
         assert actor[name].noise == base_actor[name].noise
     assert all(actor[k].func is base_actor[k].func for k in actor if k not in ("base_ang_vel", "projected_gravity", "joint_pos"))
     assert base_actor["base_ang_vel"].func.__name__ == "builtin_sensor"  # StaleJoints itself unchanged
+
+
+LUWU_STALE = "IronBark-S2-Walk-Flat-StaleJoints"
+
+
+@pytest.mark.parametrize("play", [False, True])
+def test_exp011_is_exp010_with_luwus_reward(play):
+    luwu, brian, luwu_base = cfg(LUWU_STALE, play), cfg(STALE, play), cfg("IronBark-S2-Walk-Flat", play)
+    a, b = actuator(luwu), actuator(brian)
+    assert (a.delay_min_lag, a.delay_max_lag) == (b.delay_min_lag, b.delay_max_lag) == (10, 10)
+    for group in ("actor", "critic"):
+        lt, bt = luwu.observations[group].terms, brian.observations[group].terms
+        assert list(lt) == list(bt)
+        for k in lt:
+            assert lt[k].func is bt[k].func or getattr(lt[k].func, "__name__", None) == getattr(bt[k].func, "__name__", None)
+            assert (lt[k].delay_min_lag, lt[k].delay_max_lag) == (bt[k].delay_min_lag, bt[k].delay_max_lag)
+    assert luwu.rewards.keys() == luwu_base.rewards.keys()  # Luwu's reward, untouched
+    assert luwu.rewards.keys() != brian.rewards.keys()
+    assert luwu.terminations.keys() == brian.terminations.keys()
