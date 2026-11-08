@@ -7,7 +7,8 @@ scored like EXP-010. The study lives in ~/dev/ironbark_runs/optuna/; the ranked 
 Stages (one Optuna study each, since a study's ranges can't change): stage 1 = Brian's spec
 (action_rate 0.5x-4x); stage 2 = Brian's changes (action_rate 4x-10x; saturation <= 0.3%, planar
 <= 0.031 m/s), seeded with the stage-1 trials at the 4x ceiling as known points. The search page
-ranks the trials of both together, against the latest stage's limits.
+ranks the trials of both together, against the latest stage's limits. Stage 2 ends by Brian's stop
+rule (SPEC_4, stop_state): the driver checks it between trials and exits when a rule fires.
 
   python tools/reward_search.py run [--stage 1|2]   # loop until STOP: ask -> entry -> train -> score -> tell -> table
   python tools/reward_search.py table    # rewrite the search page from the studies (CPU only)
@@ -81,6 +82,11 @@ SPEC_2 = ("Pause the search after EXP-019. Run seeds 43 and 44 for EXP-017, EXP-
 # Brian, 2026-11-08 (verbatim), before stage 2 started: its constraints.
 SPEC_3 = ("For stage 2, keep the flicker objective but tighten the constraints to: saturation ≤ 0.3% and planar ≤ 0.031 m/s "
           "(Luwu's 3-seed mean). Goal: beat the vendor on strain, tracking and flicker at once.")
+# Brian, 2026-11-08 (verbatim), with stage 2 running: when it ends.
+SPEC_4 = ("Stop rule for Stage 2: stop when (a) a trial beats Luwu's EXP-011 3-seed means on saturation, planar tracking and flicker, "
+          "confirmed with seeds 43/44; or (b) 6 consecutive trials with no improvement beyond seed noise over the current best; "
+          "or (c) 2 nights of GPU time. Then lock the winner and move to deployment prep (domain randomization, gyro units, joint mapping).")
+STOP_RULE_A = "a trial beats Luwu's EXP-011 3-seed means on saturation, planar tracking and flicker, confirmed with seeds 43/44"
 
 # Brian's spec.
 FEET_AIR_TIME_RANGE = (1.0, 7.5)  # absolute weight
@@ -91,6 +97,15 @@ PLANAR_ERROR_MAX_MPS = 0.035  # planar tracking <= 0.035 m/s (scoreboard v1 over
 # Brian's stage-2 constraints (SPEC_3): tighter than Luwu's reward under the same latency (EXP-011, seeds 42/43/44).
 STAGE2_SATURATION_MAX = 0.003  # servo saturation <= 0.3% (EXP-011's 3-seed mean is 0.95%)
 STAGE2_PLANAR_ERROR_MAX_MPS = 0.031  # planar <= 0.031 m/s, Brian's rounding of EXP-011's 3-seed mean (0.03104)
+# Brian's stage-2 stop rule (SPEC_4). Rule (a)'s bars: EXP-011 (Luwu's reward), mean of seeds 42/43/44, unrounded.
+LUWU_SATURATION_MEAN = 0.009501109182098766
+LUWU_PLANAR_MEAN_MPS = 0.0310370600852184
+LUWU_FLICKER_MEAN = 0.18521955477078364
+CONFIRM_SEEDS = (43, 44)  # rule (a): the seeds that confirm a trial
+NO_IMPROVEMENT_TRIALS = 6  # rule (b)
+# Claude's readings of the stop rule, on the search page for Brian to change.
+FLICKER_SEED_NOISE = 0.0079  # rule (b) "beyond seed noise": pooled flicker SD over the 3-seed sets EXP-010/011/015/017/018/020
+GPU_BUDGET_MINUTES = 2 * 8 * 60  # rule (c) "2 nights": 8 h each, counted as recorded training time
 # Claude's defaults, listed on the search page for Brian to change.
 LOG_SCALE = True  # the ranges are multiples, so sample ratios evenly
 N_STARTUP_TRIALS = 4  # random trials before the GP takes over, EXP-010 included (Optuna's default 10 = ~11 h of random)
@@ -450,6 +465,66 @@ def fill_index_seeds(index: str, exp_id: str, text: str) -> str:
     return _edit_row(index, exp_id, old, f"{text}. {old}")
 
 
+def beats_luwu(m: dict[str, float]) -> bool:
+    """Rule (a)'s test: strictly better than EXP-011's 3-seed means on all three."""
+    return (m["saturated_share"] < LUWU_SATURATION_MEAN and m["planar_error_mps"] < LUWU_PLANAR_MEAN_MPS
+            and m["flicker_share"] < LUWU_FLICKER_MEAN)
+
+
+def seed_means(per_seed: list[dict]) -> dict[str, float]:
+    return {k: statistics.mean(m[k] for m in per_seed) for k in ("saturated_share", "planar_error_mps", "flicker_share")}
+
+
+def stop_state(trials: list[dict], known: set[str], replicates: dict) -> dict:
+    """Brian's stop rule, worked out from stage 2's trials (in order) and the seed replicates, so a restart loses nothing.
+
+    candidates: trials that beat EXP-011 at seed 42 and still need CONFIRM_SEEDS. confirmed: the first whose 3-seed means beat it.
+    best: the trial later ones must improve on (the lowest passing flicker among the known points, then each real improvement)."""
+    candidates, confirmed, best, since, minutes = [], None, None, 0, 0
+    for r in trials:
+        exp, m = r["exp"], r["metrics"]
+        reps = replicates.get(exp, {})
+        if beats_luwu(m):
+            if not all(str(s) in reps for s in CONFIRM_SEEDS):
+                candidates.append(exp)
+            elif confirmed is None and beats_luwu(seed_means([m, *(reps[str(s)] for s in CONFIRM_SEEDS)])):
+                confirmed = exp
+        passes = not failed_constraints(m, 2)
+        if exp in known:
+            if passes and (best is None or m["flicker_share"] < best["metrics"]["flicker_share"]):
+                best = r
+            continue
+        minutes += r.get("minutes", 0) + sum(reps.get(str(s), {}).get("minutes", 0) for s in CONFIRM_SEEDS)
+        if passes and (best is None or m["flicker_share"] < best["metrics"]["flicker_share"] - FLICKER_SEED_NOISE):
+            best, since = r, 0
+        else:
+            since += 1
+    top = ranked(trials, 2)[0]["exp"] if trials else None  # under (b) or (c) the winner is rank 1 on the search page
+    stop = None
+    if confirmed:
+        stop = {"rule": "a", "winner": confirmed}
+    elif not candidates and since >= NO_IMPROVEMENT_TRIALS:
+        stop = {"rule": "b", "winner": top}
+    elif not candidates and minutes >= GPU_BUDGET_MINUTES:
+        stop = {"rule": "c", "winner": top}
+    return {"candidates": candidates, "confirmed": confirmed, "best": best["exp"] if best else None,
+            "best_flicker": best["metrics"]["flicker_share"] if best else None, "since_improvement": since, "gpu_minutes": minutes, "stop": stop}
+
+
+def stop_lines(state: dict) -> list[str]:
+    """The search page's status of the stop rule."""
+    best = f"{state['best']} ({state['best_flicker']:.2%})" if state["best"] else "none passing yet"
+    lines = ["", "## Stage 2 stop rule: status", "",
+             f"- (a) Beat EXP-011's 3-seed means (saturation {LUWU_SATURATION_MEAN:.3%}, planar {LUWU_PLANAR_MEAN_MPS:.5f} m/s, flicker "
+             f"{LUWU_FLICKER_MEAN:.2%}), confirmed with seeds {'/'.join(map(str, CONFIRM_SEEDS))}: {state['confirmed'] or 'none yet'}"
+             + (f"; waiting for seeds: {', '.join(state['candidates'])}" if state["candidates"] else ""),
+             f"- (b) {state['since_improvement']} of {NO_IMPROVEMENT_TRIALS} trials without an improvement over the current best: {best}",
+             f"- (c) {state['gpu_minutes'] / 60:.1f} of {GPU_BUDGET_MINUTES / 60:.0f} h of training"]
+    if state["stop"]:
+        lines += ["", f"**Stopped by rule ({state['stop']['rule']}). Winner: {state['stop']['winner']}.**"]
+    return lines
+
+
 # ---------- study ----------
 
 def make_sampler(n_startup_trials: int = N_STARTUP_TRIALS, seed: int = SAMPLER_SEED):
@@ -564,6 +639,10 @@ def search_doc(study, now: str, replicates: dict | None = None, stage2=None) -> 
         "",
         f"> {SPEC_3}",
         "",
+        "## Brian's stop rule for stage 2 (2026-11-08, verbatim)",
+        "",
+        f"> {SPEC_4}",
+        "",
         "## Setup",
         "",
         f"- Task `{TASK}` ({PARENT}'s conditions: 40 ms command delay, 130 ms round-robin joint readback, actor joint velocity dropped), "
@@ -591,6 +670,13 @@ def search_doc(study, now: str, replicates: dict | None = None, stage2=None) -> 
         "(Brian, 2026-11-08): each constraint's overshoot as a fraction of its limit, summed (Claude's reading; the Miss column), "
         f"smaller first, flicker breaking a tie. The table ranks every trial, both stages, against stage {LATEST_STAGE}'s limits "
         "(Claude's call); the Stage 1 column keeps each trial's verdict under stage 1's.",
+        "- Stop rule, Claude's readings for Brian to change: "
+        f"(a) the bars are EXP-011's unrounded means, so the saturation bar is {LUWU_SATURATION_MEAN:.2%}, not stage 2's limit; a trial that beats "
+        f"all three at seed {SEED} gets seeds {'/'.join(map(str, CONFIRM_SEEDS))} straight away, and the rule fires if its 3-seed means beat all three. "
+        "(b) Only trials newly trained in stage 2 count; an improvement passes stage 2's limits "
+        f"with flicker more than {FLICKER_SEED_NOISE * 100:.2f} points below the current best (the pooled flicker SD over six 3-seed sets). "
+        f"(c) \"2 nights\" = {GPU_BUDGET_MINUTES / 60:.0f} h of recorded training, stage-2 trials and their confirmation seeds. "
+        "Under (b) or (c) the winner is rank 1 in the table below.",
         f"- {PARENT} (seed 42, the start weights) is in the study as a known point: trained before the search, not retrained.",
         f"- Reward guard (Brian, 2026-11-08): before each trial trains, `tools/reward_check.py` runs with the trial's weights: standing still "
         f"(zero command, zero action) and {PARENT}'s policy on the command grid (\"walking\"). A negative standing or walking per-step total "
@@ -625,6 +711,8 @@ def search_doc(study, now: str, replicates: dict | None = None, stage2=None) -> 
         lines += ["", "Trials without scores:", ""]
         lines += [f"- {trial_label(s, o['number'])} ({o.get('exp', 'no entry')}): {o['state'].lower()}"
                   + (f", {o['reason']}" if o.get("reason") else "") for s, o in others]
+    if stage2 is not None:
+        lines += stop_lines(stop_state(rows(stage2), set(stage2.user_attrs.get("known_points", [])), replicates or {}))
     lines += replicate_section(trials, replicates or {})
     return "\n".join(lines) + "\n"
 
@@ -637,7 +725,8 @@ def replicate_section(trials: list[dict], replicates: dict) -> list[str]:
         return []
     keys = [c for c in SEED_TABLE_COLUMNS if c[0] != "fall_rate"] + [SEED_TABLE_COLUMNS[0]]
     lines = ["", "## Seed replicates (Brian's picks)", "", f"> {REPLICATE_REQUEST}", ">", f"> {REPLICATE_REQUEST_2}", "",
-             "Mean ± sample SD over the seeds scored so far (per-seed rows and ranges are in each entry).", "",
+             "Mean ± sample SD over the seeds scored so far (per-seed rows and ranges are in each entry). "
+             "Stage-2 trials that beat EXP-011's means at seed 42 are added here by the stop rule.", "",
              "| Exp | Seeds | " + " | ".join(c[1] for c in keys) + " |", "|---|---|" + "---|" * len(keys)]
     for exp, reps in done:
         per_seed = {SEED: by_exp[exp]["metrics"], **{int(s): m for s, m in reps.items()}}
@@ -778,6 +867,20 @@ def run_loop(stage: int = LATEST_STAGE) -> int:
         if STOP_FILE.exists():
             print(f"STOPPED {datetime.datetime.now():%F %T}", flush=True)
             return 0
+        if stage == 2:
+            state = stop_state(rows(study), set(study.user_attrs["known_points"]), load_replicates())
+            if state["stop"]:
+                refresh_doc(study1, stage2)
+                commit([SEARCH_DOC], f"Search stage 2 stopped by Brian's rule ({state['stop']['rule']}): winner {state['stop']['winner']}")
+                print(f"STOP RULE ({state['stop']['rule']}) winner {state['stop']['winner']} {datetime.datetime.now():%F %T}", flush=True)
+                return 0
+            if state["candidates"]:
+                exp = state["candidates"][0]
+                print(f"CONFIRM {exp} seeds {CONFIRM_SEEDS} {datetime.datetime.now():%F %T}", flush=True)
+                rc = replicate_loop([exp], list(CONFIRM_SEEDS), STOP_RULE_A, "stop-rule confirmation")
+                if rc:
+                    return rc
+                continue  # check the rule again (a STOP file during the seeds exits at the top)
         now_weights = config_weights()
         if now_weights != start:
             print(f"FAIL reward_config.py changed since the search started: {now_weights} vs {start}", flush=True)
@@ -825,8 +928,9 @@ def run_loop(stage: int = LATEST_STAGE) -> int:
               f"{constraints_text(m, stage)} {datetime.datetime.now():%F %T}", flush=True)
 
 
-def replicate_loop(exp_ids: list[str], seeds: list[int]) -> int:
-    """Brian's picks, re-trained with other seeds one at a time (same weights, task and scoring); resumable."""
+def replicate_loop(exp_ids: list[str], seeds: list[int], request: str | None = None, reason: str = "Brian's pick") -> int:
+    """Search trials re-trained with other seeds one at a time (same weights, task and scoring); resumable.
+    request: Brian's words for the entry (default: the words that picked this trial); reason: for commits and the status line."""
     STUDY_DIR.mkdir(parents=True, exist_ok=True)
     study = load_study()
     stage2 = existing_stage2(study)
@@ -847,8 +951,8 @@ def replicate_loop(exp_ids: list[str], seeds: list[int]) -> int:
             name, today = f"{exp}-s{seed}", datetime.date.today()
             cmd = "python " + " ".join(train_args(name, weights, seed))
             write(path, set_seed_line(path.read_text(encoding="utf-8"), seed, seed_line(seed, cmd, name, f"training {today}"),
-                                      replicate_request(exp)))
-            commit([path], f"{exp}: seed {seed} training (Brian's pick for seeds {'/'.join(map(str, seeds))})")
+                                      request or replicate_request(exp)))
+            commit([path], f"{exp}: seed {seed} training ({reason} for seeds {'/'.join(map(str, seeds))})")
             print(f"START {name} {weights} {datetime.datetime.now():%F %T}", flush=True)
             try:
                 run, minutes = train(name, weights, seed)
@@ -867,11 +971,11 @@ def replicate_loop(exp_ids: list[str], seeds: list[int]) -> int:
             if all(str(s) in reps[exp] for s in seeds):
                 per_seed = {SEED: by_exp[exp]["metrics"], **{int(s): v for s, v in reps[exp].items()}}
                 text = add_seed_table(text, seed_table(per_seed))
-                text = add_to_status(text, f"seeds {'/'.join(map(str, seeds))} trained and scored {today} (Brian's pick)")
+                text = add_to_status(text, f"seeds {'/'.join(map(str, seeds))} trained and scored {today} ({reason})")
                 write(INDEX, fill_index_seeds(INDEX.read_text(encoding="utf-8"), exp, seed_summary(per_seed)))
             write(path, text)
             refresh_doc(study, stage2)
-            commit([path, INDEX, SEARCH_DOC], f"Score {name} (seed replicate, Brian's pick): flicker {m['flicker_share']:.1%}, "
+            commit([path, INDEX, SEARCH_DOC], f"Score {name} (seed replicate, {reason}): flicker {m['flicker_share']:.1%}, "
                                               f"saturation {m['saturated_share']:.2%}, planar {m['planar_error_mps']:.3f}")
             print(f"SCORED {name} flicker {m['flicker_share']:.4f} sat {m['saturated_share']:.4f} planar {m['planar_error_mps']:.4f} "
                   f"{datetime.datetime.now():%F %T}", flush=True)

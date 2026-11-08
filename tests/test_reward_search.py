@@ -278,6 +278,73 @@ def add_scored(study, exp, params, m, stage=1):
                                  system_attrs={"constraints": tuple(c)}))
 
 
+def stop_row(exp, sat=0.002, planar=0.030, flicker=0.12, minutes=45):
+    return {"exp": exp, "metrics": metrics(sat=sat, planar=planar, flicker=flicker), "minutes": minutes}
+
+
+FAILS_LIMITS = {"sat": 0.004, "planar": 0.0312, "flicker": 0.10}  # misses stage 2's limits and EXP-011's planar mean
+
+
+def test_stop_rule_bars_are_exp011s_means():
+    assert (round(rs.LUWU_SATURATION_MEAN, 4), round(rs.LUWU_PLANAR_MEAN_MPS, 4), round(rs.LUWU_FLICKER_MEAN, 4)) == (0.0095, 0.031, 0.1852)
+    assert rs.beats_luwu(metrics(sat=0.009, planar=0.0310, flicker=0.18))
+    assert not rs.beats_luwu(metrics(sat=0.0096, planar=0.0310, flicker=0.18))
+    assert not rs.beats_luwu(metrics(sat=0.009, planar=0.0311, flicker=0.18))
+    assert not rs.beats_luwu(metrics(sat=0.009, planar=0.0310, flicker=0.186))
+
+
+def test_stop_rule_a_needs_the_3_seed_means():
+    known = {"K"}
+    good = metrics(sat=0.002, planar=0.030, flicker=0.12)
+    bad = metrics(sat=0.002, planar=0.034, flicker=0.12)  # seeds 43/44 worse: 3-seed planar mean 0.0327
+    trials = [stop_row("K", planar=0.0297), stop_row("N1")]
+    state = rs.stop_state(trials, known, {"K": {"43": bad, "44": bad}})
+    assert state["candidates"] == ["N1"] and state["confirmed"] is None and state["stop"] is None  # K tried and failed; N1 waits for seeds
+    state = rs.stop_state(trials, known, {"K": {"43": bad, "44": bad}, "N1": {"43": bad, "44": bad}})
+    assert state["candidates"] == [] and state["confirmed"] is None and state["stop"] is None
+    state = rs.stop_state(trials, known, {"K": {"43": bad, "44": bad}, "N1": {"43": good, "44": good}})
+    assert state["confirmed"] == "N1" and state["stop"] == {"rule": "a", "winner": "N1"}
+
+
+def test_stop_rule_b_counts_trials_without_an_improvement_beyond_noise():
+    known = {"K"}
+    k = stop_row("K", flicker=0.12)
+    rejected = {"43": metrics(planar=0.034), "44": metrics(planar=0.034)}
+    reps = {"K": rejected, **{f"N{i}": rejected for i in range(9)}}
+    same = [stop_row(f"N{i}", flicker=0.12 - rs.FLICKER_SEED_NOISE) for i in range(5)]  # exactly the noise: no improvement
+    state = rs.stop_state([k, *same], known, reps)
+    assert state["since_improvement"] == 5 and state["stop"] is None and state["best"] == "K"
+    state = rs.stop_state([k, *same, stop_row("N5", **FAILS_LIMITS)], known, reps)  # lower flicker, fails the limits: no improvement
+    assert state["since_improvement"] == 6 and state["stop"]["rule"] == "b"
+    assert state["stop"]["winner"] == "N0"  # rank 1 on the page: lowest flicker among those passing
+    better = stop_row("N5", flicker=0.12 - rs.FLICKER_SEED_NOISE - 0.0001)
+    state = rs.stop_state([k, *same, better], known, reps)
+    assert state["since_improvement"] == 0 and state["best"] == "N5" and state["stop"] is None
+    assert rs.stop_state([k, *[stop_row(f"N{i}", **FAILS_LIMITS) for i in range(5)]], known, {})["since_improvement"] == 5  # known points don't count
+
+
+def test_stop_rule_c_sums_training_time_with_confirmation_seeds():
+    known = {"K"}
+    rep = {**metrics(planar=0.034), "minutes": 60}
+    trials = [stop_row("K", minutes=9999), stop_row("N0", minutes=rs.GPU_BUDGET_MINUTES - 121), stop_row("N1", **FAILS_LIMITS, minutes=1)]
+    reps = {"K": {"43": rep, "44": rep}, "N0": {"43": rep, "44": rep}}  # K's seeds and minutes don't count
+    state = rs.stop_state(trials, known, reps)
+    assert state["gpu_minutes"] == rs.GPU_BUDGET_MINUTES and state["stop"]["rule"] == "c"
+    one_short = rs.stop_state(trials[:2], known, reps)
+    assert one_short["gpu_minutes"] == rs.GPU_BUDGET_MINUTES - 1 and one_short["stop"] is None
+
+
+def test_stop_rule_waits_for_pending_seeds_before_b_or_c():
+    trials = [stop_row("K", **FAILS_LIMITS), *[stop_row(f"N{i}", **FAILS_LIMITS) for i in range(6)], stop_row("N6", sat=0.009, planar=0.0309, flicker=0.15)]
+    state = rs.stop_state(trials, {"K"}, {})
+    assert state["candidates"] == ["N6"] and state["stop"] is None
+
+
+def test_stop_status_goes_on_the_search_page():
+    lines = "\n".join(rs.stop_lines(rs.stop_state([stop_row("K", planar=0.0297, flicker=0.1207)], {"K"}, {"K": {"43": metrics(planar=0.034), "44": metrics(planar=0.034)}})))
+    assert "## Stage 2 stop rule: status" in lines and "0 of 6 trials" in lines and "K (12.07%)" in lines and "0.0 of 16 h" in lines and "Stopped" not in lines
+
+
 def test_restarted_stage2_driver_does_not_repeat_a_random_draw(tmp_path):
     s1 = rs.load_study(storage=None, parent_metrics=metrics(sat=0.00805, planar=0.0383, flicker=0.1506))
     add_scored(s1, "EXP-100", {"feet_air_time": 3.2, "action_rate_scale": 4.0, "torques_scale": 1.1}, metrics(flicker=0.126))
@@ -326,6 +393,7 @@ def test_stage2_starts_from_the_stage1_trials_at_the_4x_ceiling():
     assert sorted(exps) == sorted(["EXP-010", "EXP-100", "EXP-101", "EXP-102", "EXP-110", "EXP-111", "EXP-112", "EXP-113"])  # each once
     assert any("(stage-2 trial 2)" in line for line in table) and any("(trial 1)" in line for line in table)
     assert "known points, not retrained (EXP-100, EXP-101)" in doc and "## Brian's change: stage 2" in doc
+    assert "## Brian's stop rule for stage 2" in doc and "## Stage 2 stop rule: status" in doc
     assert "## Brian's change: stage 2's constraints" in doc and "saturation <= 0.3%, planar <= 0.031 m/s" in doc
     assert "| Constraints (stage 2) | Miss | Stage 1 |" in doc
     row = next(line for line in table if "[EXP-100]" in line).split(" | ")
