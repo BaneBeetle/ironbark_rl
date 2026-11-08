@@ -5,7 +5,8 @@ Every subcommand opens the servo UART and can move the servos. Before each run: 
 all four feet off the ground, motor_controller stopped, a hand on the power switch.
 
   cd ~/ironbark && .venv/bin/python joint_control_probe.py read                    # readback latency + max rate; no joint commands
-  cd ~/ironbark && .venv/bin/python joint_control_probe.py imu                     # IMU refresh rate; no joint commands
+  cd ~/ironbark && .venv/bin/python joint_control_probe.py imu --label still       # IMU refresh rate; no joint commands
+  cd ~/ironbark && .venv/bin/python joint_control_probe.py imu-loop                # IMU in a policy-like loop (holds all 12 joints)
   cd ~/ironbark && .venv/bin/python joint_control_probe.py map                     # wiggle each joint id; you name the leg/joint
   cd ~/ironbark && .venv/bin/python joint_control_probe.py passive --leg 1         # torque OFF on one leg, move it by hand
   cd ~/ironbark && .venv/bin/python joint_control_probe.py step --joints leg1      # step response per joint, per motor_speed
@@ -99,6 +100,7 @@ STEP_SAMPLES = 150  # reads after each step edge. MEASURE: must outlast the rise
 MAP_WIGGLES = 2  # `map`: out-and-back moves per joint before asking (r repeats)
 READ_SAMPLES = 2000  # `read`: back-to-back read_motor() calls
 IMU_SAMPLES = 2000  # `imu`: reads per phase (read_imu blocks, then read_roll/read_pitch alternating)
+IMU_LOOP_ITERS = 1500  # `imu-loop`: policy-like iterations (~20 ms each, so ~30 s: still, then tilting)
 PASSIVE_MAX_SAMPLES = 20000  # `passive`: upper bound; Enter ends it earlier
 SINE_PERIODS = "200,100,50,25"  # sine periods in samples; the analysis converts to Hz with the logged clock
 SINE_CYCLES = 3  # cycles per period: enough to fit gain and phase
@@ -357,6 +359,30 @@ def run_imu(s, args, ui):
             s.rec.write("imu", phase=phase, call=name, t0=t0, t1=t1, v=value)
 
 
+def run_imu_loop(s, args, ui):
+    """Policy-like loop, Brian's IMU rerun 2: every iteration holds all 12 joints (one 12-joint write), then
+    read_motor() and read_imu(), the reads a deployed 50 Hz policy needs. The serial link paces it (~20 ms);
+    no clock. Brian presses Enter when he starts tilting the dog, and again when he stops (logged as marks).
+    """
+    try:
+        s.adopt()
+        holds = {j: s.hold[j] for j in LEG_IDS}
+        print("Keep the dog still. Press Enter when you start tilting it slowly, and Enter again when you stop.")
+        marks = 0
+        for i in range(args.iters):
+            s.tick("loop", holds, clamp=False, i=i)  # 12-joint write + read_motor(), like a policy step
+            t0 = ns()
+            value = s.link.imu_block()
+            t1 = ns()
+            s.rec.write("imu", phase="loop", call="read_imu", t0=t0, t1=t1, v=value, i=i)
+            if ui["stop"]():  # Enter: a state check, not a timer
+                marks += 1
+                s.event("mark", i=i, count=marks)
+                print(f"  mark {marks} at iteration {i}")
+    finally:
+        s.restore()
+
+
 def run_passive(s, args, ui):
     leg = args.leg
     s.segment("loaded", None, PRE_SAMPLES, leg=leg)
@@ -528,7 +554,7 @@ def run_map(s, args, ui):
         print(json.dumps({"map": answers, "duplicates": duplicates}, indent=1))
 
 
-TESTS = {"read": run_read, "imu": run_imu, "map": run_map, "passive": run_passive, "step": run_step, "sine": run_sine, "rate": run_rate, "gait": run_gait}
+TESTS = {"read": run_read, "imu": run_imu, "imu-loop": run_imu_loop, "map": run_map, "passive": run_passive, "step": run_step, "sine": run_sine, "rate": run_rate, "gait": run_gait}
 
 
 # ---------------------------------------------------------------------------------- plumbing
@@ -607,6 +633,10 @@ def build_parser():
     r.add_argument("--samples", type=int, default=READ_SAMPLES)
     im = sub.add_parser("imu", help="back-to-back IMU reads; no joint commands")
     im.add_argument("--samples", type=int, default=IMU_SAMPLES)
+    im.add_argument("--label", default=None, help="free text kept in the header, e.g. still")
+    il = sub.add_parser("imu-loop", help="policy-like loop: hold all 12 joints, read_motor + read_imu each step")
+    il.add_argument("--iters", type=int, default=IMU_LOOP_ITERS)
+    il.add_argument("--label", default=None, help="free text kept in the header")
     mp = sub.add_parser("map", help="wiggle each joint id; say which physical leg/joint moved")
     mp.add_argument("--joints", type=parse_joints, default=parse_joints("all"))
     mp.add_argument("--amp-deg", type=float, default=STEP_AMP_DEG)

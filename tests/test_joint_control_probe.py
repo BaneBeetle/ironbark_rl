@@ -317,3 +317,17 @@ def test_map_flags_two_ids_named_as_the_same_joint(tmp_path):
                                           ("fl hip fwd", None), ("xx calf fwd", None), (" s ", "s")])
 def test_parse_map_answer(text, parsed):
     assert probe.parse_map_answer(text) == parsed
+
+
+def test_imu_loop_holds_all_12_and_reads_both_every_step(tmp_path):
+    link = FakeLink(start={j: float(j % 10) for j in probe.LEG_IDS})
+    link.imu_block = lambda: [0.0, 0.0, -9.8, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    presses = iter([False, False, True] + [False] * 3 + [True] + [False] * 100)  # Enter at iterations 2 and 6
+    code, rows = run(tmp_path, ["imu-loop", "--iters", "10", "--label", "tilt"], link, stop=lambda: next(presses))
+    loop = [r for r in rows if r["type"] == "sample" and r["phase"] == "loop"]
+    imu = [r for r in rows if r["type"] == "imu" and r["phase"] == "loop"]
+    assert code == 0 and rows[0]["args"]["label"] == "tilt"
+    assert len(loop) == len(imu) == 10
+    assert all(r["cmd"]["ids"] == probe.LEG_IDS and r["read"]["ok"] for r in loop)
+    assert all(r["cmd"]["deg"] == [float(j % 10) for j in probe.LEG_IDS] for r in loop)  # holds, never moved
+    assert [r["i"] for r in rows if r.get("name") == "mark"] == [2, 6]
