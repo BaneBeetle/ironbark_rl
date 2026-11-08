@@ -102,8 +102,11 @@ Brian's answers to `next-pieces.md`, as given:
 Claude's choices while building, for Brian to veto (none of these were asked):
 - **`TARGET_LOST_FRAMES = 3`** as the T1 placeholder. That's 0.6 s at the replay's 5 Hz,
   marked `# MEASURE:`.
-- **Interrupts:** only a fall interrupts (P2 named the fall). `battery_low` skips the
-  cooldown but waits for a line that's already playing to finish.
+- **Interrupts:** both urgent events (`fell` and `battery_low`) cut off a playing line, though
+  P2 named only the fall. Reason: a `battery_low` that fires mid-line would otherwise be
+  dropped (P3), and it won't fire again until the battery is charged above 30 %. Holding it
+  until the line ends would clash with P4's 1.5 s age rule. Easy to narrow to falls only if
+  Brian prefers.
 - **`behavior_changed`** (e.g. IDLE → FOLLOW) is the one novel event, so Haiku has something to
   say (C2). It's taken from Claude's C2 recommendation, which Brian accepted only in general
   terms.
