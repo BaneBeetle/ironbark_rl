@@ -18,6 +18,10 @@ Design answers (2026-11-07, Brian chose each recommended option; reasons as they
 - **Actor joint velocity dropped** in EXP-010 (the dog has no velocity readback); the critic keeps the true joint state.
 - **Scoring with the delays on**, plus EXP-005's policy re-scored under the same conditions as the reference.
 
+Brian agreed (2026-11-07) with Claude's two smaller calls: EXP-009 keeps the existing 20-40 ms joint-observation delay; in EXP-010 the 130 ms sample-and-hold replaces it for the actor's joint positions.
+
+Brian (2026-11-07): "Before any policy deployment (not now), add a mapping-verification step to the probe: wiggle each xgolib joint ID one at a time so I can confirm which physical leg/joint moves, then lock the mapping in a tested config. Until then it stays # MEASURE:."
+
 Evidence: [phase1-joint-control-results.md](phase1-joint-control-results.md). Path A goes ahead only if EXP-009/010 (or the action-history follow-up) still walk; otherwise Path B.
 
 ## 2026-11-07: EXP-005 wins; `feet_air_time` weight 3.0 is the current best
