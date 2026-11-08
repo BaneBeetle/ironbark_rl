@@ -2,6 +2,17 @@
 
 Brian's decisions and verdicts, dated, in his words. Newest first. Numbers and run details are in [progress.md](progress.md) and the [experiment files](experiments/README.md).
 
+## 2026-11-08: Optuna search over three of Brian's reward weights (EXP-010's latency)
+
+> After the 4 seed runs finish and are scored, start an Optuna search (Bayesian optimization) on MY reward under EXP-010's latency conditions:
+> - Tune 3 weights: feet_air_time (1.0–7.5), action_rate (0.5x–4x current), torques (0.5x–2x current). Everything else fixed.
+> - Objective: servo saturation ≤ 0.9% AND planar tracking ≤ 0.035 m/s, then minimize flicker. Trials failing a constraint rank below all that pass.
+> - Seed 42, one trial at a time, each a numbered experiment with its weights recorded. Keep going until I stop you.
+> - Leave the GPU free when the website session asks.
+> - Morning summary: ranked table of trials. Don't interpret. I'll pick the top 2–3 to re-run with seeds 43/44.
+
+Claude's defaults where the spec is silent (listed on the search page for Brian to change): Optuna GPSampler (Gaussian-process BO, constraint-aware), sampler seed 42; first 4 trials random, EXP-010 (seed 42, start weights) counted as one known point; log scale on all three ranges; failing trials ordered by flicker below the passing ones; reward guard skipped, as in the feet_air_time sweep. Driver: `tools/reward_search.py`; page: [SEARCH-exp010-reward-weights.md](experiments/SEARCH-exp010-reward-weights.md).
+
 ## 2026-11-07: EXP-011, the fair fight (Luwu's reward under EXP-010's latency)
 
 > Fair fight: train Luwu's reward with EXP-010's latency conditions (40 ms delay + stale joints, same actor obs as EXP-010) as EXP-011, seed 42, then score it under the same conditions. If it's close to EXP-010, run seeds 43 and 44 for both.
