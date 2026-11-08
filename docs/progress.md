@@ -1,5 +1,24 @@
 # Progress
 
+## 2026-11-07 (late): EXP-009 and EXP-010 scored; v2-archive merged (Brian reads first; no interpretation here)
+
+Scored with each experiment's latency on (Brian), seed 42, scoreboard v1 + `gait_check`:
+
+| Policy, conditions | Falls | Planar err [m/s] | Yaw err [rad/s] | Joint-target rate [rad/s] | CoT | Saturation | Flicker | Touchdowns/foot/s |
+|---|---|---|---|---|---|---|---|---|
+| EXP-005, play config (no latency) | 0.000 | 0.0345 | 0.0953 | 2.82 | 1.82 | 0.52% | 17.7% | 2.41 |
+| EXP-005, 40 ms delay | 0.000 | 0.0388 | 0.1116 | 3.16 | 1.64 | 0.70% | 12.4% | 2.30 |
+| **EXP-009**, 40 ms delay | 0.000 | 0.0340 | 0.0966 | 2.83 | 1.73 | 0.60% | 13.3% | 2.33 |
+| EXP-005, delay + stale joints (vel = change of stale reading) | 0.000 | 0.064 | 0.182 | 6.38 | 2.39 | 2.38% | 19.9% | 2.57 |
+| **EXP-010**, delay + stale joints | 0.000 | 0.038 | 0.123 | 3.00 | 1.76 | 0.80% | 15.1% | 2.34 |
+| EXP-010, delay + stale joints + measured IMU freezes (no retraining) | 0.000 | 0.040 | 0.132 | 3.00 | 1.70 | 0.78% | 25.4% | 2.68 |
+
+- Training-time endings near the last iteration: EXP-005 fell 0.8% / non-foot contact 5.6%; EXP-009 1.8% / 12.9%; EXP-010 3.8% / 12.0%. Final mean episode length 972 / 926 / 921 steps.
+- EXP-010 trained 65 min (a slow first ~30 min: GPU shared with other apps and two `aws_api_mcp_server` workers, which Brian had stopped).
+- **IMU freeze model** (scoring only, `IronBark-S2-Walk-Flat-Brian-StaleJoints-ImuFreeze`): each env alternates frozen / live stretches drawn from the 38 measured freezes (882-1004 ms) and 40 live stretches (25 ms - 6.6 s); 41.8% frozen; gyro and gravity hold together.
+- **v2-archive merged** into main (`docs/v2-archive/`, merge `ea33fac`); CLAUDE.md now points there, and camera/lidar are PUSH -> PULL. Flags raised from MEASURED_FACTS / LESSONS / findings are in `docs/deployment-notes.md` and the corrected yaw-drift lines.
+- **Open (Brian):** reads and verdicts for EXP-009 and EXP-010; the Path A decision rule from his hypothesis; the queued IMU-freeze training experiment; the milestone quiz (protocol step 6) after his read.
+
 ## 2026-11-07 (night): EXP-009 training; EXP-010 next (Brian: Path A conditional)
 
 - Brian's Phase 1 read and decision are in [journal.md](journal.md). Path A stays alive only if the policy still walks with the real dog's latency in sim.

@@ -99,6 +99,26 @@ Episode endings near iteration 1499: fell_over 3.8%, illegal_contact 12.0%, time
 |---|---|---|---|---|---|
 | 2.38% | 0.008 | 0.176 | 0.216 | 19.9% | 2.57 |
 
+**Reference `imu_freeze`: task `IronBark-S2-Walk-Flat-Brian-StaleJoints-ImuFreeze`.** **2026-11-07, scoreboard v1.** Run `2026-11-07_20-02-00_EXP-010`, checkpoint `model_1499.pt` (iteration 1499), 32 dogs × 10 s per command, seed 0, mass 0.972 kg. Smoothness and CoT use only episodes that never fell; CoT is NaN by design where there's no ground speed (standing, turning in place).
+
+| Command (vx, vy, wz) | Fall rate | Planar err [m/s] | Yaw err [rad/s] | Joint-target rate [rad/s] | CoT |
+|---|---|---|---|---|---|
+| (+0.0, +0.0, +0.0) | 0.000 | 0.004 | 0.007 | 0.73 | nan |
+| (+0.2, +0.0, +0.0) | 0.000 | 0.050 | 0.154 | 3.29 | 1.17 |
+| (+0.4, +0.0, +0.0) | 0.000 | 0.065 | 0.171 | 4.91 | 1.44 |
+| (-0.2, +0.0, +0.0) | 0.000 | 0.045 | 0.107 | 3.20 | 1.26 |
+| (+0.0, +0.2, +0.0) | 0.000 | 0.046 | 0.158 | 3.42 | 1.80 |
+| (+0.0, -0.2, +0.0) | 0.000 | 0.044 | 0.173 | 3.53 | 1.91 |
+| (+0.0, +0.0, +0.5) | 0.000 | 0.033 | 0.147 | 2.40 | 2.59 |
+| (+0.0, +0.0, -0.5) | 0.000 | 0.031 | 0.138 | 2.51 | nan |
+| **overall (mean of rows)** | 0.000 | 0.040 | 0.132 | 3.00 | 1.70 |
+
+**Reference `imu_freeze`: task `IronBark-S2-Walk-Flat-Brian-StaleJoints-ImuFreeze`.** **2026-11-07, gait diagnostics (not scoreboard).** Run `2026-11-07_20-02-00_EXP-010`, checkpoint `model_1499.pt`, 32 dogs × 10 s per command (first 1 s skipped), seed 0. Saturation: requested torque above the 0.43 N·m cap.
+
+| Servo saturation | Swing p10 [s] | Swing median [s] | Swing p90 [s] | Flicker touchdowns (< 0.02 s) | Touchdowns / foot / s |
+|---|---|---|---|---|---|
+| 0.78% | 0.008 | 0.176 | 0.208 | 25.4% | 2.68 |
+
 ## What I saw (Brian: viewer, curves)
 
 ## Why / next (Brian)
