@@ -14,6 +14,7 @@ Logs:
 
 import argparse
 import json
+from collections import deque
 import threading
 import time
 from datetime import datetime
@@ -86,6 +87,11 @@ class VoiceLoop:
         self.out = out
         self.state: RobotState | None = None  # latest state; staleness and Haiku read it
         self._play_lock = threading.Lock()  # one sound at a time, even while a cut-off line winds down
+        # Urgent events that wait for the current line instead of cutting it off (battery_low,
+        # Brian 2026-11-07). The speaker thread plays them as soon as its line ends.
+        self._queued: deque[Event] = deque()
+        self._queue_lock = threading.Lock()  # guards _queued and _line_active together
+        self._line_active = False  # a speaker job is running and will drain the queue when its line ends
 
     # --- main thread ---------------------------------------------------------------------------
     def handle(self, state: RobotState) -> None:
@@ -97,21 +103,60 @@ class VoiceLoop:
         for event in events:
             self._on_event(event)
 
+    def _source(self, event: Event) -> str:
+        return "cache" if self.cache.has(event.name) else "haiku"  # C2
+
     def _on_event(self, event: Event) -> None:
-        source = "cache" if self.cache.has(event.name) else "haiku"  # C2
+        source = self._source(event)
         decision = self.policy.decide(event, source, self.clock(), self.speaker.busy)
-        self._log_decision(event, source, "speak" if decision.speak else "drop", decision.reason)
-        if not decision.speak:
+        outcome = "speak" if decision.speak else ("queue" if decision.queue else "drop")
+        self._log_decision(event, source, outcome, decision.reason)
+        if decision.queue:
+            with self._queue_lock:
+                if self._line_active:  # the speaker thread will play it when its line ends
+                    self._queued.append(event)
+                    return
+            # The line ended between decide() and now, so there's nothing to wait for.
+            self._log_decision(event, source, "speak", "urgent: the line ahead already ended, playing now")
+        elif not decision.speak:
             return
         if decision.interrupt:
             self.speaker.interrupt()
-        self.speaker.start(lambda stop: self._speak(event, source, stop))
+        self._start_line(event, source)
+
+    def _start_line(self, event: Event, source: str) -> None:
+        with self._queue_lock:
+            self._line_active = True
+        self.speaker.start(lambda stop: self._run_line(event, source, stop))
 
     def wait(self) -> None:
         self.speaker.wait()
 
     # --- speaker thread ------------------------------------------------------------------------
-    def _speak(self, event: Event, source: str, stop: threading.Event) -> None:
+    @staticmethod
+    def _never_drop(event: Event) -> bool:
+        """Urgent events that don't interrupt (battery_low) must always be said eventually."""
+        return event.urgent and event.name not in config.INTERRUPTING_EVENTS
+
+    def _requeue(self, event: Event, why: str) -> None:
+        with self._queue_lock:
+            self._queued.appendleft(event)  # front of the line: it was already waiting
+        self._log_decision(event, self._source(event), "queue", f"{why}; requeued to play after the interrupting line")
+
+    def _run_line(self, event: Event, source: str, stop: threading.Event) -> None:
+        """Say one line, then any urgent lines queued behind it, back to back (no cooldown)."""
+        self._speak(event, source, stop)
+        while not stop.is_set():  # if a fall cut us off, the fall's own job drains the queue
+            with self._queue_lock:
+                if not self._queued:
+                    self._line_active = False  # nothing waiting: new events start a new job
+                    return
+                nxt = self._queued.popleft()
+            self._log_decision(nxt, self._source(nxt), "speak", "queued: plays right after the previous line, skipping the cooldown")
+            # Brian: a queued battery_low is never dropped, so no staleness check (it already waited a whole line).
+            self._speak(nxt, self._source(nxt), stop, check_stale=False)
+
+    def _speak(self, event: Event, source: str, stop: threading.Event, check_stale: bool = True) -> None:
         try:
             usage = {}
             if source == "cache":
@@ -126,19 +171,23 @@ class VoiceLoop:
                 usage = {"haiku_input_tokens": result.input_tokens, "haiku_output_tokens": result.output_tokens}
             text_ready = self.clock()
             if stop.is_set():
-                self._log_decision(event, source, "skip", "cut off before it started")
+                self._skipped(event, source)
                 return
-            stale = self.policy.stale_reason(event, self.state, text_ready)  # P4, checked once, here
+            stale = self.policy.stale_reason(event, self.state, text_ready) if check_stale else None  # P4, checked once
             if stale:
                 self._log_decision(event, source, "stale", stale)
                 return
             with self._play_lock:  # waits (~50 ms) for a cut-off line to go quiet
                 if stop.is_set():
-                    self._log_decision(event, source, "skip", "cut off before it started")
+                    self._skipped(event, source)
                     return
                 if chunks is None:
                     chunks = self.tts.stream_pcm(text)
                 playback = self.player.play(chunks, stop=stop)
+                if playback.interrupted and self._never_drop(event):
+                    # Still holding the play lock, so the interrupting line can't finish (and drain
+                    # the queue) before this is back in it.
+                    self._requeue(event, "cut off by a fall")
             self.policy.line_finished(source, self.clock())  # the 4 s / 30 s gaps start now
             spoken = text if source == "cache" else (self.tts.last_text or text)
             rec = latency_log.append(LineTiming(
@@ -151,6 +200,12 @@ class VoiceLoop:
                      else f"    said nothing{cut} [{source}]")
         except Exception as e:  # a failed line must never stop the loop
             self._log_decision(event, source, "error", f"{type(e).__name__}: {e}")
+
+    def _skipped(self, event: Event, source: str) -> None:
+        if self._never_drop(event):
+            self._requeue(event, "cut off before it started")
+        else:
+            self._log_decision(event, source, "skip", "cut off before it started")
 
     def _log_decision(self, event: Event, source: str, outcome: str, reason: str) -> None:
         self.out(f"[frame {event.frame:>4}] {event.name:<18} {source:<5} {outcome:<5} {reason}")

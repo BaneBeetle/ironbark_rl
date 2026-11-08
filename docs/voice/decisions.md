@@ -102,11 +102,8 @@ Brian's answers to `next-pieces.md`, as given:
 Claude's choices while building, for Brian to veto (none of these were asked):
 - **`TARGET_LOST_FRAMES = 3`** as the T1 placeholder. That's 0.6 s at the replay's 5 Hz,
   marked `# MEASURE:`.
-- **Interrupts:** both urgent events (`fell` and `battery_low`) cut off a playing line, though
-  P2 named only the fall. Reason: a `battery_low` that fires mid-line would otherwise be
-  dropped (P3), and it won't fire again until the battery is charged above 30 %. Holding it
-  until the line ends would clash with P4's 1.5 s age rule. Easy to narrow to falls only if
-  Brian prefers.
+- ~~**Interrupts:** both urgent events cut off a playing line.~~ Superseded by Brian's call
+  below: only falls interrupt, and `battery_low` queues.
 - **`behavior_changed`** (e.g. IDLE → FOLLOW) is the one novel event, so Haiku has something to
   say (C2). It's taken from Claude's C2 recommendation, which Brian accepted only in general
   terms.
@@ -118,6 +115,26 @@ Claude's choices while building, for Brian to veto (none of these were asked):
   "lost"). A one-frame flicker while lost would say "reacquired".
 - **"fell" fires on the upright → fallen transition** and re-arms once tilt drops back under
   `FALL_TILT_DEG`. One noisy frame could trigger it.
+
+## 2026-11-07: battery_low queues instead of interrupting (Brian)
+
+"Only falls interrupt a playing line. battery_low should NOT cut off a line; instead, if a
+line is playing, queue battery_low to play immediately after it ends (skipping the
+cooldown), so it's never dropped."
+
+- `config.INTERRUPTING_EVENTS = {"fell"}`. `SpeechPolicy.decide` returns `queue=True` for an
+  urgent, non-interrupting event while a line is playing. The loop's speaker thread plays queued
+  lines back to back as soon as its line ends.
+
+How Claude applied "never dropped" (for Brian to veto):
+- **No staleness check:** a queued `battery_low` skips the P4 check. It has already waited a
+  whole line, so the 1.5 s age rule would otherwise always drop it.
+- **Requeued after a fall:** if a fall cuts off the battery line, the battery line goes back in
+  the queue and plays right after the fall line. A fall still interrupts everything.
+- **Different variant:** the replayed battery line is a different variant (C1: never the same
+  one twice in a row).
+- **Honest latency:** its logged "event → first sound" counts from when the battery event was
+  first detected, so it includes the wait (4.3–4.4 s in the demo replay).
 
 ## Context Claude found (for reference, not decisions)
 

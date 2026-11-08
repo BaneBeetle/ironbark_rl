@@ -43,9 +43,19 @@ def test_busy_drops_normal_events():
 
 
 @pytest.mark.parametrize("busy", [False, True])
-def test_urgent_skips_cooldown_and_interrupts_only_when_busy(busy):
+def test_fall_skips_cooldown_and_interrupts_only_when_busy(busy):
     d = policy_after(line_end=9.9).decide(E("fell", urgent=True), "cache", now_s=10.0, busy=busy)
-    assert d.speak and d.interrupt is busy
+    assert d.speak and d.interrupt is busy and not d.queue
+
+
+def test_battery_low_skips_cooldown_when_idle():
+    d = policy_after(line_end=9.9).decide(E("battery_low", urgent=True), "cache", now_s=10.0, busy=False)
+    assert d.speak and not d.interrupt and not d.queue
+
+
+def test_battery_low_queues_instead_of_interrupting():
+    d = SpeechPolicy().decide(E("battery_low", urgent=True), "cache", now_s=10.0, busy=True)
+    assert not d.speak and not d.interrupt and d.queue  # Brian: wait for the line, never dropped
 
 
 def test_line_finished_starts_the_gaps():

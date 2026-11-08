@@ -60,6 +60,9 @@ TELEMETRY_PORT = 5558  # Pi PUBs telemetry JSON here (CLAUDE.md wire protocol)
 CACHED_LINE_COOLDOWN_S = 4.0  # quiet after a line before the next cached line
 HAIKU_LINE_MIN_SPACING_S = 30.0  # at least this long between two Haiku-generated lines
 URGENT_EVENTS = frozenset({"fell", "battery_low"})  # cached, and skip the cooldown
+# Brian, 2026-11-07: only a fall cuts off a playing line. Other urgent events (battery_low)
+# queue behind the current line and play right after it, never dropped.
+INTERRUPTING_EVENTS = frozenset({"fell"})
 
 # --- Budget ------------------------------------------------------------------------------
 ELEVENLABS_MONTHLY_CREDITS = 121_000  # Brian, 2026-11-07: Creator plan (key stays restricted, so not readable via API)

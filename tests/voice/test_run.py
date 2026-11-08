@@ -112,6 +112,85 @@ def test_same_frame_urgent_goes_first(tmp_path):
     assert [d["event"] for d in decisions(tmp_path)][0] == "battery_low"
 
 
+class GatedPlayer:
+    """Threaded test player: each line plays until the test opens its gate (or a stop arrives)."""
+
+    def __init__(self):
+        self.log = []  # ("start" | "done" | "cut", event text)
+        self.gates = {}  # text -> threading.Event the test sets to let that line finish
+        self.started = {}  # text -> threading.Event set when that line starts
+
+    def expect(self, text):
+        self.gates[text], self.started[text] = threading.Event(), threading.Event()
+
+    def play(self, chunks, stop=None):
+        text = bytes(b"".join(chunks)).decode("utf-8")  # LabelCache puts the event name in the "audio"
+        self.log.append(("start", text))
+        self.started.setdefault(text, threading.Event()).set()
+        gate = self.gates.setdefault(text, threading.Event())
+        while not gate.wait(0.01):
+            if stop is not None and stop.is_set():
+                self.log.append(("cut", text))
+                return PlaybackTiming(0, 0, 0, 0.0, 0, interrupted=True)
+        self.log.append(("done", text))
+        return PlaybackTiming(0, 0, 0, 0.0, 2)
+
+
+class LabelCache(FakeCache):
+    def pick(self, event):
+        from ironbark_voice.line_cache import CachedClip
+        return CachedClip(event=event, text=event, pcm=event.encode("utf-8"))  # "audio" = the event name
+
+
+def threaded_loop(tmp_path, player):
+    return VoiceLoop(cache=LabelCache(), writer=None, tts=FakeTTS(), player=player, speaker=Speaker(),
+                     decisions_path=tmp_path / "decisions.jsonl", latency_path=tmp_path / "latency.jsonl",
+                     out=lambda *_: None)
+
+
+def wait_for(cond, timeout=3.0):
+    import time
+    end = time.monotonic() + timeout
+    while time.monotonic() < end:
+        if cond():
+            return True
+        time.sleep(0.01)
+    return False
+
+
+def test_battery_low_waits_for_the_line_then_plays_right_after(tmp_path):
+    """Brian, 2026-11-07: battery_low doesn't cut off a line; it plays as soon as the line ends."""
+    player = GatedPlayer()
+    loop = threaded_loop(tmp_path, player)
+    loop.handle(RobotState(frame=0, target_visible=True, battery_pct=80))  # found: line starts
+    assert player.started.setdefault("target_found", threading.Event()).wait(2.0)
+    loop.handle(RobotState(frame=1, target_visible=True, battery_pct=15))  # battery_low while talking
+    assert [d["outcome"] for d in decisions(tmp_path)][-1] == "queue"
+    assert ("cut", "target_found") not in player.log  # not interrupted
+    player.gates["target_found"].set()  # the line ends normally...
+    assert wait_for(lambda: ("start", "battery_low") in player.log)  # ...and battery plays right after,
+    player.gates["battery_low"].set()  # with no 4 s cooldown in between
+    loop.wait()
+    assert player.log == [("start", "target_found"), ("done", "target_found"), ("start", "battery_low"), ("done", "battery_low")]
+
+
+def test_fall_still_cuts_off_and_a_cut_battery_line_comes_back(tmp_path):
+    """A fall interrupts even the battery line; the battery line is requeued and plays after the fall."""
+    player = GatedPlayer()
+    loop = threaded_loop(tmp_path, player)
+    loop.handle(RobotState(frame=0, battery_pct=15, roll_deg=0.0, pitch_deg=0.0))  # battery_low starts (idle)
+    assert player.started.setdefault("battery_low", threading.Event()).wait(2.0)
+    loop.handle(RobotState(frame=1, battery_pct=15, roll_deg=80.0, pitch_deg=0.0))  # fell -> interrupts
+    assert wait_for(lambda: ("start", "fell") in player.log)
+    player.gates["fell"].set()
+    assert wait_for(lambda: player.log.count(("start", "battery_low")) == 2)  # battery comes back after the fall
+    player.gates["battery_low"].set()
+    loop.wait()
+    assert player.log == [("start", "battery_low"), ("cut", "battery_low"), ("start", "fell"), ("done", "fell"),
+                          ("start", "battery_low"), ("done", "battery_low")]
+    assert "requeued" in " ".join(d["reason"] for d in decisions(tmp_path))
+
+
 def test_real_speaker_cuts_a_line_off_for_a_fall(tmp_path):
     """Threaded: a long cached line is playing when a fall arrives; the fall interrupts it."""
     played, started = [], threading.Event()

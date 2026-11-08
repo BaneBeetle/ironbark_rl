@@ -12,9 +12,10 @@ from ironbark_voice.triggers import Event, still_true
 
 @dataclass(frozen=True)
 class Decision:
-    speak: bool
+    speak: bool  # start it now
     interrupt: bool  # cut off the line that's playing first
     reason: str  # human-readable, printed and logged so drops can be audited
+    queue: bool = False  # hold it and play it right after the current line ends (never dropped)
 
 
 class SpeechPolicy:
@@ -29,12 +30,18 @@ class SpeechPolicy:
         Examples (last line ended at 9.1 s, nothing playing):
           decide(target_lost, "cache", now_s=12.4) -> Decision(False, False, "cooldown: 3.3 s of 4.0 s")
           decide(fell, "cache", now_s=12.4)        -> Decision(True, False, "urgent: skips the cooldown")
+        While a line is playing:
+          decide(fell, ...)        -> Decision(True, True, "urgent: cuts off the current line")
+          decide(battery_low, ...) -> Decision(False, False, "urgent: queued ...", queue=True)
         """
-        if event.urgent:
-            # P2 + Brian's pacing: urgent events skip the cooldown and cut off a playing line.
-            # (P2 named the fall; battery_low interrupts too, else a warning that fires mid-line
-            # would be dropped by P3 and not repeat until the battery is back above 30 %.)
-            return Decision(True, busy, "urgent: cuts off the current line" if busy else "urgent: skips the cooldown")
+        if event.urgent:  # urgent events always skip the cooldown (Brian's pacing)
+            if not busy:
+                return Decision(True, False, "urgent: skips the cooldown")
+            if event.name in config.INTERRUPTING_EVENTS:  # P2: a fall cuts off a playing line
+                return Decision(True, True, "urgent: cuts off the current line")
+            # Brian, 2026-11-07: battery_low doesn't interrupt. It waits for the current line and
+            # plays right after, so it's never dropped (it won't fire again until charged above 30 %).
+            return Decision(False, False, "urgent: queued to play right after the current line", queue=True)
         if busy:
             return Decision(False, False, "busy: already talking (dropped, P3)")
         if self.last_line_end_s is not None:
