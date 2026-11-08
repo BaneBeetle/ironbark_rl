@@ -85,7 +85,11 @@ Back-to-back reads, no joint commands; `joint_control_imu_20261108-001338.jsonl`
 - `read_imu()` (accel, gyro, roll/pitch/yaw in one 24-byte block): **4.15 ms** median (p99 4.54), 238 calls/s, 0 failures. `read_roll()` / `read_pitch()`: 2.68 ms each.
 - **All nine channels change together, in bursts.** 7 bursts in 8.4 s, starting 1.0-1.6 s apart and lasting 21-597 ms, with a change on nearly every read (median 4.35 ms apart). Between bursts every channel holds exactly the same value for 1-1.6 s, gyro included (e.g. gyro_z held at 30.2 deg/s, then 11.6, then 3.4).
 - Within bursts: roll -15.9 to +19.3 deg, pitch -26.7 to +9.7 deg, accel_z mostly -9.3 to -10.0 m/s^2 but also 0.00 and +9.80, gyro_z up to 768.8 deg/s once.
-- Open: was the dog moved during the run? The refresh rate can't be read off this run until that's known.
+- Brian (2026-11-07): "Yes, I moved it. I set it down on the floor." So the large roll/pitch values are real handling.
+- **Frozen stretches:** 6 of the 7 last 991-996 ms, the other 679 ms; 85% of reads fall inside one. Yaw is constant through them too, so the register stopped updating, not the dog.
+- **Suspect reads:** 5 of 2000 have whole vectors at exactly 0.00 (accel xyz, or gyro xyz), one with gyro (-1513.7, +1623.4, +768.8) deg/s.
+- `read_roll()` phase (5.6 s): the value changed on 99 of 1000 reads.
+- Not yet measured: the refresh with the dog still, and at a policy-like read rate (one IMU read per ~20 ms loop).
 
 ## Open
 
