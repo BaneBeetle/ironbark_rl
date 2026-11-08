@@ -72,17 +72,25 @@ def cmd_devices(args) -> None:
 def cmd_account(args) -> None:
     from elevenlabs.client import ElevenLabs
 
+    from elevenlabs.core.api_error import ApiError
+
     client = ElevenLabs(api_key=config.require_env("ELEVENLABS_API_KEY"))
-    sub = client.user.subscription.get()
-    reset = (f"{datetime.fromtimestamp(sub.next_character_count_reset_unix):%Y-%m-%d}"
-             if sub.next_character_count_reset_unix else "unknown")
-    print(f"tier {sub.tier} | credits used {sub.character_count} of {sub.character_limit} | "
-          f"left {sub.character_limit - sub.character_count} | resets {reset}")
+    try:
+        sub = client.user.subscription.get()
+        reset = (f"{datetime.fromtimestamp(sub.next_character_count_reset_unix):%Y-%m-%d}"
+                 if sub.next_character_count_reset_unix else "unknown")
+        print(f"tier {sub.tier} | credits used {sub.character_count} of {sub.character_limit} | "
+              f"left {sub.character_limit - sub.character_count} | resets {reset}")
+    except ApiError as e:  # scoped keys can lack user_read; the voice check below still runs
+        detail = e.body.get("detail", {}) if isinstance(e.body, dict) else {}
+        print(f"credits: unavailable ({e.status_code}: {detail.get('message', e.body)})")
     voice_id = resolve_voice(args.voice)
     try:
         v = client.voices.get(voice_id)
-    except Exception as e:  # show the reason instead of a traceback
-        raise SystemExit(f"voice {voice_id} NOT usable with this key: {type(e).__name__}: {e}")
+    except ApiError as e:  # scoped keys can lack voices_read; TTS can still work, so say so plainly
+        detail = e.body.get("detail", {}) if isinstance(e.body, dict) else {}
+        print(f"voice {voice_id}: details unavailable ({e.status_code}: {detail.get('message', e.body)})")
+        return
     print(f"voice {v.name} ({voice_id}) | category {v.category} | labels {v.labels}")
     if v.sharing is not None:  # Voice Library voices: their owner can set a custom rate, and live moderation adds latency
         s = v.sharing
