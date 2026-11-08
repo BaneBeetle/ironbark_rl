@@ -2,6 +2,12 @@
 
 Brian's decisions and verdicts, dated, in his words. Newest first. Numbers and run details are in [progress.md](progress.md) and the [experiment files](experiments/README.md).
 
+## 2026-11-07: joint map verified on the dog
+
+> 11 was fl calf, 12 is fl thigh, 13 is fl hip, 21 is fr calf, 22 is fr thigh, 23 is fr hip, 31 is br calf, 32 is br  thigh, 33 is br hip, 41 is bl calf, 42 is bl thigh, 43 is bl hip
+
+From the probe's `map` run (`joint_control_map_20261108-001412.jsonl`; Brian skipped the prompts and gave the answers in chat). Locked in `ironbark_rl/assets/s2_joint_map.py` (tested). It matches the order EXP-009/010 assumed, so neither changes. Still `# MEASURE:` before deployment: each joint's sign and zero offset.
+
 ## 2026-11-07: Phase 1 gate: Path A conditionally alive; test delay and stale readback in sim first
 
 > My Phase 1 read: Path A is conditionally alive. Command rate (102 Hz) is fine, but servos lag ~100 ms (tracking falls off above ~2 Hz) and joint readback refreshes only every ~105 ms round-robin, while the sim models 4–8 ms of delay. Servo spec is 0.1 s/60° (a 10° move ≈ 17 ms unloaded) and 4.5 kg·cm ≈ 0.44 N·m (matches our 0.43 cap), so the motors are fast: the lag is mostly the motion board firmware and bus polling. Model it as command-pipeline delay + readback staleness, not slow motors.
