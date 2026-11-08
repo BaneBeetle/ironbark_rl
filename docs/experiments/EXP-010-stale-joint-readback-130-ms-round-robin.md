@@ -35,6 +35,13 @@ Unchanged from EXP-009: 40 ms command delay, reward (EXP-005's), terminations, c
 - Guard: `tools/reward_check.py IronBark-S2-Walk-Flat-Brian-StaleJoints` (standing only: no earlier checkpoint has this actor input): OK, standing +0.0292. Tests: 163 passed + 3 sim tests (stale readings refresh ~once per cycle and lag; actor input 12 smaller).
 - Run folder: `~/dev/ironbark_runs/logs/rsl_rl/ironbark_s2_walk_brian_stale_joints/*_EXP-010`
 
+### Seed replicates (same setup, different seed: measures the noise floor, rule 4)
+
+Brian's seed rule (EXP-011 file): EXP-011 seed 42 came out within 5% of EXP-010 on yaw error, so both get seeds 43 and 44. Run one at a time, in the order EXP-010-s43, EXP-011-s43, EXP-010-s44, EXP-011-s44; each scored under the same conditions as seed 42.
+
+- **Seed 43** (queued 2026-11-07): `python tools/run.py train IronBark-S2-Walk-Flat-Brian-StaleJoints --env.scene.num-envs 4096 --agent.max-iterations 1500 --agent.seed 43 --agent.run-name EXP-010-s43`. Run folder `~/dev/ironbark_runs/logs/rsl_rl/ironbark_s2_walk_brian_stale_joints/*_EXP-010-s43`, console log `~/dev/ironbark_runs/EXP-010-s43.log`.
+- **Seed 44** (queued 2026-11-07): `python tools/run.py train IronBark-S2-Walk-Flat-Brian-StaleJoints --env.scene.num-envs 4096 --agent.max-iterations 1500 --agent.seed 44 --agent.run-name EXP-010-s44`. Run folder `~/dev/ironbark_runs/logs/rsl_rl/ironbark_s2_walk_brian_stale_joints/*_EXP-010-s44`, console log `~/dev/ironbark_runs/EXP-010-s44.log`.
+
 ## Results (scoreboard: `metrics.py`)
 
 _Pending. Filled by the evaluation harness once training finishes._

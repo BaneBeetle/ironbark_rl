@@ -33,6 +33,13 @@ Scored like EXP-010: the delay and the staleness stay on in the play config.
 - Guard: skipped (Luwu's reward; README rule 2). Tests: 171 passed + 5 sim tests (EXP-011's actor and critic inputs match EXP-010's).
 - Run folder: `~/dev/ironbark_runs/logs/rsl_rl/ironbark_s2_walk_stale_joints/*_EXP-011`
 
+### Seed replicates (same setup, different seed: measures the noise floor, rule 4)
+
+Brian's seed rule (EXP-011 file): EXP-011 seed 42 came out within 5% of EXP-010 on yaw error, so both get seeds 43 and 44. Run one at a time, in the order EXP-010-s43, EXP-011-s43, EXP-010-s44, EXP-011-s44; each scored under the same conditions as seed 42.
+
+- **Seed 43** (queued 2026-11-07): `python tools/run.py train IronBark-S2-Walk-Flat-StaleJoints --env.scene.num-envs 4096 --agent.max-iterations 1500 --agent.seed 43 --agent.run-name EXP-011-s43`. Run folder `~/dev/ironbark_runs/logs/rsl_rl/ironbark_s2_walk_stale_joints/*_EXP-011-s43`, console log `~/dev/ironbark_runs/EXP-011-s43.log`.
+- **Seed 44** (queued 2026-11-07): `python tools/run.py train IronBark-S2-Walk-Flat-StaleJoints --env.scene.num-envs 4096 --agent.max-iterations 1500 --agent.seed 44 --agent.run-name EXP-011-s44`. Run folder `~/dev/ironbark_runs/logs/rsl_rl/ironbark_s2_walk_stale_joints/*_EXP-011-s44`, console log `~/dev/ironbark_runs/EXP-011-s44.log`.
+
 ## Results (scoreboard: `metrics.py`)
 
 _Pending. Filled by the evaluation harness once training finishes._
