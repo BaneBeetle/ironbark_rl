@@ -12,6 +12,8 @@ Scored with each experiment's latency on (Brian), seed 42, scoreboard v1 + `gait
 | EXP-005, delay + stale joints (vel = change of stale reading) | 0.000 | 0.064 | 0.182 | 6.38 | 2.39 | 2.38% | 19.9% | 2.57 |
 | **EXP-010**, delay + stale joints | 0.000 | 0.038 | 0.123 | 3.00 | 1.76 | 0.80% | 15.1% | 2.34 |
 | EXP-010, delay + stale joints + measured IMU freezes (no retraining) | 0.000 | 0.040 | 0.132 | 3.00 | 1.70 | 0.78% | 25.4% | 2.68 |
+| EXP-002 (Luwu baseline, seed 42), play config (no latency) | 0.000 | 0.0355 | 0.0924 | 2.14 | 1.36 | 0.79% | 22.7% | 2.61 |
+| EXP-002, delay + stale joints (vel = change of stale reading; Brian's fair-comparison check) | 0.000 | 0.056 | 0.129 | 4.04 | 1.72 | 1.65% | 23.7% | 2.72 |
 
 - Training-time endings near the last iteration: EXP-005 fell 0.8% / non-foot contact 5.6%; EXP-009 1.8% / 12.9%; EXP-010 3.8% / 12.0%. Final mean episode length 972 / 926 / 921 steps.
 - EXP-010 trained 65 min (a slow first ~30 min: GPU shared with other apps and two `aws_api_mcp_server` workers, which Claude stopped at Brian's OK).
