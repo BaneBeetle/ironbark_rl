@@ -11,6 +11,9 @@ Built on IronBark-S2-Walk-Flat-Brian (EXP-005's config). Numbers and reasons: ir
 - stale_joints_vel_ref: stale_joints with the actor's joint velocity put back as the change of the
   stale reading per step. Never trained: only to score EXP-005's policy (which needs a velocity input)
   under EXP-010's conditions.
+- stale_joints_imu_freeze: stale_joints plus the measured IMU freezes on the actor's base_ang_vel and
+  projected_gravity (ironbark_rl/brian/obs.py). Never trained: only to score EXP-010's policy under the
+  freezes (Brian, 2026-11-07: "no retraining").
 
 Scoring (Brian, 2026-11-07): these delays stay on in the play config too, so the scoreboard sees them.
 Training's random joint-observation delay (1-2 policy steps) is kept on as well, so play matches training.
@@ -80,6 +83,22 @@ def s2_flat_walk_brian_stale_joints_env_cfg(play: bool = False) -> ManagerBasedR
     actor = cfg.observations["actor"].terms
     actor["joint_pos"] = _stale_term(actor["joint_pos"], obs.stale_joint_pos)
     del actor["joint_vel"]  # Brian: the dog has no joint-velocity readback
+    return cfg
+
+
+_IMU_TERMS = ("base_ang_vel", "projected_gravity")
+
+
+def _with_imu_freezes(cfg: ManagerBasedRlEnvCfg) -> None:
+    actor = cfg.observations["actor"].terms
+    for name in _IMU_TERMS:
+        old = actor[name]  # keep its slot, noise and scale; the freeze wraps its function
+        actor[name] = replace(old, func=obs.imu_frozen, params={"inner": old.func, "inner_params": dict(old.params)})
+
+
+def s2_flat_walk_brian_stale_joints_imu_freeze_env_cfg(play: bool = False) -> ManagerBasedRlEnvCfg:
+    cfg = s2_flat_walk_brian_stale_joints_env_cfg(play=play)
+    _with_imu_freezes(cfg)
     return cfg
 
 

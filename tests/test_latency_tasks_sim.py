@@ -91,3 +91,25 @@ def test_vel_ref_matches_exp005_actor_size():
             assert actor_dim(env) == expected
         finally:
             env.close()
+
+
+def test_imu_freeze_holds_the_actor_imu_terms():
+    from ironbark_rl.brian import obs
+
+    env = build("IronBark-S2-Walk-Flat-Brian-StaleJoints-ImuFreeze")
+    try:
+        schedule = obs.imu_freeze_schedule(env)
+        n_act = env.action_manager.total_action_dim
+        frozen_steps = 0
+        for k in range(150):  # 3 s
+            env.step(0.5 * torch.sin(torch.full((DOGS, n_act), 0.3 * k, device=env.device)))
+            frozen_steps += int(schedule.frozen.sum())
+        share = frozen_steps / (150 * DOGS)
+        assert 0.1 < share < 0.8  # 41.8% in the logs; 8 dogs x 3 s is a small sample
+        base = build("IronBark-S2-Walk-Flat-Brian-StaleJoints")
+        try:
+            assert actor_dim(env) == actor_dim(base)  # EXP-010's checkpoint fits
+        finally:
+            base.close()
+    finally:
+        env.close()

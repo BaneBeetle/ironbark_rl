@@ -58,3 +58,20 @@ def test_stale_joints_actor_and_critic(play):
 
 def test_vel_ref_keeps_exp005s_actor_layout():
     assert list(cfg(REF, True).observations["actor"].terms) == list(cfg(CMD, True).observations["actor"].terms)
+
+
+FREEZE = "IronBark-S2-Walk-Flat-Brian-StaleJoints-ImuFreeze"
+
+
+@pytest.mark.parametrize("play", [False, True])
+def test_imu_freeze_task_wraps_only_the_imu_terms(play):
+    c, base = cfg(FREEZE, play), cfg(STALE, play)
+    actor, base_actor = c.observations["actor"].terms, base.observations["actor"].terms
+    assert list(actor) == list(base_actor)
+    for name in ("base_ang_vel", "projected_gravity"):
+        assert actor[name].func.__name__ == "imu_frozen"
+        assert actor[name].params["inner"] is base_actor[name].func
+        assert actor[name].params["inner_params"] == base_actor[name].params
+        assert actor[name].noise == base_actor[name].noise
+    assert all(actor[k].func is base_actor[k].func for k in actor if k not in ("base_ang_vel", "projected_gravity", "joint_pos"))
+    assert base_actor["base_ang_vel"].func.__name__ == "builtin_sensor"  # StaleJoints itself unchanged
