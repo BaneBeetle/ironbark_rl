@@ -511,7 +511,9 @@ def load_stage2(stage1, storage: str | None):
                 system_attrs={"constraints": tuple(c)},
             ))
         study.set_user_attr("known_points", [r["exp"] for r in known])
-    study.sampler = make_sampler(len(study.user_attrs["known_points"]) + stage.random_trials, stage.sampler_seed)
+    known_count = len(study.user_attrs["known_points"])
+    new_trials = len(study.trials) - known_count  # a fresh sampler restarts its random stream: a restarted driver must not repeat a draw
+    study.sampler = make_sampler(known_count + stage.random_trials, stage.sampler_seed + new_trials)
     return study
 
 
@@ -579,7 +581,8 @@ def search_doc(study, now: str, replicates: dict | None = None, stage2=None) -> 
         f"Claude's defaults, for Brian to change: a new study (`{s2.study_name}`; one study's ranges can't change); "
         f"the stage-1 trials at the 4x ceiling go in as known points, not retrained ({known2}); then {s2.random_trials} random "
         f"trials in the new range, then the GP; same sampler and log scale, sampler seed {s2.sampler_seed} "
-        f"(seed {SAMPLER_SEED} would repeat stage 1's random draws of the other two weights). Stage-2 trials are labeled \"stage-2 trial N\" "
+        f"(seed {SAMPLER_SEED} would repeat stage 1's random draws of the other two weights), plus the stage-2 trials already run "
+        "(so a restarted driver doesn't repeat a random draw). Stage-2 trials are labeled \"stage-2 trial N\" "
         "(Optuna's numbering in the new study, the known points first). The known points carry constraint values under stage 2's limits.",
         f"- Constraints (unrounded): servo saturation (`gait_check`) and planar error (scoreboard v1 overall); stage 1 {limits_text(1)}, "
         f"stage 2 {limits_text(2)} ({STAGE2_PLANAR_ERROR_MAX_MPS} is Brian's rounding of EXP-011's 3-seed mean, 0.03104). "

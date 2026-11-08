@@ -278,6 +278,22 @@ def add_scored(study, exp, params, m, stage=1):
                                  system_attrs={"constraints": tuple(c)}))
 
 
+def test_restarted_stage2_driver_does_not_repeat_a_random_draw(tmp_path):
+    s1 = rs.load_study(storage=None, parent_metrics=metrics(sat=0.00805, planar=0.0383, flicker=0.1506))
+    add_scored(s1, "EXP-100", {"feet_air_time": 3.2, "action_rate_scale": 4.0, "torques_scale": 1.1}, metrics(flicker=0.126))
+    url = f"sqlite:///{(tmp_path / 's2.db').as_posix()}"
+    s2 = rs.load_stage2(s1, url)
+    trial = s2.ask(rs.distributions(2))
+    first = dict(trial.params)
+    m = metrics(flicker=0.12)
+    for name, value in (("exp", "EXP-110"), ("weights", rs.trial_weights(first, START)), ("metrics", m), ("constraints", list(rs.constraint_values(m, 2)))):
+        trial.set_user_attr(name, value)
+    s2.tell(trial, m["flicker_share"])
+    restarted = rs.load_stage2(s1, url)
+    assert restarted.sampler._n_startup_trials == 1 + rs.STAGES[2].random_trials
+    assert dict(restarted.ask(rs.distributions(2)).params) != first
+
+
 def test_stage2_starts_from_the_stage1_trials_at_the_4x_ceiling():
     from optuna.trial import TrialState
 
