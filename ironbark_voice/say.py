@@ -37,14 +37,28 @@ def tee(chunks, sink: list):
         yield chunk
 
 
-def speak(text: str, voice_id: str, event: str, source: str, event_s: float, text_ready_s: float,
-          wav_path: str | None = None, **haiku_usage) -> dict:
-    """TTS -> speakers (and optionally a WAV file), then log the timing. Returns the latency record."""
+def build_audio(voice_id: str):
+    """TTS client + player, built BEFORE the clock starts.
+
+    The real voice process pays SDK imports and setup once at startup, not per line. Measured
+    2026-11-07: `import anthropic` ~3.7 s and `import elevenlabs.client` ~0.8 s in a fresh
+    process, which the first CLI measurements wrongly counted as line latency.
+    """
     from ironbark_voice.tts import ElevenLabsTTS
 
-    tts = ElevenLabsTTS(voice_id=voice_id)
+    return ElevenLabsTTS(voice_id=voice_id), PcmPlayer()
+
+
+def speak(text: str, tts, player: PcmPlayer, event: str, source: str, event_s: float, text_ready_s: float,
+          wav_path: str | None = None, **haiku_usage) -> dict:
+    """TTS -> speakers (and optionally a WAV file), then log the timing. Returns the latency record.
+
+    Note: each CLI run opens a fresh HTTPS connection, so the first request includes the TLS
+    handshake (~0.07 s more than a warm request, measured 2026-11-07). The long-running voice
+    process reuses its connection, so CLI numbers are slightly pessimistic.
+    """
     kept: list[bytes] = []
-    playback = PcmPlayer().play(tee(tts.stream_pcm(text), kept))  # plays while it streams
+    playback = player.play(tee(tts.stream_pcm(text), kept))  # plays while it streams
     if wav_path:
         write_wav(wav_path, b"".join(kept))
     timing = LineTiming(event=event, source=source, text=text, event_s=event_s, text_ready_s=text_ready_s,
@@ -98,23 +112,25 @@ def cmd_account(args) -> None:
 
 
 def cmd_line(args) -> None:
+    tts, player = build_audio(resolve_voice(args.voice))
     now = time.perf_counter()  # a typed line is "ready" the moment it's sent
-    print_record(speak(args.text, resolve_voice(args.voice), event=args.event, source="tts",
+    print_record(speak(args.text, tts, player, event=args.event, source="tts",
                        event_s=now, text_ready_s=now, wav_path=args.wav))
 
 
 def cmd_haiku(args) -> None:
     from ironbark_voice.brain import LineWriter
 
-    voice_id = resolve_voice(args.voice)
+    writer = LineWriter()  # import + client setup happen here, before the clock (see build_audio)
+    tts, player = build_audio(resolve_voice(args.voice))
     event_s = time.perf_counter()  # the trigger fires now
-    result = LineWriter().write_line(args.event, args.state)
+    result = writer.write_line(args.event, args.state)
     text_ready_s = time.perf_counter()
     if not result.text:
         raise SystemExit("Haiku returned no speakable line (refusal or empty).")
     if result.over_limit:
         print(f"note: {result.words} words, over the {config.MAX_WORDS_PER_LINE}-word cap")
-    print_record(speak(result.text, voice_id, event=args.event, source="haiku", event_s=event_s, text_ready_s=text_ready_s,
+    print_record(speak(result.text, tts, player, event=args.event, source="haiku", event_s=event_s, text_ready_s=text_ready_s,
                        wav_path=args.wav, haiku_input_tokens=result.input_tokens, haiku_output_tokens=result.output_tokens))
 
 
