@@ -2,6 +2,14 @@
 
 Brian's decisions and verdicts, dated, in his words. Newest first. Numbers and run details are in [progress.md](progress.md) and the [experiment files](experiments/README.md).
 
+## 2026-11-08: owner verify allowed despite the no-identity rule
+
+Claude asked whether to change `CLAUDE.md`'s no-identity rule to allow the owner verify in [roadmap.md](roadmap.md) Phase 1 (VLM verify with multi-reference photos). Brian:
+
+> Yes, allow it
+
+`CLAUDE.md` now lists that as the one exception; the rule against re-adding face/ReID otherwise stands.
+
 ## 2026-11-08: EXP-020 added to the seed replicates; stage 2's constraints tightened
 
 > Add EXP-020 to the seed replicates (seeds 43 and 44). For stage 2, keep the flicker objective but tighten the constraints to: saturation ≤ 0.3% and planar ≤ 0.031 m/s (Luwu's 3-seed mean). Goal: beat the vendor on strain, tracking and flicker at once. Everything else approved.

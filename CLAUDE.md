@@ -15,7 +15,7 @@ You are helping Brian (M.S. CS @ Columbia, ML focus) on **IronBark**, his autono
 - **Single-variable commits.** One work item = at least one commit; never bundle two work items. Match the existing message style.
 - **No wall-clock logic in Pi-side code.** Frame counts and state predicates only. PC-side timers are fine.
 - **Do not change the Pi's `~/ironbark/motor_controller.py` semantics** (it's measurement-derived; read-only reference copy: `docs/v2-archive/reference/motor_controller.py`). Additive telemetry fields are fine if needed. Say so in your report.
-- Do not re-add identity (face/ReID). Do not build EXPLORE (Phase 3) unless Brian asks.
+- Do not re-add identity (face/ReID), with one exception (Brian, 2026-11-08): owner verify by VLM with multi-reference photos, as in `docs/roadmap.md` Phase 1. Do not build EXPLORE (Phase 3) unless Brian asks.
 - In `brian/`, design decisions are Brian's (thresholds, frames, weights, trade-offs): ask, don't decide. Never rewrite code Brian wrote himself (e.g. `feet_air_time`, his `metrics.py` functions) without asking (see Division of labor).
 - Keep replies short. Brian dislikes long explanations. Prefer one-line terminal commands.
 
