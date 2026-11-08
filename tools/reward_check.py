@@ -2,6 +2,7 @@
 
   python tools/reward_check.py IronBark-S2-Walk-Flat-Brian
   python tools/reward_check.py IronBark-S2-Walk-Flat-Brian --checkpoint <EXP-002 run>/model_1499.pt
+  python tools/reward_check.py <task> --checkpoint <run>/model_1499.pt --weight torques=-0.25 --json out.json
 
 Scenarios (scoreboard conditions: play config, pinned commands, terminations off, fixed seed):
   (a) standing still: zero command, zero action (the default pose)
@@ -9,6 +10,8 @@ Scenarios (scoreboard conditions: play config, pinned commands, terminations off
       checkpoint's observations and actions (IronBark-S2-Walk-Flat-Brian does: only the reward differs)
 A negative mean total is flagged: if a typical step loses reward, ending the episode early
 pays. Reports numbers only; weights are Brian's (ironbark_rl/brian/reward_config.py).
+--weight NAME=VALUE (repeatable) overrides a term's weight, e.g. a search trial's (tools/reward_search.py);
+--json saves the totals. Exit code 1 means flagged.
 Meant for Brian's reward tasks: on the baseline task it would list Luwu's reward terms.
 Run it only while nothing is training.
 """
@@ -16,6 +19,7 @@ Run it only while nothing is training.
 import argparse
 import contextlib
 import io
+import json
 import sys
 from pathlib import Path
 
@@ -33,6 +37,17 @@ def report(title: str, means: dict[str, float]) -> None:
     print("\n".join(reward_audit.summary_lines(means)))
 
 
+def parse_weights(items: list[str]) -> dict[str, float]:
+    """["torques=-0.25", ...] -> {"torques": -0.25, ...}"""
+    out = {}
+    for item in items:
+        name, sep, value = item.partition("=")
+        if not sep or not name:
+            raise ValueError(f"--weight wants NAME=VALUE, got {item!r}")
+        out[name] = float(value)
+    return out
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("task")
@@ -40,36 +55,53 @@ def main() -> None:
     p.add_argument("--episodes-per-command", type=int, default=evaluation.EPISODES_PER_COMMAND)
     p.add_argument("--seconds", type=float, default=evaluation.EVAL_SECONDS)
     p.add_argument("--seed", type=int, default=evaluation.EVAL_SEED)
+    p.add_argument("--weight", action="append", default=[], metavar="NAME=VALUE", help="override a reward weight (repeatable)")
+    p.add_argument("--json", type=Path, default=None, help="save the totals here")
     args = p.parse_args()
+    weights = parse_weights(args.weight)
+    if weights:
+        print("weights overridden: " + ", ".join(f"{k} = {v:g}" for k, v in weights.items()))
 
     flagged = False
+    result = {"task": args.task, "weights": weights, "checkpoint": str(args.checkpoint) if args.checkpoint else None,
+              "seconds": args.seconds, "seed": args.seed}
 
     standing = np.zeros((STANDING_DOGS, 3))
     with contextlib.redirect_stdout(io.StringIO()):  # mjlab's startup tables
-        env, _ = evaluation.make_pinned_command_env(args.task, standing, args.seed)
+        env, _ = evaluation.make_pinned_command_env(args.task, standing, args.seed, reward_weights=weights)
     zero_action = lambda obs: torch.zeros(env.unwrapped.action_space.shape, device=env.unwrapped.device)  # (N, J)
     means, _ = reward_audit.mean_contributions(env, standing, zero_action, args.seconds)
     env.close()
     report(f"{args.task} (a) standing still, zero command: {STANDING_DOGS} dogs x {args.seconds:.0f} s", means)
     flagged |= reward_audit.is_negative(means[reward_audit.TOTAL])
+    result["standing_total"] = float(means[reward_audit.TOTAL])
+    result["standing_terms"] = {k: float(v) for k, v in means.items()}
 
     if args.checkpoint is not None:
         grid = np.asarray(metrics.COMMAND_GRID, dtype=float)  # (C, 3)
         commands = np.repeat(grid, args.episodes_per_command, axis=0)  # (C * E, 3)
         with contextlib.redirect_stdout(io.StringIO()):  # mjlab's startup tables, the network printout
-            env, _ = evaluation.make_pinned_command_env(args.task, commands, args.seed)
+            env, _ = evaluation.make_pinned_command_env(args.task, commands, args.seed, reward_weights=weights)
             policy = evaluation.load_policy(args.task, env, args.checkpoint)
         means, per_dog_total = reward_audit.mean_contributions(env, commands, policy, args.seconds)
         env.close()
         report(f"{args.task} (b) {args.checkpoint} on the command grid: {len(commands)} dogs x {args.seconds:.0f} s", means)
         flagged |= reward_audit.is_negative(means[reward_audit.TOTAL])
+        result["walking_total"] = float(means[reward_audit.TOTAL])
+        result["walking_terms"] = {k: float(v) for k, v in means.items()}
+        result["walking_by_command"] = []
         print("\n  mean per-step total by command (vx, vy, wz):")
         for k, command in enumerate(grid):
             total = float(per_dog_total[k * args.episodes_per_command:(k + 1) * args.episodes_per_command].mean())
             mark = "  <-- NEGATIVE" if reward_audit.is_negative(total) else ""
             print(f"    ({command[0]:+.2f}, {command[1]:+.2f}, {command[2]:+.2f})  {total:+.5f}{mark}")
+            result["walking_by_command"].append({"command": [float(c) for c in command], "total": total})
 
     print("\nFLAG: a mean per-step total is negative (see above)." if flagged else "\nOK: every mean per-step total is >= 0.")
+    result["flagged"] = bool(flagged)
+    if args.json is not None:
+        args.json.write_text(json.dumps(result, indent=1), encoding="utf-8")
+        print(f"saved {args.json}")
     sys.exit(1 if flagged else 0)
 
 

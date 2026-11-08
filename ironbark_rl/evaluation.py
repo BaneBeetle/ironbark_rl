@@ -46,10 +46,21 @@ def load_policy(task: str, env, checkpoint: Path):
     return runner.get_inference_policy(device=DEVICE)
 
 
+def apply_reward_weights(cfg, reward_weights: dict[str, float] | None) -> None:
+    """Override reward terms' weights in place (e.g. a search trial's). An unknown term name raises KeyError."""
+    for name, weight in (reward_weights or {}).items():
+        cfg.rewards[name].weight = weight
+
+
 def make_pinned_command_env(task: str, commands: np.ndarray, seed: int, render: bool = False,
-                            viewer_size: tuple[int, int] | None = None, camera_distance_m: float | None = None):
-    """Play-config env with one dog per row of `commands`, terminations off, resampling off."""
+                            viewer_size: tuple[int, int] | None = None, camera_distance_m: float | None = None,
+                            reward_weights: dict[str, float] | None = None):
+    """Play-config env with one dog per row of `commands`, terminations off, resampling off.
+
+    reward_weights overrides those terms' weights (the scoreboard doesn't read rewards; reward_check does).
+    """
     cfg = load_env_cfg(task, play=True)
+    apply_reward_weights(cfg, reward_weights)
     cfg.scene.num_envs = len(commands)
     cfg.seed = seed
     cfg.terminations = {}
