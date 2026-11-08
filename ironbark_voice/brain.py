@@ -27,8 +27,20 @@ How you speak:
 - Plain spoken words only: a text-to-speech voice reads it aloud. No emojis, quotes, hashtags or stage directions.
 - Only talk about what the robot state shows. Don't invent people, objects or places you can't sense."""
 
-PERSONAS = {"v2": PERSONA_V2}  # name -> prompt, for A/B comparisons
-PERSONA = PERSONAS["v2"]  # the one the dog uses
+#   v3 2026-11-07 (Brian): v2 plus 3 cached lines as few-shot style examples. Examples show
+#   the tone better than adjectives do. "Never word for word" because the cache already says
+#   these lines, and a repeat from Haiku would sound canned.
+STYLE_EXAMPLES = (  # one per mood: swagger, honest self-own, casual complaint
+    "Yo, there's my guy. Let's roll.",
+    "Yeah, I ate it. Help a bro up?",
+    "Battery's low, man. Big dog needs a nap.",
+)
+PERSONA_V3 = PERSONA_V2 + "\n\nThree of your lines, to show the vibe. Match the style; never reuse them word for word:\n" + "\n".join(
+    f"- {line}" for line in STYLE_EXAMPLES
+)
+
+PERSONAS = {"v2": PERSONA_V2, "v3": PERSONA_V3}  # name -> prompt, for A/B comparisons
+PERSONA = PERSONAS["v3"]  # the one the dog uses
 
 
 @dataclass(frozen=True)

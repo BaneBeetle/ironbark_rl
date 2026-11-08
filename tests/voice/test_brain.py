@@ -40,6 +40,14 @@ def test_request_is_fast_haiku_with_persona():
     assert "battery=62%" in call["messages"][0]["content"]
 
 
+def test_v3_is_v2_plus_style_examples():
+    from ironbark_voice.brain import PERSONA_V2, PERSONA_V3, STYLE_EXAMPLES
+
+    assert PERSONA == PERSONA_V3 and PERSONA_V3.startswith(PERSONA_V2)
+    assert all(line in PERSONA_V3 for line in STYLE_EXAMPLES)
+    assert all(len(line.split()) <= config.MAX_WORDS_PER_LINE for line in STYLE_EXAMPLES)  # examples obey the cap
+
+
 def test_persona_can_be_swapped_for_ab_tests():
     client = SimpleNamespace(messages=FakeMessages("Yo."))
     LineWriter(client=client, persona="TEST PERSONA").write_line("x", "")
