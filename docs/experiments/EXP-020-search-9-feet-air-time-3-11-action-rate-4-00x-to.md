@@ -1,6 +1,6 @@
 # EXP-020: search 9: feet_air_time 3.11, action_rate 4.00x, torques 0.75x
 
-**Status:** search trial 9 (Optuna); trained 2026-11-08 (seed 42, 1500 iterations, 45 min, no crash), scored with the staleness and delay on; constraints pass; verdict pending (Brian) · **Parent:** EXP-010
+**Status:** search trial 9 (Optuna); trained 2026-11-08 (seed 42, 1500 iterations, 45 min, no crash), scored with the staleness and delay on; constraints pass; seeds 43/44 trained and scored 2026-11-08 (Brian's pick); verdict pending (Brian) · **Parent:** EXP-010
 
 ## Hypothesis (Brian, before the run)
 
@@ -25,7 +25,16 @@ vs. EXP-010: three reward weights, picked by the search (Brian's search varies t
 Brian (2026-11-08): "Add EXP-020 to the seed replicates (seeds 43 and 44)." Same weights, task and scoring as seed 42; one run at a time.
 
 - **Seed 43** (trained and scored 2026-11-08, 44 min, no crash): `python tools/run.py train IronBark-S2-Walk-Flat-Brian-StaleJoints --env.scene.num-envs 4096 --agent.max-iterations 1500 --agent.seed 43 --agent.run-name EXP-020-s43 --env.rewards.feet_air_time.weight 3.10615 --env.rewards.action_rate.weight -0.32 --env.rewards.torques.weight -0.093384`. Run folder `~/dev/ironbark_runs/logs/rsl_rl/ironbark_s2_walk_brian_stale_joints/*_EXP-020-s43`, console log `~/dev/ironbark_runs/EXP-020-s43.log`.
-- **Seed 44** (training 2026-11-08): `python tools/run.py train IronBark-S2-Walk-Flat-Brian-StaleJoints --env.scene.num-envs 4096 --agent.max-iterations 1500 --agent.seed 44 --agent.run-name EXP-020-s44 --env.rewards.feet_air_time.weight 3.10615 --env.rewards.action_rate.weight -0.32 --env.rewards.torques.weight -0.093384`. Run folder `~/dev/ironbark_runs/logs/rsl_rl/ironbark_s2_walk_brian_stale_joints/*_EXP-020-s44`, console log `~/dev/ironbark_runs/EXP-020-s44.log`.
+- **Seed 44** (trained and scored 2026-11-08, 44 min, no crash): `python tools/run.py train IronBark-S2-Walk-Flat-Brian-StaleJoints --env.scene.num-envs 4096 --agent.max-iterations 1500 --agent.seed 44 --agent.run-name EXP-020-s44 --env.rewards.feet_air_time.weight 3.10615 --env.rewards.action_rate.weight -0.32 --env.rewards.torques.weight -0.093384`. Run folder `~/dev/ironbark_runs/logs/rsl_rl/ironbark_s2_walk_brian_stale_joints/*_EXP-020-s44`, console log `~/dev/ironbark_runs/EXP-020-s44.log`.
+
+**Seeds 42/43/44, mean ± sample SD [min–max]** (scoreboard v1 overall + gait diagnostics, `model_1499.pt`, staleness and delay on):
+
+| Seed | Falls | Planar err [m/s] | Yaw err [rad/s] | Joint-target rate [rad/s] | CoT | Saturation | Flicker | Swing median [s] |
+|---|---|---|---|---|---|---|---|---|
+| 42 | 0.000 | 0.0297 | 0.0896 | 2.424 | 1.370 | 0.23% | 12.07% | 0.1840 |
+| 43 | 0.000 | 0.0335 | 0.0880 | 2.428 | 1.666 | 0.40% | 12.57% | 0.1840 |
+| 44 | 0.000 | 0.0322 | 0.0950 | 2.447 | 1.614 | 0.36% | 12.18% | 0.1840 |
+| **mean ± SD [min–max]** | 0.000 ± 0.000 [0.000–0.000] | 0.0318 ± 0.0019 [0.0297–0.0335] | 0.0909 ± 0.0037 [0.0880–0.0950] | 2.433 ± 0.012 [2.424–2.447] | 1.550 ± 0.158 [1.370–1.666] | 0.33% ± 0.09% [0.23%–0.40%] | 12.27% ± 0.27% [12.07%–12.57%] | 0.1840 ± 0.0000 [0.1840–0.1840] |
 
 ## Results (scoreboard: `metrics.py`)
 
@@ -110,6 +119,46 @@ Episode endings near iteration 1499: fell_over 1.8%, illegal_contact 9.2%, time_
 | episode length (steps) | 132 | 757 | 920 | 926 |
 
 Episode endings near iteration 1499: fell_over 3.0%, illegal_contact 12.0%, time_out 85.0%.
+
+**2026-11-08, scoreboard v1.** Run `2026-11-08_14-53-22_EXP-020-s44`, checkpoint `model_1499.pt` (iteration 1499), 32 dogs × 10 s per command, seed 0, mass 0.972 kg. Smoothness and CoT use only episodes that never fell; CoT is NaN by design where there's no ground speed (standing, turning in place).
+
+| Command (vx, vy, wz) | Fall rate | Planar err [m/s] | Yaw err [rad/s] | Joint-target rate [rad/s] | CoT |
+|---|---|---|---|---|---|
+| (+0.0, +0.0, +0.0) | 0.000 | 0.003 | 0.008 | 0.54 | nan |
+| (+0.2, +0.0, +0.0) | 0.000 | 0.032 | 0.084 | 2.65 | 1.12 |
+| (+0.4, +0.0, +0.0) | 0.000 | 0.057 | 0.126 | 3.86 | 1.36 |
+| (-0.2, +0.0, +0.0) | 0.000 | 0.035 | 0.077 | 2.58 | 1.15 |
+| (+0.0, +0.2, +0.0) | 0.000 | 0.039 | 0.131 | 2.71 | 1.61 |
+| (+0.0, -0.2, +0.0) | 0.000 | 0.032 | 0.112 | 2.92 | 1.66 |
+| (+0.0, +0.0, +0.5) | 0.000 | 0.028 | 0.120 | 2.25 | 2.79 |
+| (+0.0, +0.0, -0.5) | 0.000 | 0.032 | 0.101 | 2.05 | nan |
+| **overall (mean of rows)** | 0.000 | 0.032 | 0.095 | 2.45 | 1.61 |
+
+**2026-11-08, gait diagnostics (not scoreboard).** Run `2026-11-08_14-53-22_EXP-020-s44`, checkpoint `model_1499.pt`, 32 dogs × 10 s per command (first 1 s skipped), seed 0. Saturation: requested torque above the 0.43 N·m cap.
+
+| Servo saturation | Swing p10 [s] | Swing median [s] | Swing p90 [s] | Flicker touchdowns (< 0.02 s) | Touchdowns / foot / s |
+|---|---|---|---|---|---|
+| 0.36% | 0.008 | 0.184 | 0.208 | 12.2% | 2.26 |
+
+**2026-11-08, training curves (TensorBoard).** Run `2026-11-08_14-53-22_EXP-020-s44`. Reward rows: each term's per-step contribution (weight × value × dt), mean over ±10 iterations.
+
+| | iter 0 | iter 100 | iter 400 | iter 1499 |
+|---|---|---|---|---|
+| track_lin_vel_xy | +0.00515 | +0.01249 | +0.01570 | +0.01609 |
+| total | -0.00944 | +0.00752 | +0.01444 | +0.01554 |
+| track_ang_vel_z | +0.00336 | +0.00470 | +0.00578 | +0.00602 |
+| action_rate | -0.00886 | -0.00421 | -0.00338 | -0.00325 |
+| torques | -0.00241 | -0.00217 | -0.00205 | -0.00196 |
+| lin_vel_z | -0.00430 | -0.00158 | -0.00099 | -0.00087 |
+| feet_air_time | -0.00056 | +0.00054 | +0.00084 | +0.00085 |
+| orientation | -0.00085 | -0.00125 | -0.00074 | -0.00067 |
+| ang_vel_xy | -0.00054 | -0.00079 | -0.00059 | -0.00053 |
+| base_height | -0.00038 | -0.00014 | -0.00007 | -0.00007 |
+| joint_acc | -0.00005 | -0.00005 | -0.00006 | -0.00006 |
+| undesired_contacts | -2.9e-06 | -1.6e-05 | -3.4e-06 | -3.1e-06 |
+| episode length (steps) | 132 | 685 | 938 | 933 |
+
+Episode endings near iteration 1499: fell_over 2.3%, illegal_contact 10.9%, time_out 86.8%.
 
 ## What I saw (Brian: viewer, curves)
 
