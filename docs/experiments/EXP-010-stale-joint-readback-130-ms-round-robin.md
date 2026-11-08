@@ -1,6 +1,6 @@
 # EXP-010: stale joint readback (130 ms round-robin)
 
-**Status:** planned · **Parent:** EXP-009
+**Status:** trained 2026-11-07 (seed 42, 1500 iterations, 65 min incl. a slow start from GPU sharing, no crash), scored with the staleness and delay on; verdict pending (Brian) · **Parent:** EXP-009
 
 ## Hypothesis (Brian, before the run)
 
@@ -38,6 +38,66 @@ Unchanged from EXP-009: 40 ms command delay, reward (EXP-005's), terminations, c
 ## Results (scoreboard: `metrics.py`)
 
 _Pending. Filled by the evaluation harness once training finishes._
+
+**2026-11-07, scoreboard v1.** Run `2026-11-07_20-02-00_EXP-010`, checkpoint `model_1499.pt` (iteration 1499), 32 dogs × 10 s per command, seed 0, mass 0.972 kg. Smoothness and CoT use only episodes that never fell; CoT is NaN by design where there's no ground speed (standing, turning in place).
+
+| Command (vx, vy, wz) | Fall rate | Planar err [m/s] | Yaw err [rad/s] | Joint-target rate [rad/s] | CoT |
+|---|---|---|---|---|---|
+| (+0.0, +0.0, +0.0) | 0.000 | 0.003 | 0.007 | 0.70 | nan |
+| (+0.2, +0.0, +0.0) | 0.000 | 0.046 | 0.133 | 3.30 | 1.17 |
+| (+0.4, +0.0, +0.0) | 0.000 | 0.062 | 0.150 | 4.86 | 1.44 |
+| (-0.2, +0.0, +0.0) | 0.000 | 0.043 | 0.090 | 3.23 | 1.22 |
+| (+0.0, +0.2, +0.0) | 0.000 | 0.048 | 0.166 | 3.45 | 1.82 |
+| (+0.0, -0.2, +0.0) | 0.000 | 0.042 | 0.167 | 3.53 | 1.87 |
+| (+0.0, +0.0, +0.5) | 0.000 | 0.030 | 0.137 | 2.41 | 2.33 |
+| (+0.0, +0.0, -0.5) | 0.000 | 0.033 | 0.133 | 2.53 | 2.47 |
+| **overall (mean of rows)** | 0.000 | 0.038 | 0.123 | 3.00 | 1.76 |
+
+**2026-11-07, gait diagnostics (not scoreboard).** Run `2026-11-07_20-02-00_EXP-010`, checkpoint `model_1499.pt`, 32 dogs × 10 s per command (first 1 s skipped), seed 0. Saturation: requested torque above the 0.43 N·m cap.
+
+| Servo saturation | Swing p10 [s] | Swing median [s] | Swing p90 [s] | Flicker touchdowns (< 0.02 s) | Touchdowns / foot / s |
+|---|---|---|---|---|---|
+| 0.80% | 0.008 | 0.184 | 0.208 | 15.1% | 2.34 |
+
+**2026-11-07, training curves (TensorBoard).** Run `2026-11-07_20-02-00_EXP-010`. Reward rows: each term's per-step contribution (weight × value × dt), mean over ±10 iterations.
+
+| | iter 0 | iter 100 | iter 400 | iter 1499 |
+|---|---|---|---|---|
+| track_lin_vel_xy | +0.00505 | +0.00936 | +0.01490 | +0.01556 |
+| total | -0.00401 | +0.00594 | +0.01269 | +0.01388 |
+| track_ang_vel_z | +0.00344 | +0.00452 | +0.00520 | +0.00536 |
+| torques | -0.00335 | -0.00329 | -0.00367 | -0.00358 |
+| action_rate | -0.00234 | -0.00197 | -0.00181 | -0.00174 |
+| lin_vel_z | -0.00433 | -0.00098 | -0.00099 | -0.00088 |
+| orientation | -0.00087 | -0.00113 | -0.00086 | -0.00079 |
+| feet_air_time | -0.00065 | +0.00028 | +0.00072 | +0.00070 |
+| ang_vel_xy | -0.00052 | -0.00071 | -0.00065 | -0.00060 |
+| base_height | -0.00038 | -0.00008 | -0.00007 | -0.00007 |
+| joint_acc | -0.00005 | -0.00005 | -0.00007 | -0.00007 |
+| undesired_contacts | -4.3e-07 | -6.4e-06 | -3.4e-06 | -2.0e-06 |
+| episode length (steps) | 132 | 829 | 896 | 921 |
+
+Episode endings near iteration 1499: fell_over 3.8%, illegal_contact 12.0%, time_out 84.2%.
+
+**Reference `stale_joints`: task `IronBark-S2-Walk-Flat-Brian-StaleJoints-VelRef`.** **2026-11-07, scoreboard v1.** Run `2026-11-07_02-47-40_EXP-005`, checkpoint `model_1499.pt` (iteration 1499), 32 dogs × 10 s per command, seed 0, mass 0.972 kg. Smoothness and CoT use only episodes that never fell; CoT is NaN by design where there's no ground speed (standing, turning in place).
+
+| Command (vx, vy, wz) | Fall rate | Planar err [m/s] | Yaw err [rad/s] | Joint-target rate [rad/s] | CoT |
+|---|---|---|---|---|---|
+| (+0.0, +0.0, +0.0) | 0.000 | 0.003 | 0.011 | 1.14 | nan |
+| (+0.2, +0.0, +0.0) | 0.000 | 0.084 | 0.206 | 7.59 | 1.91 |
+| (+0.4, +0.0, +0.0) | 0.000 | 0.133 | 0.300 | 10.60 | 1.84 |
+| (-0.2, +0.0, +0.0) | 0.000 | 0.064 | 0.175 | 6.84 | 1.71 |
+| (+0.0, +0.2, +0.0) | 0.000 | 0.071 | 0.229 | 6.65 | 2.20 |
+| (+0.0, -0.2, +0.0) | 0.000 | 0.075 | 0.205 | 7.42 | 2.53 |
+| (+0.0, +0.0, +0.5) | 0.000 | 0.043 | 0.165 | 5.28 | 4.13 |
+| (+0.0, +0.0, -0.5) | 0.000 | 0.033 | 0.164 | 5.51 | nan |
+| **overall (mean of rows)** | 0.000 | 0.064 | 0.182 | 6.38 | 2.39 |
+
+**Reference `stale_joints`: task `IronBark-S2-Walk-Flat-Brian-StaleJoints-VelRef`.** **2026-11-07, gait diagnostics (not scoreboard).** Run `2026-11-07_02-47-40_EXP-005`, checkpoint `model_1499.pt`, 32 dogs × 10 s per command (first 1 s skipped), seed 0. Saturation: requested torque above the 0.43 N·m cap.
+
+| Servo saturation | Swing p10 [s] | Swing median [s] | Swing p90 [s] | Flicker touchdowns (< 0.02 s) | Touchdowns / foot / s |
+|---|---|---|---|---|---|
+| 2.38% | 0.008 | 0.176 | 0.216 | 19.9% | 2.57 |
 
 ## What I saw (Brian: viewer, curves)
 
