@@ -5,3 +5,21 @@
 {"logged_at": "2026-11-07T19:32:56.059", "frame": 105, "event": "battery_low", "urgent": true, "source": "cache", "outcome": "speak", "reason": "urgent: skips the cooldown"}
 {"logged_at": "2026-11-07T19:32:57.062", "frame": 110, "event": "fell", "urgent": true, "source": "cache", "outcome": "speak", "reason": "urgent: cuts off the current line"}
 {"logged_at": "2026-11-07T19:33:04.140", "frame": 145, "event": "behavior_changed", "urgent": false, "source": "haiku", "outcome": "speak", "reason": "ok"}
+{"logged_at": "2026-11-07T19:38:26.163", "frame": 10, "event": "target_found", "urgent": false, "source": "cache", "outcome": "speak", "reason": "ok"}
+{"logged_at": "2026-11-07T19:38:26.166", "frame": 10, "event": "behavior_changed", "urgent": false, "source": "haiku", "outcome": "drop", "reason": "busy: already talking (dropped, P3)"}
+{"logged_at": "2026-11-07T19:38:33.585", "frame": 47, "event": "target_lost", "urgent": false, "source": "cache", "outcome": "speak", "reason": "ok"}
+{"logged_at": "2026-11-07T19:38:40.202", "frame": 80, "event": "target_reacquired", "urgent": false, "source": "cache", "outcome": "drop", "reason": "cooldown: 3.5 s of 4.0 s (dropped, P3)"}
+{"logged_at": "2026-11-07T19:38:45.217", "frame": 105, "event": "battery_low", "urgent": true, "source": "cache", "outcome": "speak", "reason": "urgent: skips the cooldown"}
+{"logged_at": "2026-11-07T19:38:46.219", "frame": 110, "event": "fell", "urgent": true, "source": "cache", "outcome": "speak", "reason": "urgent: cuts off the current line"}
+{"logged_at": "2026-11-07T19:38:46.269", "frame": 105, "event": "battery_low", "urgent": true, "source": "cache", "outcome": "queue", "reason": "cut off by a fall; requeued to play after the interrupting line"}
+{"logged_at": "2026-11-07T19:38:49.310", "frame": 105, "event": "battery_low", "urgent": true, "source": "cache", "outcome": "speak", "reason": "queued: plays right after the previous line, skipping the cooldown"}
+{"logged_at": "2026-11-07T19:38:53.291", "frame": 145, "event": "behavior_changed", "urgent": false, "source": "haiku", "outcome": "drop", "reason": "cooldown: 1.4 s of 4.0 s (dropped, P3)"}
+{"logged_at": "2026-11-07T19:39:46.067", "frame": 10, "event": "target_found", "urgent": false, "source": "cache", "outcome": "speak", "reason": "ok"}
+{"logged_at": "2026-11-07T19:39:46.070", "frame": 10, "event": "behavior_changed", "urgent": false, "source": "haiku", "outcome": "drop", "reason": "busy: already talking (dropped, P3)"}
+{"logged_at": "2026-11-07T19:39:53.490", "frame": 47, "event": "target_lost", "urgent": false, "source": "cache", "outcome": "speak", "reason": "ok"}
+{"logged_at": "2026-11-07T19:40:01.122", "frame": 85, "event": "target_reacquired", "urgent": false, "source": "cache", "outcome": "speak", "reason": "ok"}
+{"logged_at": "2026-11-07T19:40:06.141", "frame": 110, "event": "battery_low", "urgent": true, "source": "cache", "outcome": "speak", "reason": "urgent: skips the cooldown"}
+{"logged_at": "2026-11-07T19:40:07.146", "frame": 115, "event": "fell", "urgent": true, "source": "cache", "outcome": "speak", "reason": "urgent: cuts off the current line"}
+{"logged_at": "2026-11-07T19:40:07.200", "frame": 110, "event": "battery_low", "urgent": true, "source": "cache", "outcome": "queue", "reason": "cut off by a fall; requeued to play after the interrupting line"}
+{"logged_at": "2026-11-07T19:40:10.321", "frame": 110, "event": "battery_low", "urgent": true, "source": "cache", "outcome": "speak", "reason": "queued: plays right after the previous line, skipping the cooldown"}
+{"logged_at": "2026-11-07T19:40:18.229", "frame": 170, "event": "behavior_changed", "urgent": false, "source": "haiku", "outcome": "speak", "reason": "ok"}
