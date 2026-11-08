@@ -9,6 +9,7 @@ description = "Locomotion RL for the IronBark robot dog (Yahboom DogZilla S2)"
 requires-python = ">=3.11"
 # No declared dependencies: mjlab, mujoco, warp, torch and Luwu's luwu_mjlab
 # (imported as `src`) come from the `luwu_mjlab` conda env. See docs/progress.md.
+# tools/reward_search.py also needs optuna (5.0.0 there: pip install optuna).
 
 [tool.setuptools.packages.find]
 include = ["ironbark_rl*"]
