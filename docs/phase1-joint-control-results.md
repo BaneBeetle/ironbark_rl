@@ -103,6 +103,18 @@ Back-to-back reads, no joint commands; `joint_control_imu_20261108-001338.jsonl`
 - Frozen stretches: 987 ms (13 of them), 966 ms (2), 714 ms, 588 ms; 51% of reads repeat (41% before step 760, 62% after). Live stretches: 84-3171 ms. While live, every channel changes every step (~21 ms).
 - 6 suspect reads (same definition). Other reads: roll p1/p50/p99 = -55.0 / -1.4 / +68.6 deg, pitch -29.8 / -0.5 / +14.5 deg (tilting after step 760), |accel| 9.52 / 9.78 / 9.99 m/s^2.
 
+## IMU read-only checks (2026-11-07, Pi clock 11-08 00:47-00:50; numbers only)
+
+**`imu-probe`** (`joint_control_imu-probe_20261108-004747.jsonl`; dog still, read requests only):
+- **Register `0x61` (self-stabilization): 0, 0, 0, 0, 0** (off).
+- **Side by side** (`read_imu()` + `read_imu_int16()` roll/pitch/yaw each iteration; 11.6 ms per iteration):
+  - `read_imu()` frozen stretches 1003, 992, 992, 432 ms; 29.3% of reads repeat; 1 zeroed vector.
+  - The int16 registers freeze in the same stretches (1003, 992, 992, 431-432 ms). Over 999 consecutive pairs: both repeat or both change in 97.2%; the int16 value never changes while `read_imu()` repeats; 28 times it repeats while `read_imu()` changes.
+  - **The three int16 "axes" return the same value on every iteration** (roll == pitch == yaw in 100%), 44 distinct values, low byte 0xFF in 97.1%; correlation with `read_imu()` roll/pitch/yaw is |r| <= 0.08 (accel_x 0.48).
+- **Slow reads** (one `read_imu()` per 98.5 ms median): frozen stretches 983, 982, 980, 886, 886, 884, 882, 882, 784, 491 ms; 29.4% of reads repeat; 0 zeroed vectors.
+
+**`imu --label still-imu0 --set-imu-mode 0`** (`joint_control_imu_20261108-005045.jsonl`): `0x61` read 0 before and 0 after `imu(0)` (it was already off). `read_imu()`: frozen stretches 999 and 533 ms; 42.5% of reads repeat; 2 zeroed vectors. `read_roll()` / `read_pitch()`: 604, 465 / 615, 460 ms.
+
 ## Open
 
 - Re-run `sine` with the fixed probe if Brian wants joints 12 and 13. The Pi went offline before the fixed probe could be deployed (it still has `8e1cab7`).
