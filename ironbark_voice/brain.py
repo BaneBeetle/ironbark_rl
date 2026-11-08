@@ -9,10 +9,13 @@ from dataclasses import dataclass
 
 from ironbark_voice import config
 
-# Brian's personality spec, turned into a system prompt. v1 2026-11-07: chill bro dog.
-# v2 2026-11-07, to match the Tilly voice: a tiny dog with big-bro energy. It never changes
-# at runtime, so it is a stable prefix (cacheable later if it ever grows past the cache minimum).
-PERSONA = f"""You are IronBark, a tiny robot dog with big-bro energy, saying your thoughts out loud to the people around you.
+# Brian's personality spec, turned into system prompts. Old versions stay here so a new one
+# can be A/B-compared against them on identical settings (`python -m ironbark_voice.persona_ab`).
+# A persona never changes at runtime, so it is a stable prefix (cacheable later if it ever
+# grows past the cache minimum).
+#   v1 2026-11-07: chill bro dog (in git history only; replaced before any lines were judged).
+#   v2 2026-11-07: tiny dog with big-bro energy, to match the Tilly voice.
+PERSONA_V2 = f"""You are IronBark, a tiny robot dog with big-bro energy, saying your thoughts out loud to the people around you.
 
 Your voice is small and squeaky, but you talk like a big, laid-back bro. That contrast is the joke, so play it straight: never mention your voice. Now and then you can own being tiny, but mostly you're just the big bro.
 
@@ -23,6 +26,9 @@ How you speak:
 - One line, at most {config.MAX_WORDS_PER_LINE} words.
 - Plain spoken words only: a text-to-speech voice reads it aloud. No emojis, quotes, hashtags or stage directions.
 - Only talk about what the robot state shows. Don't invent people, objects or places you can't sense."""
+
+PERSONAS = {"v2": PERSONA_V2}  # name -> prompt, for A/B comparisons
+PERSONA = PERSONAS["v2"]  # the one the dog uses
 
 
 @dataclass(frozen=True)
@@ -50,7 +56,8 @@ def clean_line(raw: str) -> str:
 
 
 class LineWriter:
-    def __init__(self, client=None, model: str = config.HAIKU_MODEL):
+    def __init__(self, client=None, model: str = config.HAIKU_MODEL, persona: str = PERSONA):
+        self.persona = persona  # system prompt; overridable so persona versions can be compared
         if client is None:
             import anthropic
 
@@ -72,7 +79,7 @@ class LineWriter:
         response = self._client.messages.create(
             model=self.model,
             max_tokens=config.HAIKU_MAX_TOKENS,
-            system=PERSONA,
+            system=self.persona,
             # Thinking off: a 12-word quip gains nothing from it and it costs time to first token.
             # Haiku 5.5 allows "disabled" at effort high or below.
             thinking={"type": "disabled"},

@@ -40,6 +40,12 @@ def test_request_is_fast_haiku_with_persona():
     assert "battery=62%" in call["messages"][0]["content"]
 
 
+def test_persona_can_be_swapped_for_ab_tests():
+    client = SimpleNamespace(messages=FakeMessages("Yo."))
+    LineWriter(client=client, persona="TEST PERSONA").write_line("x", "")
+    assert client.messages.calls[0]["system"] == "TEST PERSONA"
+
+
 def test_result_is_cleaned_and_counted():
     w, _ = writer('  "There you are, bro! Thought I lost you."\n')
     result = w.write_line("target_reacquired", "")
