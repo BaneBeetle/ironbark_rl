@@ -132,9 +132,25 @@ def failed_constraints(m: dict[str, float]) -> list[str]:
     return [name for name, c in (("saturation", sat), ("planar", planar)) if c > 0]
 
 
+def overshoots(m: dict[str, float]) -> dict[str, float]:
+    """How far each constraint is missed, as a fraction of its limit (0 = met)."""
+    return {"saturation": max(0.0, m["saturated_share"] / SATURATION_MAX - 1.0),
+            "planar": max(0.0, m["planar_error_mps"] / PLANAR_ERROR_MAX_MPS - 1.0)}
+
+
+def constraint_miss(m: dict[str, float]) -> float:
+    """Brian (2026-11-08): failing trials rank by how far they miss the constraints. Claude's reading: the overshoots summed."""
+    return sum(overshoots(m).values())
+
+
 def ranked(rows: list[dict]) -> list[dict]:
-    """Brian: trials failing a constraint rank below all that pass. Within each group: lower flicker first."""
-    return sorted(rows, key=lambda r: (bool(failed_constraints(r["metrics"])), r["metrics"]["flicker_share"]))
+    """Brian: trials failing a constraint rank below all that pass, passing ones by flicker (lower first),
+    failing ones by how far they miss (smaller first; flicker breaks a tie)."""
+    def key(r):
+        miss = constraint_miss(r["metrics"])
+        return (miss > 0, miss, r["metrics"]["flicker_share"])
+
+    return sorted(rows, key=key)
 
 
 def _num(x: float) -> str:
@@ -155,9 +171,14 @@ def summary_text(m: dict[str, float]) -> str:
             f"saturation {m['saturated_share']:.2%}")
 
 
+def constraints_cell(m: dict[str, float]) -> str:
+    over = {k: v for k, v in overshoots(m).items() if v > 0}
+    return "pass" if not over else "fail: " + ", ".join(f"{k} +{v:.1%}" for k, v in over.items())
+
+
 def constraints_text(m: dict[str, float]) -> str:
-    failed = failed_constraints(m)
-    return "constraints pass" if not failed else "constraints fail (" + ", ".join(failed) + ")"
+    cell = constraints_cell(m)
+    return "constraints pass" if cell == "pass" else f"constraints {cell.replace('fail: ', 'fail (')} over the limit)"
 
 
 def guard_flags(g: dict) -> list[str]:
@@ -329,7 +350,9 @@ def search_doc(study, now: str) -> str:
         "The weights go in as command-line overrides; `reward_config.py` isn't edited.",
         f"- Constraints (unrounded): servo saturation <= {SATURATION_MAX:.1%} (`gait_check`) and planar error <= {PLANAR_ERROR_MAX_MPS} m/s "
         "(scoreboard v1 overall). Objective: minimize flicker (`gait_check` share of touchdowns after swings < 0.02 s).",
-        "- Ranking (Brian): trials that pass both constraints first, lower flicker first; then trials that fail one, also by flicker.",
+        "- Ranking (Brian): trials that pass both constraints first, lower flicker first; then trials that fail, by how far they miss "
+        "(Brian, 2026-11-08): each constraint's overshoot as a fraction of its limit, summed (Claude's reading; the Miss column), "
+        "smaller first, flicker breaking a tie.",
         f"- {PARENT} (seed 42, the start weights) is in the study as a known point: trained before the search, not retrained.",
         f"- Reward guard (Brian, 2026-11-08): before each trial trains, `tools/reward_check.py` runs with the trial's weights: standing still "
         f"(zero command, zero action) and {PARENT}'s policy on the command grid (\"walking\"). A negative standing or walking per-step total "
@@ -342,18 +365,17 @@ def search_doc(study, now: str) -> str:
         "",
         f"## Ranked trials ({now})",
         "",
-        "| Rank | Exp | feet_air_time | action_rate (x start) | torques (x start) | Constraints | Saturation | Planar err [m/s] | Flicker "
+        "| Rank | Exp | feet_air_time | action_rate (x start) | torques (x start) | Constraints | Miss | Saturation | Planar err [m/s] | Flicker "
         "| Falls | Yaw err [rad/s] | Joint-target rate [rad/s] | CoT | Swing median [s] | Guard: standing / walking per step |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for rank, r in enumerate(ranked(rows(study)), 1):
         w, m = r["weights"], r["metrics"]
         g = study.user_attrs.get("parent_guard") if r["exp"] == PARENT else r.get("guard")
-        failed = failed_constraints(m)
         exp = f"[{r['exp']}]({_entry_name(r['exp'])})" + (" (known point)" if r["exp"] == PARENT else f" (trial {r['number']})")
         lines.append(
             f"| {rank} | {exp} | {_num(w['feet_air_time'])} | {_num(w['action_rate'])} ({w['action_rate'] / start['action_rate']:.2f}x) "
-            f"| {_num(w['torques'])} ({w['torques'] / start['torques']:.2f}x) | {'pass' if not failed else 'fail: ' + ', '.join(failed)} "
+            f"| {_num(w['torques'])} ({w['torques'] / start['torques']:.2f}x) | {constraints_cell(m)} | {constraint_miss(m):.1%} "
             f"| {m['saturated_share']:.2%} | {m['planar_error_mps']:.4f} | {m['flicker_share']:.1%} | {m['fall_rate']:.3f} "
             f"| {m['yaw_rate_error_radps']:.3f} | {m['joint_target_rate_radps']:.2f} | {m['cost_of_transport']:.2f} | {m['swing_median_s']:.3f} "
             f"| {guard_short(g)} |")

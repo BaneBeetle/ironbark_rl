@@ -67,12 +67,22 @@ def test_constraints_are_inclusive():
     assert rs.failed_constraints(metrics(sat=0.009, planar=0.0351)) == ["planar"]
 
 
-def test_failing_trials_rank_below_every_passing_one():
+def test_failing_trials_rank_below_every_passing_one_by_how_far_they_miss():
     rows = [{"exp": "A", "metrics": metrics(flicker=0.20)},
-            {"exp": "B", "metrics": metrics(flicker=0.05, sat=0.02)},  # lowest flicker, but fails saturation
+            {"exp": "B", "metrics": metrics(flicker=0.05, sat=0.018)},  # lowest flicker; saturation 100% over its limit
             {"exp": "C", "metrics": metrics(flicker=0.12)},
-            {"exp": "D", "metrics": metrics(flicker=0.10, planar=0.04)}]
-    assert [r["exp"] for r in rs.ranked(rows)] == ["C", "A", "B", "D"]
+            {"exp": "D", "metrics": metrics(flicker=0.30, planar=0.0385)},  # worst flicker; planar only 10% over
+            {"exp": "E", "metrics": metrics(flicker=0.25, sat=0.0099, planar=0.0385)}]  # 10% + 10% over
+    assert [r["exp"] for r in rs.ranked(rows)] == ["C", "A", "D", "E", "B"]
+
+
+def test_miss_is_the_overshoots_summed_as_fractions_of_their_limits():
+    assert rs.constraint_miss(metrics(sat=0.009, planar=0.035)) == 0.0
+    assert rs.overshoots(metrics(sat=0.0099, planar=0.0385)) == pytest.approx({"saturation": 0.1, "planar": 0.1})
+    assert rs.constraint_miss(metrics(sat=0.0099, planar=0.0385)) == pytest.approx(0.2)
+    assert rs.constraints_cell(metrics(sat=0.0099, planar=0.0300)) == "fail: saturation +10.0%"
+    assert rs.constraints_text(metrics(sat=0.0099, planar=0.0385)) == "constraints fail (saturation +10.0%, planar +10.0% over the limit)"
+    assert rs.constraints_text(metrics()) == "constraints pass"
 
 
 def template_entry(exp_id="EXP-099"):
