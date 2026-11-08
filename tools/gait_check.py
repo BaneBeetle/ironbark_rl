@@ -10,7 +10,7 @@ COMMAND_GRID, play config, terminations off, fixed seed, first SKIP_S seconds sk
   than FLICKER_SWING_S (counted as flicker);
 - touchdowns per foot per second.
 Reads simulator tensors only, never the task's reward. Run it only while nothing is training.
-Writes gait_<checkpoint>.json next to the checkpoint; --exp appends a dated block to that
+Writes gait_<checkpoint>[_<tag>].json next to the checkpoint (--tag: scoring under another task's conditions); --exp appends a dated block to that
 experiment's Results (append-only), labeled as diagnostics.
 """
 
@@ -90,13 +90,14 @@ def markdown(r: dict) -> str:
             f"{100 * r['flicker_share']:.1f}% | {r['touchdowns_per_foot_per_s']:.2f} |")
 
 
-def append_to_experiment(exp_id: str, r: dict, table: str) -> Path:
+def append_to_experiment(exp_id: str, r: dict, table: str, tag: str | None = None, task: str | None = None) -> Path:
     matches = sorted(EXPERIMENTS_DIR.glob(f"{exp_id}-*.md"))
     if len(matches) != 1:
         sys.exit(f"expected one file for {exp_id}, found {[m.name for m in matches]}")
     path = matches[0]
     text = path.read_bytes().decode("utf-8")
-    block = (f"**{r['date']}, gait diagnostics (not scoreboard).** Run `{Path(r['checkpoint']).parent.name}`, checkpoint "
+    label = f"**Reference `{tag}`: task `{task}`.** " if tag else ""
+    block = label + (f"**{r['date']}, gait diagnostics (not scoreboard).** Run `{Path(r['checkpoint']).parent.name}`, checkpoint "
              f"`{Path(r['checkpoint']).name}`, {r['episodes_per_command']} dogs × {r['seconds']:g} s per command (first {SKIP_S:g} s "
              f"skipped), seed {r['seed']}. Saturation: requested torque above the {r['servo_cap_nm']:.2f} N·m cap.\n\n{table}\n\n")
     if RESULTS_ANCHOR not in text:
@@ -113,15 +114,16 @@ def main() -> None:
     p.add_argument("--episodes-per-command", type=int, default=evaluation.EPISODES_PER_COMMAND)
     p.add_argument("--seconds", type=float, default=evaluation.EVAL_SECONDS)
     p.add_argument("--seed", type=int, default=evaluation.EVAL_SEED)
+    p.add_argument("--tag", default=None, help="suffix for the output file and label for the --exp block (another task's conditions)")
     args = p.parse_args()
     r = diagnose(args.task, args.checkpoint, args.episodes_per_command, args.seconds, args.seed)
     table = markdown(r)
     print(table)
-    out = args.checkpoint.with_name(f"gait_{args.checkpoint.stem}.json")
+    out = args.checkpoint.with_name(f"gait_{args.checkpoint.stem}{'_' + args.tag if args.tag else ''}.json")
     out.write_text(json.dumps(r, indent=2), encoding="utf-8")
     print(f"saved {out}")
     if args.exp:
-        print("appended to", append_to_experiment(args.exp, r, table))
+        print("appended to", append_to_experiment(args.exp, r, table, args.tag, args.task))
 
 
 if __name__ == "__main__":

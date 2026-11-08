@@ -7,6 +7,10 @@ Conditions (see ironbark_rl/evaluation.py): every COMMAND_GRID command x 32 dogs
 commands pinned, start from rest, no pushes or noise, falls judged by metrics.is_fallen,
 fixed seed. Writes eval_<scoreboard>_<checkpoint>.json next to the checkpoint; --exp
 appends the table (dated) to that experiment's Results section.
+
+--tag NAME scores a checkpoint under another task's conditions without touching its own results:
+the file becomes eval_<scoreboard>_<checkpoint>_NAME.json and the block names the tag and task
+(e.g. EXP-005's policy under EXP-009's command delay).
 """
 
 import argparse
@@ -22,13 +26,14 @@ EXPERIMENTS_DIR = REPO / "docs" / "experiments"
 RESULTS_ANCHOR = "## What I saw"  # results are inserted just above this heading
 
 
-def append_to_experiment(exp_id: str, result: dict, table: str) -> Path:
+def append_to_experiment(exp_id: str, result: dict, table: str, tag: str | None = None, task: str | None = None) -> Path:
     matches = sorted(EXPERIMENTS_DIR.glob(f"{exp_id}-*.md"))
     if len(matches) != 1:
         sys.exit(f"expected one file for {exp_id}, found {[m.name for m in matches]}")
     path = matches[0]
     text = path.read_text(encoding="utf-8")
-    block = (
+    label = f"**Reference `{tag}`: task `{task}`.** " if tag else ""
+    block = label + (
         f"**{result['date']}, scoreboard {result['scoreboard_version']}.** Run `{Path(result['checkpoint']).parent.name}`, "
         f"checkpoint `{Path(result['checkpoint']).name}` (iteration {result['iteration']}), "
         f"{result['episodes_per_command']} dogs × {result['seconds']:g} s per command, seed {result['seed']}, "
@@ -50,6 +55,7 @@ def main() -> None:
     p.add_argument("--episodes-per-command", type=int, default=EPISODES_PER_COMMAND)
     p.add_argument("--seconds", type=float, default=EVAL_SECONDS)
     p.add_argument("--seed", type=int, default=EVAL_SEED)
+    p.add_argument("--tag", default=None, help="suffix for the output file and label for the --exp block")
     args = p.parse_args()
 
     checkpoint = args.checkpoint or latest_checkpoint(args.task)
@@ -60,11 +66,12 @@ def main() -> None:
     print(f"\n{args.task} · {Path(checkpoint).name} · scoreboard {result['scoreboard_version']}\n")
     print(table)
 
-    out = Path(checkpoint).with_name(f"eval_{result['scoreboard_version']}_{Path(checkpoint).stem}.json")
+    suffix = f"_{args.tag}" if args.tag else ""
+    out = Path(checkpoint).with_name(f"eval_{result['scoreboard_version']}_{Path(checkpoint).stem}{suffix}.json")
     out.write_text(json.dumps(result, indent=2), encoding="utf-8")
     print(f"saved {out}")
     if args.exp:
-        print(f"appended to {append_to_experiment(args.exp, result, table).relative_to(REPO)}")
+        print(f"appended to {append_to_experiment(args.exp, result, table, args.tag, args.task).relative_to(REPO)}")
 
 
 if __name__ == "__main__":
