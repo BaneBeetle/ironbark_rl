@@ -22,3 +22,7 @@ desktop.ini
 
 # Machine-local Claude Code preview config (absolute paths)
 .claude/launch.json
+
+# Generated voice audio (rebuildable from text; may hold licensed voice output)
+samples/
+audio_cache/
