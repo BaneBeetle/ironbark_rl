@@ -76,3 +76,16 @@ Same install: dist `xgolib 1.1.10` (`__init__.py` says 1.1.9, `xgolib_dog.py` sa
 - `motor_speed(0..255)`, 0 becomes 1. Whether 255 is fastest: `# MEASURE:` `step --speeds 255,128,64`.
 - `move_x(step)`: one byte over ±`VX_LIMIT` = 25; the source gives no physical unit. `stop()` = `move_x(0)`, `move_y(0)`, `mark_time(0)`, `turn(0)`. `reset()` = `action(255)`.
 - `SCAN_PORTS = ["/dev/ttyAMA5", "/dev/ttyAMA0"]`; this Pi has `/dev/ttyAMA0` and `/dev/ttyAMA10` only. `config.V2_MOTION_PORT` = `/dev/ttyAMA0` @ 115200.
+
+## IMU freezes: firmware and config check, 2026-11-07 (Brian's request; nothing changed on the dog)
+
+- **Firmware:** `M-4.0.1-Y`, from `read_firmware()` in every probe log header (Brian's runs; Claude never opens the port).
+- **Newer firmware / update tool:** no public motion-board firmware release, changelog or file found. Checked: Yahboom's DOGZILLA tutorial index (no firmware-update lesson; downloads are Pi system images, apps, "Software calibration", "Communication Protocol"), Luwu's XGO-PythonLib README ("burn the latest official image", i.e. the Pi image, plus `pip install --upgrade`), web search, the Pi's disk (no `.bin` or other XGO/Yahboom library), PyPI. xgolib has `upgrade(filename)`: register `0x05`, then the raw `.bin` at 350000 baud; its own docstring says "testing phase, do not use". Getting a newer firmware would mean asking Yahboom (support@yahboom.com).
+- **xgolib version:** 1.1.10 is the newest on PyPI (2026-08-26; 16 releases since 2025-10-28). No notes anywhere tie xgolib versions to firmware versions; xgolib only switches its limit table on the firmware's first letter.
+- **Every IMU-related call in `xgolib_dog.py`:**
+  - `imu(mode)`: writes register `0x61`, self-stabilization 0 off / 1 on. Yahboom: "the robot dog will automatically adjust the posture angle to keep the back at the horizontal position". With 1, the firmware moves the legs.
+  - `read_imu()`: `0x65`, 24-byte block. `read_roll/pitch/yaw()`: `0x62-0x64` floats. `read_imu_int16(axis)`: `0x66-0x68` int16, not yet tested.
+  - `set_yaw_init()`: a Pi-side offset only. `calibration(state)` (`0x04`, "use with caution!!!") is servo software calibration, not IMU.
+  - No IMU refresh-rate, filter or IMU-calibration setting exists.
+- **Yahboom's protocol PDF** ("DOGZILLA STM32 serial communication protocol", 2022-08-30, Google Drive linked from the tutorial): `0x61` "IMU state", **read/write, default 0x00**, 0x00 close / 0x01 self-stable mode; `0x62-0x64` roll/pitch/yaw read. It has no `0x65-0x68` and no IMU rate setting; it predates this firmware (the S2's motion board is an ESP32).
+- **Unknown:** whether self-stabilization was on during the IMU runs. The probe never calls `imu()`; `motor_controller.py` sends `imu(0)` at its startup; the 2022 doc's default is off. Register `0x61` can be read, which changes nothing.
