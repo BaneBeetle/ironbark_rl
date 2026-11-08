@@ -25,6 +25,7 @@ vs. EXP-010: three reward weights, picked by the search (Brian's search varies t
 Brian (2026-11-08): "Run seeds 43 and 44 for EXP-017, EXP-018 and EXP-015 (my top 3; I rank by saturation first, then tracking, then flicker)." Same weights, task and scoring as seed 42; one run at a time.
 
 - **Seed 43** (trained and scored 2026-11-08, 44 min, no crash): `python tools/run.py train IronBark-S2-Walk-Flat-Brian-StaleJoints --env.scene.num-envs 4096 --agent.max-iterations 1500 --agent.seed 43 --agent.run-name EXP-018-s43 --env.rewards.feet_air_time.weight 3.37843 --env.rewards.action_rate.weight -0.32 --env.rewards.torques.weight -0.0772526`. Run folder `~/dev/ironbark_runs/logs/rsl_rl/ironbark_s2_walk_brian_stale_joints/*_EXP-018-s43`, console log `~/dev/ironbark_runs/EXP-018-s43.log`.
+- **Seed 44** (training 2026-11-08): `python tools/run.py train IronBark-S2-Walk-Flat-Brian-StaleJoints --env.scene.num-envs 4096 --agent.max-iterations 1500 --agent.seed 44 --agent.run-name EXP-018-s44 --env.rewards.feet_air_time.weight 3.37843 --env.rewards.action_rate.weight -0.32 --env.rewards.torques.weight -0.0772526`. Run folder `~/dev/ironbark_runs/logs/rsl_rl/ironbark_s2_walk_brian_stale_joints/*_EXP-018-s44`, console log `~/dev/ironbark_runs/EXP-018-s44.log`.
 
 ## Results (scoreboard: `metrics.py`)
 
