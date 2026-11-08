@@ -1,0 +1,40 @@
+IronBark V2 — W5 deadman verification (no Pi, no motion)
+
+Both arming gates driven through their real code paths; only the
+ZMQ socket is swapped for a recorder, so every assertion is about
+the JSON that would actually have gone on the wire.
+
+A. teleop (pc/remote_control.py) — hold-to-arm with lapse
+  [PASS] starts disarmed: w alone never leaves stop
+  [PASS] F then w drives forward
+  [PASS] SPACE disarms: nothing but stop after it
+  [PASS] exiting always sends a final stop (asserted inside run())
+  [PASS] arm lapses after ~1 s of no input
+  [PASS] re-arming after a lapse works
+  [PASS] disarmed ticks still emit an explicit stop (not silence)
+
+B. follower (pc/follower.py) — toggle arm + panic key
+[Follower] Command PUB bound on 127.0.0.1:5556
+[Follower] Telemetry SUB connected to 127.0.0.1:5558
+  [PASS] starts disarmed
+[Follower] IDLE → FOLLOW
+[FOLLOW] tid=#7 area=0.167 off_x=-140
+[Follower] WARNING: no forward-clearance data — LiDAR silent and depth disabled. FOLLOW will drive forward on vision alone; the obstacle veto, cornered and imminent checks are ALL dark this session.
+[Trace] src=turn_left hyst=turn_left→forward (1/3) final=forward
+  [PASS] disarmed: a visible target still only produces stop
+  [PASS] ...and the FSM still ran (state advanced to FOLLOW)
+[Follower] ARMED — commands now reach the dog
+  [PASS] 'a' arms
+  [PASS] armed: real motion reaches the wire
+[Follower] panic key 120 — disarming
+[Follower] DISARMED — stop sent, only stops will flow
+  [PASS] any other key disarms
+  [PASS] disarm pushes a stop immediately, not on the next tick
+  [PASS] disarmed again: only stop
+[Follower] ARMED — commands now reach the dog
+  [PASS] re-arm works after a panic stop
+[Follower] DISARMED — stop sent, only stops will flow
+  [PASS] 'a' toggles back off
+  [PASS] note_key ignores the no-key sentinels
+
+All deadman checks passed.
