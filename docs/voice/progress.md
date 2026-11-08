@@ -95,6 +95,33 @@ Brian's:
 - Battery % is read out in 4 of 10 lines (as words, e.g. "forty-seven").
 - Haiku latency 0.62–0.93 s per line. Rendering cost 59 (v2) / 58 (v3) credits for 5 lines.
 
+## 2026-11-07 (late): v2 back live; the "too high-pitched" line
+
+**Brian's verdict on the A/B:** "v2 better but follow started on both too high pitched. the
+rest good." The live persona is back to v2.
+
+**Pitch measured** with a scratch autocorrelation F0 tracker (120–700 Hz band, so values near
+670 Hz may be capped; fine for comparing lines, not for absolute pitch):
+- In the A/B clips, v2 follow_started had a median F0 of **571 Hz**; the other v2 lines
+  were 229–393 Hz.
+- The only two lines ending in "!" were the highest in their sets (571 Hz in v2, 511 Hz in v3).
+
+**Experiment:** the same line ("Alright, I've got you now, let's roll"), 3 takes per variant,
+72 credits:
+
+| Variant | Median F0 per take | Takes > 500 Hz |
+|---|---|---|
+| A: as written, ends in "!" | 600, 558, 258 Hz | 2 of 3 |
+| B: "!" → "." | 268, 329, 397 Hz | 0 of 3 |
+| C: "." + `stability=0.75` | 338, 242, 253 Hz | 0 of 3 |
+
+- Read: "!" makes Tilly's delivery spike into squeak on most takes. Dropping it removes the
+  spikes, and stability 0.75 lowers and tightens it further.
+- Caveat 1: n=3 per variant.
+- Caveat 2: C sends only `stability`, so ElevenLabs may have reset Tilly's other stored
+  settings for those takes. Listen for whether C still sounds like Tilly.
+- WAVs are in `samples/pitch_fix/` (gitignored). Which fix to adopt is Brian's call.
+
 **Interview talking point:** split the latency budget into parts (LLM → text, TTS → first
 audio byte, device buffer) and measure each one separately. Caching the common lines removes
 both network hops for the lines that matter most. That's precomputation, traded against
