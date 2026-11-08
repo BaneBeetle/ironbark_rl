@@ -29,6 +29,7 @@ Scored like EXP-010: the delay and the staleness stay on in the play config.
 - Task: `IronBark-S2-Walk-Flat-StaleJoints`
 - Seed: 42 · Iterations: 1500 · Envs: 4096
 - Train: `python tools/run.py train IronBark-S2-Walk-Flat-StaleJoints --env.scene.num-envs 4096 --agent.max-iterations 1500 --agent.seed 42 --agent.run-name EXP-011`
+- Note: at ~21:31 a ~20 s GPU render from another Claude session (the IronBark website) overlapped EXP-011's first iterations (reported by that session). It affects timing only.
 - Guard: skipped (Luwu's reward; README rule 2). Tests: 171 passed + 5 sim tests (EXP-011's actor and critic inputs match EXP-010's).
 - Run folder: `~/dev/ironbark_runs/logs/rsl_rl/ironbark_s2_walk_stale_joints/*_EXP-011`
 
