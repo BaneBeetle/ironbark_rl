@@ -1,0 +1,7 @@
+{"logged_at": "2026-11-07T19:32:36.957", "frame": 10, "event": "target_found", "urgent": false, "source": "cache", "outcome": "speak", "reason": "ok"}
+{"logged_at": "2026-11-07T19:32:36.967", "frame": 10, "event": "behavior_changed", "urgent": false, "source": "haiku", "outcome": "drop", "reason": "busy: already talking (dropped, P3)"}
+{"logged_at": "2026-11-07T19:32:44.423", "frame": 47, "event": "target_lost", "urgent": false, "source": "cache", "outcome": "speak", "reason": "ok"}
+{"logged_at": "2026-11-07T19:32:51.043", "frame": 80, "event": "target_reacquired", "urgent": false, "source": "cache", "outcome": "drop", "reason": "cooldown: 3.9 s of 4.0 s (dropped, P3)"}
+{"logged_at": "2026-11-07T19:32:56.059", "frame": 105, "event": "battery_low", "urgent": true, "source": "cache", "outcome": "speak", "reason": "urgent: skips the cooldown"}
+{"logged_at": "2026-11-07T19:32:57.062", "frame": 110, "event": "fell", "urgent": true, "source": "cache", "outcome": "speak", "reason": "urgent: cuts off the current line"}
+{"logged_at": "2026-11-07T19:33:04.140", "frame": 145, "event": "behavior_changed", "urgent": false, "source": "haiku", "outcome": "speak", "reason": "ok"}
