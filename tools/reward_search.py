@@ -11,7 +11,7 @@ ranks the trials of both together, against the latest stage's limits.
 
   python tools/reward_search.py run [--stage 1|2]   # loop until STOP: ask -> entry -> train -> score -> tell -> table
   python tools/reward_search.py table    # rewrite the search page from the studies (CPU only)
-  python tools/reward_search.py replicate EXP-017 EXP-018 EXP-015 --seeds 43 44   # Brian's picks, other seeds
+  python tools/reward_search.py replicate EXP-017 EXP-018 EXP-015 EXP-020 --seeds 43 44   # Brian's picks, other seeds
 
 Control files in the study folder, checked between trials only (a running trial always finishes):
   PAUSE   wait with the GPU free until the file is removed (e.g. while another session renders)
@@ -123,6 +123,8 @@ def storage_url(stage: int) -> str:
 # Brian, 2026-11-08, verbatim (the part about seeds; the rest of the message is in docs/journal.md).
 REPLICATE_REQUEST = ("Run seeds 43 and 44 for EXP-017, EXP-018 and EXP-015 (my top 3; I rank by saturation first, "
                      "then tracking, then flicker).")
+REPLICATE_REQUEST_2 = "Add EXP-020 to the seed replicates (seeds 43 and 44)."  # Brian, 2026-11-08, verbatim: a fourth pick
+REPLICATE_REQUESTS = {"EXP-020": REPLICATE_REQUEST_2}  # picks from a later message; the others are REPLICATE_REQUEST's
 REPLICATE_HEADING = "### Seed replicates (same setup, different seed: measures the noise floor, rule 4)"
 RESULTS_HEADING = "## Results (scoreboard: `metrics.py`)"
 
@@ -397,13 +399,18 @@ def seed_line(seed: int, cmd: str, run_name: str, state: str) -> str:
             f"console log `~/dev/ironbark_runs/{run_name}.log`.")
 
 
-def set_seed_line(text: str, seed: int, line: str) -> str:
+def replicate_request(exp_id: str) -> str:
+    """Brian's words that asked for this trial's seed replicates."""
+    return REPLICATE_REQUESTS.get(exp_id, REPLICATE_REQUEST)
+
+
+def set_seed_line(text: str, seed: int, line: str, request: str = REPLICATE_REQUEST) -> str:
     """Add or replace this seed's line in the entry's Seed replicates block (made before Results on first use)."""
     if REPLICATE_HEADING not in text:
         old = "\n" + RESULTS_HEADING
         if text.count(old) != 1:
             raise ValueError("no Results heading")
-        block = (f"\n{REPLICATE_HEADING}\n\nBrian (2026-11-08): \"{REPLICATE_REQUEST}\" Same weights, task and scoring "
+        block = (f"\n{REPLICATE_HEADING}\n\nBrian (2026-11-08): \"{request}\" Same weights, task and scoring "
                  f"as seed {SEED}; one run at a time.\n\n{line}\n")
         return text.replace(old, block + old, 1)
     lines = text.split("\n")
@@ -626,7 +633,7 @@ def replicate_section(trials: list[dict], replicates: dict) -> list[str]:
     if not done:
         return []
     keys = [c for c in SEED_TABLE_COLUMNS if c[0] != "fall_rate"] + [SEED_TABLE_COLUMNS[0]]
-    lines = ["", "## Seed replicates (Brian's picks)", "", f"> {REPLICATE_REQUEST}", "",
+    lines = ["", "## Seed replicates (Brian's picks)", "", f"> {REPLICATE_REQUEST}", ">", f"> {REPLICATE_REQUEST_2}", "",
              "Mean ± sample SD over the seeds scored so far (per-seed rows and ranges are in each entry).", "",
              "| Exp | Seeds | " + " | ".join(c[1] for c in keys) + " |", "|---|---|" + "---|" * len(keys)]
     for exp, reps in done:
@@ -836,7 +843,8 @@ def replicate_loop(exp_ids: list[str], seeds: list[int]) -> int:
                 return 0
             name, today = f"{exp}-s{seed}", datetime.date.today()
             cmd = "python " + " ".join(train_args(name, weights, seed))
-            write(path, set_seed_line(path.read_text(encoding="utf-8"), seed, seed_line(seed, cmd, name, f"training {today}")))
+            write(path, set_seed_line(path.read_text(encoding="utf-8"), seed, seed_line(seed, cmd, name, f"training {today}"),
+                                      replicate_request(exp)))
             commit([path], f"{exp}: seed {seed} training (Brian's pick for seeds {'/'.join(map(str, seeds))})")
             print(f"START {name} {weights} {datetime.datetime.now():%F %T}", flush=True)
             try:

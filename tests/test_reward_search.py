@@ -215,6 +215,15 @@ def test_seed_block_goes_before_results_and_fills_in_order():
     assert lines.index(rs.RESULTS_HEADING) > i + 4
 
 
+def test_exp020_seed_block_quotes_brians_later_request():
+    assert rs.replicate_request("EXP-017") == rs.REPLICATE_REQUEST
+    assert rs.replicate_request("EXP-020") == "Add EXP-020 to the seed replicates (seeds 43 and 44)."
+    line = rs.seed_line(43, "python x", "EXP-020-s43", "training")
+    text = rs.set_seed_line(template_entry("EXP-020"), 43, line, rs.replicate_request("EXP-020"))
+    assert 'Brian (2026-11-08): "Add EXP-020 to the seed replicates (seeds 43 and 44)." Same weights' in text
+    assert rs.REPLICATE_REQUEST not in text
+
+
 def test_status_and_index_get_the_seed_summary():
     text = rs.set_status(template_entry(), "search trial 6 (Optuna); trained; constraints pass; verdict pending (Brian)")
     text = rs.add_to_status(text, "seeds 43/44 trained and scored 2026-11-08 (Brian's pick)")
