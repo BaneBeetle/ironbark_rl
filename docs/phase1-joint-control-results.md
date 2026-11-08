@@ -76,6 +76,7 @@ All 12 joints together, 3° at 0.556 Hz (the `--read-every 1` run): gain 0.92–
 ## Other numbers
 
 - **IMU yaw** between run starts: 135.9° → 206.9° over 177 s, with the dog on a stand. Rates between consecutive runs: 0.40, 0.40, 0.79, −0.21, 0.03 and 0.62 °/s. The V2 smoke log's clean boot drifted −0.009 °/s, and a boot where the dog was handled during bias sampling drifted −9.9 °/s.
+  - **Correction (2026-11-07):** the −0.009 °/s isn't a valid clean-boot baseline. It was measured on a yaw register that didn't change once in 30 s (V2 archive, `docs/v2-archive/MEASURED_FACTS.md`, "Corrections: what V2 got wrong about yaw"). These yaw numbers also span the ~1 s IMU freezes measured later.
 - **xgolib truncates commands:** commanding a read-back angle can land one byte low. Example: joint 11 reads 19.27° (byte 181); commanding 19.27° sends byte 180 (18.76°).
 
 ## IMU (`imu` run, 2026-11-07, Pi clock 11-08 00:13; numbers only)
@@ -90,6 +91,7 @@ Back-to-back reads, no joint commands; `joint_control_imu_20261108-001338.jsonl`
 - **Suspect reads:** 5 of 2000 have whole vectors at exactly 0.00 (accel xyz, or gyro xyz), one with gyro (-1513.7, +1623.4, +768.8) deg/s.
 - `read_roll()` phase (5.6 s): the value changed on 99 of 1000 reads.
 - Not yet measured: the refresh with the dog still, and at a policy-like read rate (one IMU read per ~20 ms loop).
+- **Gyro unit is disputed:** xgolib divides the raw int16 by 16.4 (the usual +-2000 deg/s scale, so deg/s, as written here); V2's MEASURED_FACTS lists rad/s, raw, not bias-subtracted. `# MEASURE:` rotate the dog by a known angle and integrate, before a policy uses the gyro.
 
 ## IMU reruns (2026-11-07, Pi clock 11-08 00:29-00:30; numbers only)
 

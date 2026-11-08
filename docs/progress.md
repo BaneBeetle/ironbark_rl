@@ -17,7 +17,7 @@
 - 10° steps: delay 50–144 ms, ≥ 90% within 250 ms, final error within ±1.25°; `motor_speed` 255/128/64 made no consistent difference at this resolution.
 - Sine (joint 11, 10°): gain 0.96 / 0.89 / 0.32 at 1.1 / 2.2 / 4.3 Hz, lag 86–108 ms.
 - **`motor()` preempts the firmware gait**, and every joint drives to its last joint-mode setpoint (unsent joints jumped ~8°). `stop()` returns control to the firmware.
-- Yaw between runs: +71° over 177 s on a stand (0.4 °/s typical, vs −0.009 °/s on a clean boot in the V2 smoke log).
+- Yaw between runs: +71° over 177 s on a stand (0.4 °/s typical, vs −0.009 °/s on a clean boot in the V2 smoke log). Correction: that −0.009 °/s was measured on a frozen register (V2 archive), so it's no baseline.
 
 **Probe fixes from this run:** `e1cc046` (the sine abort was a false positive: a stale reading) and `f9a9f4f` (send all 12 joints' measured angles first). 24 + 5 new tests; 117 pass. **Not yet deployed:** the Pi went offline right after the run and still has `8e1cab7`.
 
