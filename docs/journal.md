@@ -2,6 +2,16 @@
 
 Brian's decisions and verdicts, dated, in his words. Newest first. Numbers and run details are in [progress.md](progress.md) and the [experiment files](experiments/README.md).
 
+## 2026-11-08: stop rule for search stage 2
+
+> Stop rule for Stage 2: stop when (a) a trial beats Luwu's EXP-011 3-seed means on saturation, planar tracking and flicker, confirmed with seeds 43/44; or (b) 6 consecutive trials with no improvement beyond seed noise over the current best; or (c) 2 nights of GPU time. Then lock the winner and move to deployment prep (domain randomization, gyro units, joint mapping).
+
+The message came in with stage 2 already running (EXP-021, since 15:39). Claude's readings where the message is silent (on the search page, for Brian to change):
+- (a) The bars are EXP-011's unrounded means: saturation 0.950%, planar 0.03104 m/s, flicker 18.52%. So the saturation bar is Luwu's 0.95%, not stage 2's 0.3% limit. A trial that beats all three at seed 42 gets seeds 43/44 straight away; (a) fires if its 42/43/44 means beat all three.
+- (b) Only trials newly trained in stage 2 count (not the known points, not confirmation seeds). An improvement is a trial that passes stage 2's limits at seed 42 with flicker more than 0.79 points below the current best. The current best starts at EXP-020 (12.07%). 0.79 points is the pooled flicker SD over the six 3-seed sets so far (EXP-010, 011, 015, 017, 018, 020).
+- (c) "2 nights" is 16 h (2 × 8 h) of recorded training time: stage-2 trials plus their confirmation seeds.
+- Under (b) or (c) the winner is rank 1 on the search page. When a rule fires the driver exits; locking the winner and the deployment-prep design questions then go through Brian.
+
 ## 2026-11-08: owner verify allowed despite the no-identity rule
 
 Claude asked whether to change `CLAUDE.md`'s no-identity rule to allow the owner verify in [roadmap.md](roadmap.md) Phase 1 (VLM verify with multi-reference photos). Brian:
