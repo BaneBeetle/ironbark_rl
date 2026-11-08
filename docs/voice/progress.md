@@ -150,6 +150,20 @@ rest good." The live persona is back to v2.
 - Building the cache cost 116 credits, once. Cached lines cost nothing after that.
 - n is small: 4 cached lines and 1 Haiku line in one run.
 
+## 2026-11-07 (later): battery_low queues instead of interrupting
+
+**Brian's change:** only falls interrupt; `battery_low` waits for the current line, then plays
+right after it, skipping the cooldown, and is never dropped (`decisions.md`). 72 tests,
+including threaded ones:
+- battery queued behind a line
+- battery cut off by a fall and replayed after it
+
+**Demo replay re-run** (retimed so every cached event clears the cooldown):
+- found, lost and reacquired: first sound 0.19–0.20 s after each event
+- `battery_low` → cut off by the fall → requeued → played right after the fall line (logged
+  4.37 s after its detection, the wait included)
+- final `behavior_changed` → Haiku, 1.39 s
+
 **Interview talking point:** split the latency budget into parts (LLM → text, TTS → first
 audio byte, device buffer) and measure each one separately. Caching the common lines removes
 both network hops for the lines that matter most. That's precomputation, traded against
