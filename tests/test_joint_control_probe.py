@@ -331,3 +331,46 @@ def test_imu_loop_holds_all_12_and_reads_both_every_step(tmp_path):
     assert all(r["cmd"]["ids"] == probe.LEG_IDS and r["read"]["ok"] for r in loop)
     assert all(r["cmd"]["deg"] == [float(j % 10) for j in probe.LEG_IDS] for r in loop)  # holds, never moved
     assert [r["i"] for r in rows if r.get("name") == "mark"] == [2, 6]
+
+
+def imu_fake(state_values=(0,)):
+    link = FakeLink()
+    states = iter(list(state_values) * 10)
+    link.imu_block = lambda: [0.0, 0.0, -9.8, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+    link.imu_int16 = lambda axis: {"roll": 12, "pitch": -3, "yaw": 900}[axis]
+    link.imu_state = lambda: next(states)
+    return link
+
+
+def test_imu_probe_only_reads(tmp_path, capsys):
+    link = imu_fake(state_values=(1,))
+    code, rows = run(tmp_path, ["imu-probe", "--samples", "4", "--slow-iters", "3", "--pad-reads", "2"], link)
+    imu = [r for r in rows if r["type"] == "imu"]
+    assert code == 0 and link.writes == [] and "set_imu_mode_off" not in [c[0] for c in link.calls]
+    assert [r["v"] for r in imu if r["call"] == "read_0x61"] == [1] * probe.IMU_STATE_READS
+    assert [r["call"] for r in imu if r["phase"] == "alongside"][:4] == ["read_imu", "int16_roll", "int16_pitch", "int16_yaw"]
+    assert sum(r["phase"] == "alongside" for r in imu) == 4 * 4
+    assert sum(r["phase"] == "slow" for r in imu) == 3
+    assert sum(r.get("phase") == "slow_pad" for r in rows if r["type"] == "sample") == 3 * 2
+    assert "ON: run" in capsys.readouterr().out
+
+
+def test_imu_set_mode_0_sends_imu0_once_and_reads_back(tmp_path):
+    link = imu_fake(state_values=(1, 0))
+    link.set_imu_mode_off = lambda: link.calls.append(("set_imu_mode_off", ()))
+    code, rows = run(tmp_path, ["imu", "--samples", "2", "--set-imu-mode", "0"], link)
+    assert code == 0 and [c[0] for c in link.calls].count("set_imu_mode_off") == 1
+    (state,) = [r for r in rows if r.get("name") == "imu_state"]
+    assert state["values"] == [1, 0]
+
+
+def test_imu_without_flag_never_touches_0x61(tmp_path):
+    link = imu_fake()
+    link.roll, link.pitch = (lambda: 0.0), (lambda: 0.0)
+    run(tmp_path, ["imu", "--samples", "2"], link)
+    assert "set_imu_mode_off" not in [c[0] for c in link.calls]
+
+
+def test_set_imu_mode_accepts_only_0():
+    with pytest.raises(SystemExit):
+        probe.main(["imu", "--set-imu-mode", "1"], link=imu_fake())

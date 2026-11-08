@@ -6,6 +6,7 @@ all four feet off the ground, motor_controller stopped, a hand on the power swit
 
   cd ~/ironbark && .venv/bin/python joint_control_probe.py read                    # readback latency + max rate; no joint commands
   cd ~/ironbark && .venv/bin/python joint_control_probe.py imu --label still       # IMU refresh rate; no joint commands
+  cd ~/ironbark && .venv/bin/python joint_control_probe.py imu-probe               # read-only: 0x61, int16 IMU registers, slow reads
   cd ~/ironbark && .venv/bin/python joint_control_probe.py imu-loop                # IMU in a policy-like loop (holds all 12 joints)
   cd ~/ironbark && .venv/bin/python joint_control_probe.py map                     # wiggle each joint id; you name the leg/joint
   cd ~/ironbark && .venv/bin/python joint_control_probe.py passive --leg 1         # torque OFF on one leg, move it by hand
@@ -72,6 +73,7 @@ LIMIT_ROW = {1: 0, 2: 1, 3: 2}
 # motor_controller uses up to 14 (V2_FORWARD_STEP_MAX). Proposed by Claude; Brian's call.
 GAIT_PROBE_STEP = 5.0
 GAIT_STEP_MAX = 14.0  # never above what motor_controller already uses (V2_FORWARD_STEP_MAX)
+IMU_STATE_REGISTER = 0x61  # XGOorder["IMU"]; Yahboom's protocol: "IMU state", read/write, 0 close / 1 self-stable
 COMMAND_ROUNDING = "nearest"  # XgoLink.write adds half a byte step; logs before 2026-11-07 evening are "truncate"
 IMU_READY_MAX_READS = 5000  # read_yaw() polls before giving up. MEASURE: bias-sampling length after power-on
 
@@ -100,6 +102,12 @@ STEP_SAMPLES = 150  # reads after each step edge. MEASURE: must outlast the rise
 MAP_WIGGLES = 2  # `map`: out-and-back moves per joint before asking (r repeats)
 READ_SAMPLES = 2000  # `read`: back-to-back read_motor() calls
 IMU_SAMPLES = 2000  # `imu`: reads per phase (read_imu blocks, then read_roll/read_pitch alternating)
+IMU_PROBE_SAMPLES = 1000  # `imu-probe`: read_imu + 3 int16 reads per iteration (~12 ms each, ~12 s)
+IMU_STATE_READS = 5  # `imu-probe`: reads of register 0x61
+SLOW_IMU_ITERS = 300  # `imu-probe` slow phase: ~30 s, long enough for several ~1 s freezes
+# read_motor() calls between slow IMU reads: 26 x 3.6 ms + 4.1 ms ~ 100 ms (Brian's ~100 ms).
+# MEASURE: the actual spacing comes from the logged timestamps.
+SLOW_IMU_PAD_READS = 26
 IMU_LOOP_ITERS = 1500  # `imu-loop`: policy-like iterations (~20 ms each, so ~30 s: still, then tilting)
 PASSIVE_MAX_SAMPLES = 20000  # `passive`: upper bound; Enter ends it earlier
 SINE_PERIODS = "200,100,50,25"  # sine periods in samples; the analysis converts to Hz with the logged clock
@@ -154,6 +162,21 @@ class XgoLink:
         # read_imu(): 24-byte register 0x65. unpack_imu -> accel xyz (int16 / 16384 * 9.8, m/s^2),
         # gyro xyz (int16 / 16.4, deg/s), roll/pitch/yaw (float deg / 180 * 3.14, ~rad). [] on failure.
         return list(self.dog.read_imu())
+
+    def imu_state(self):
+        """Register 0x61, self-stabilization (0 off, 1 on). A read request only (mode 0x02).
+
+        xgolib has no public reader for it, so this calls xgolib's private __read/__unpack exactly the way
+        its own read_battery() does. Returns None if the reply doesn't arrive.
+        """
+        self.dog._XGO_DOG__read(IMU_STATE_REGISTER, 1)
+        return int(self.dog.rx_data[0]) if self.dog._XGO_DOG__unpack() else None
+
+    def imu_int16(self, axis):
+        return self.dog.read_imu_int16(axis)  # registers 0x66-0x68 ("roll"/"pitch"/"yaw"), int16; [] on failure
+
+    def set_imu_mode_off(self):
+        self.dog.imu(0)  # writes 0x61 = 0: the firmware stops its own leg corrections (Brian: only if 0x61 reads 1)
 
     def roll(self):
         return self.dog.read_roll()  # float deg, rounded to 2 dp; 0 on failure
@@ -348,7 +371,18 @@ def run_read(s, args, ui):
 
 
 def run_imu(s, args, ui):
-    """Back-to-back IMU reads; no joint commands. Refresh rate = how often each channel's value changes."""
+    """Back-to-back IMU reads; no joint commands. Refresh rate = how often each channel's value changes.
+
+    --set-imu-mode 0 (Brian: only if imu-probe read 0x61 = 1) first turns self-stabilization off and reads
+    0x61 back. It's the one write this test can send.
+    """
+    if getattr(args, "set_imu_mode", None) is not None:
+        before = imu_call(s, "imu_state", "read_0x61", s.link.imu_state)
+        s.event("set_imu_mode", value=0, before=before)
+        s.link.set_imu_mode_off()
+        after = imu_call(s, "imu_state", "read_0x61", s.link.imu_state)
+        s.event("imu_state", values=[before, after])
+        print(f"register 0x61: {before} -> imu(0) -> {after}")
     calls = {"read_imu": s.link.imu_block, "read_roll": s.link.roll, "read_pitch": s.link.pitch}
     for phase, names in (("imu_block", ["read_imu"]), ("roll_pitch", ["read_roll", "read_pitch"])):
         for k in range(args.samples):
@@ -357,6 +391,38 @@ def run_imu(s, args, ui):
             value = calls[name]()
             t1 = ns()
             s.rec.write("imu", phase=phase, call=name, t0=t0, t1=t1, v=value)
+
+
+def imu_call(s, phase, call, fn, **tags):
+    """One timed IMU read, logged as an `imu` row."""
+    t0 = ns()
+    value = fn()
+    t1 = ns()
+    s.rec.write("imu", phase=phase, call=call, t0=t0, t1=t1, v=value, **tags)
+    return value
+
+
+def run_imu_probe(s, args, ui):
+    """Brian's read-only IMU checks (2026-11-07), dog still on the stand. Sends no commands, only read requests:
+    1. register 0x61 (self-stabilization state), IMU_STATE_READS times;
+    2. read_imu() alongside read_imu_int16 roll/pitch/yaw every iteration: do the int16 registers freeze too?
+    3. slow: one read_imu() per ~100 ms, paced by read_motor() calls through the serial link (no clock).
+    """
+    states = [imu_call(s, "imu_state", "read_0x61", s.link.imu_state) for _ in range(IMU_STATE_READS)]
+    s.event("imu_state", values=states)
+    verdict = "ON: run `imu --label still-imu0 --set-imu-mode 0` next" if 1 in states else (
+        "off" if set(states) == {0} else "unclear (see the log)")
+    print(f"register 0x61 (self-stabilization): {states} -> {verdict}")
+    print(f"alongside: {args.samples} x (read_imu + read_imu_int16 roll/pitch/yaw). Keep the dog still.")
+    for i in range(args.samples):
+        imu_call(s, "alongside", "read_imu", s.link.imu_block, i=i)
+        for axis in ("roll", "pitch", "yaw"):
+            imu_call(s, "alongside", f"int16_{axis}", lambda a=axis: s.link.imu_int16(a), i=i)
+    print(f"slow: {args.slow_iters} x (read_imu + {args.pad_reads} read_motor), ~100 ms each. Keep the dog still.")
+    for i in range(args.slow_iters):
+        imu_call(s, "slow", "read_imu", s.link.imu_block, i=i)
+        for _ in range(args.pad_reads):
+            s.tick("slow_pad")  # read_motor() only: it's what spaces the IMU reads
 
 
 def run_imu_loop(s, args, ui):
@@ -554,7 +620,7 @@ def run_map(s, args, ui):
         print(json.dumps({"map": answers, "duplicates": duplicates}, indent=1))
 
 
-TESTS = {"read": run_read, "imu": run_imu, "imu-loop": run_imu_loop, "map": run_map, "passive": run_passive, "step": run_step, "sine": run_sine, "rate": run_rate, "gait": run_gait}
+TESTS = {"read": run_read, "imu": run_imu, "imu-probe": run_imu_probe, "imu-loop": run_imu_loop, "map": run_map, "passive": run_passive, "step": run_step, "sine": run_sine, "rate": run_rate, "gait": run_gait}
 
 
 # ---------------------------------------------------------------------------------- plumbing
@@ -634,6 +700,13 @@ def build_parser():
     im = sub.add_parser("imu", help="back-to-back IMU reads; no joint commands")
     im.add_argument("--samples", type=int, default=IMU_SAMPLES)
     im.add_argument("--label", default=None, help="free text kept in the header, e.g. still")
+    im.add_argument("--set-imu-mode", type=int, choices=[0], default=None,
+                    help="first send imu(0): self-stabilization off (only if imu-probe read 0x61 = 1)")
+    ip = sub.add_parser("imu-probe", help="read-only: 0x61 state, int16 IMU registers alongside read_imu, slow reads")
+    ip.add_argument("--samples", type=int, default=IMU_PROBE_SAMPLES)
+    ip.add_argument("--slow-iters", type=int, default=SLOW_IMU_ITERS)
+    ip.add_argument("--pad-reads", type=int, default=SLOW_IMU_PAD_READS)
+    ip.add_argument("--label", default=None, help="free text kept in the header")
     il = sub.add_parser("imu-loop", help="policy-like loop: hold all 12 joints, read_motor + read_imu each step")
     il.add_argument("--iters", type=int, default=IMU_LOOP_ITERS)
     il.add_argument("--label", default=None, help="free text kept in the header")
