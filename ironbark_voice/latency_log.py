@@ -50,6 +50,7 @@ class LineTiming:
             "event_to_first_sound_s": None if pb.first_sound_s is None else pb.first_sound_s - self.event_s,
             "playback_s": pb.end_s - (pb.first_write_s if pb.first_write_s is not None else pb.start_s),
             "audio_bytes": pb.num_bytes,
+            "interrupted": pb.interrupted,  # cut off by an urgent event (P2)
             "haiku_input_tokens": self.haiku_input_tokens,
             "haiku_output_tokens": self.haiku_output_tokens,
             "tts_chars": len(self.text),
