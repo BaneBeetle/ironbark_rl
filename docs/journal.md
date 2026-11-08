@@ -2,6 +2,12 @@
 
 Brian's decisions and verdicts, dated, in his words. Newest first. Numbers and run details are in [progress.md](progress.md) and the [experiment files](experiments/README.md).
 
+## 2026-11-07: IMU reruns, and an IMU sanity filter for deployment
+
+> Agreed, I'll run both: dog still first, then the policy-like loop. Add a note for deployment: the runtime needs an IMU sanity filter (reject zeroed/impossible vectors, detect freezes). If the onboard IMU proves unusable, the fallback is a separate I2C IMU wired directly to the Pi; log that as an option.
+
+Context: the first `imu` run (dog handled, then set on the floor) showed ~1 s freezes of the whole IMU block and a few zeroed or impossible vectors. Logged in [deployment-notes.md](deployment-notes.md).
+
 ## 2026-11-07: joint map verified on the dog
 
 > 11 was fl calf, 12 is fl thigh, 13 is fl hip, 21 is fr calf, 22 is fr thigh, 23 is fr hip, 31 is br calf, 32 is br  thigh, 33 is br hip, 41 is bl calf, 42 is bl thigh, 43 is bl hip
