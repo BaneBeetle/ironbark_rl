@@ -2,6 +2,14 @@
 
 Brian's decisions and verdicts, dated, in his words. Newest first. Numbers and run details are in [progress.md](progress.md) and the [experiment files](experiments/README.md).
 
+## 2026-11-07: EXP-011, the fair fight (Luwu's reward under EXP-010's latency)
+
+> Fair fight: train Luwu's reward with EXP-010's latency conditions (40 ms delay + stale joints, same actor obs as EXP-010) as EXP-011, seed 42, then score it under the same conditions. If it's close to EXP-010, run seeds 43 and 44 for both.
+
+> "Close" = any metric within seed noise (~5% tracking, ~9% smoothness/saturation, from EXP-000). If close, run seeds 43 and 44 for both.
+
+Hypothesis is in [EXP-011](experiments/EXP-011-fair-fight-luwu-reward-under-exp-010-latency.md).
+
 ## 2026-11-07: Pi-hang safety requirements before any policy deployment
 
 > Add to the V3 safety plan (from docs/v2-archive/findings/2026-09-30-pi-hang.md): if the Pi hangs, the motion board keeps executing the last command, and the Pi-side watchdog can't stop it. Before any policy deployment: (1) test what the board does if the Pi stops sending mid-motion in joint mode vs gait mode, dog on the stand; (2) every motion session needs a physical kill switch within reach (power switch or battery disconnect); (3) log enough before each session that a hang leaves evidence. Add this to docs/deployment-notes.md.

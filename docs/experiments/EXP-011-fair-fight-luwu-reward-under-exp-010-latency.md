@@ -8,7 +8,9 @@
 
 Written 2026-11-07, before training.
 
-**Seed rule (Brian, verbatim):** ""Close" = any metric within seed noise (~5% tracking, ~9% smoothness/saturation, from EXP-000). If close, run seeds 43 and 44 for both." 
+**Seed rule (Brian, verbatim):**
+
+> "Close" = any metric within seed noise (~5% tracking, ~9% smoothness/saturation, from EXP-000). If close, run seeds 43 and 44 for both.
 
 ## Change (one variable)
 
