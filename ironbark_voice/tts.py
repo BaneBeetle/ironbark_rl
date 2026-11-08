@@ -31,20 +31,31 @@ class ElevenLabsTTS:
         self.voice_id = voice_id
         self.model_id = model_id
         self.output_format = output_format
+        # Filled from the response headers of the latest request. Credits come from the
+        # "character-cost" header: the real charge per line, measured rather than computed
+        # from a price table, and readable without the key's user_read permission.
+        self.last_credits: int | None = None
+        self.last_request_id: str | None = None
 
     def stream_pcm(self, text: str) -> Iterator[bytes]:
         """Yield PCM byte chunks as they arrive, so playback can start before synthesis ends.
 
         Example: stream_pcm("Yo, found you!") -> b"\\x01\\x00\\xfe\\xff...", b"...", ...
         (16-bit little-endian mono at config.TTS_SAMPLE_RATE_HZ; chunk sizes vary and can be
-        odd, so the player re-aligns them to whole samples).
+        odd, so the player re-aligns them to whole samples). After the first chunk,
+        last_credits holds what this line cost.
         """
-        return self._client.text_to_speech.stream(
+        # with_raw_response exposes the headers; the plain .stream() call hides them.
+        with self._client.text_to_speech.with_raw_response.stream(
             voice_id=self.voice_id,
             text=text,
             model_id=self.model_id,
             output_format=self.output_format,  # raw PCM: no decoder between network and speaker
-        )
+        ) as response:
+            cost = response.headers.get("character-cost")
+            self.last_credits = int(cost) if cost is not None else None
+            self.last_request_id = response.headers.get("request-id")  # for support tickets
+            yield from response.data
 
     def synthesize_pcm(self, text: str) -> bytes:
         """Whole clip in one bytes object: for pre-generating cached lines, not live speech."""

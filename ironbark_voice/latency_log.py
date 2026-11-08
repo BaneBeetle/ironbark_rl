@@ -27,6 +27,7 @@ class LineTiming:
     tts_model: str | None = None
     haiku_input_tokens: int | None = None
     haiku_output_tokens: int | None = None
+    tts_credits: int | None = None  # ElevenLabs "character-cost" header for this line
 
     def record(self) -> dict:
         """Flat dict of the intervals that matter, in seconds (None where there was no sound).
@@ -51,6 +52,8 @@ class LineTiming:
             "audio_bytes": pb.num_bytes,
             "haiku_input_tokens": self.haiku_input_tokens,
             "haiku_output_tokens": self.haiku_output_tokens,
+            "tts_chars": len(self.text),
+            "tts_credits": self.tts_credits,  # measured charge; divide by tts_chars for credits per character
         }
 
 

@@ -1,32 +1,36 @@
 """ElevenLabs TTS client with a fake SDK: no network, no key."""
 
+from contextlib import contextmanager
+from types import SimpleNamespace
+
 from ironbark_voice import config
 from ironbark_voice.tts import ElevenLabsTTS
 
 
-class FakeTTSEndpoint:
-    """Stands in for client.text_to_speech: records the call, returns canned chunks."""
+class FakeRawTTS:
+    """Stands in for client.text_to_speech.with_raw_response: records the call, returns canned chunks + headers."""
 
-    def __init__(self, chunks):
+    def __init__(self, chunks, headers):
         self.chunks = chunks
+        self.headers = headers
         self.calls = []
 
+    @contextmanager
     def stream(self, **kwargs):
         self.calls.append(kwargs)
-        return iter(self.chunks)
+        yield SimpleNamespace(headers=self.headers, data=iter(self.chunks))
 
 
-class FakeElevenLabs:
-    def __init__(self, chunks):
-        self.text_to_speech = FakeTTSEndpoint(chunks)
+def fake_client(chunks, headers=None):
+    raw = FakeRawTTS(chunks, headers if headers is not None else {"character-cost": "15", "request-id": "req1"})
+    return SimpleNamespace(text_to_speech=SimpleNamespace(with_raw_response=raw)), raw
 
 
 def test_stream_sends_model_format_and_voice():
-    client = FakeElevenLabs([b"\x01\x02"])
+    client, raw = fake_client([b"\x01\x02"])
     tts = ElevenLabsTTS(voice_id="voice123", client=client)
     assert list(tts.stream_pcm("Yo, found you!")) == [b"\x01\x02"]
-    call = client.text_to_speech.calls[0]
-    assert call == {
+    assert raw.calls[0] == {
         "voice_id": "voice123",
         "text": "Yo, found you!",
         "model_id": config.TTS_MODEL,
@@ -34,6 +38,21 @@ def test_stream_sends_model_format_and_voice():
     }
 
 
+def test_credits_and_request_id_come_from_headers():
+    client, _ = fake_client([b"ab"])
+    tts = ElevenLabsTTS(voice_id="v", client=client)
+    assert tts.last_credits is None  # nothing sent yet
+    list(tts.stream_pcm("hi"))
+    assert (tts.last_credits, tts.last_request_id) == (15, "req1")
+
+
+def test_missing_cost_header_is_none():
+    client, _ = fake_client([b"ab"], headers={})
+    tts = ElevenLabsTTS(voice_id="v", client=client)
+    list(tts.stream_pcm("hi"))
+    assert tts.last_credits is None
+
+
 def test_synthesize_joins_chunks():
-    tts = ElevenLabsTTS(voice_id="v", client=FakeElevenLabs([b"ab", b"cd", b"e"]))
-    assert tts.synthesize_pcm("hi") == b"abcde"
+    client, _ = fake_client([b"ab", b"cd", b"e"])
+    assert ElevenLabsTTS(voice_id="v", client=client).synthesize_pcm("hi") == b"abcde"

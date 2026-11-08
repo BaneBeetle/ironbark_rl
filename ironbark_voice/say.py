@@ -48,7 +48,8 @@ def speak(text: str, voice_id: str, event: str, source: str, event_s: float, tex
     if wav_path:
         write_wav(wav_path, b"".join(kept))
     timing = LineTiming(event=event, source=source, text=text, event_s=event_s, text_ready_s=text_ready_s,
-                        playback=playback, voice_id=voice_id, tts_model=tts.model_id, **haiku_usage)
+                        playback=playback, voice_id=tts.voice_id, tts_model=tts.model_id,
+                        tts_credits=tts.last_credits, **haiku_usage)
     return latency_log.append(timing)
 
 
@@ -58,6 +59,7 @@ def print_record(rec: dict) -> None:
     print(f"  event->text {rec['event_to_text_s']:.3f} s | text->first write "
           f"{(rec['text_to_first_write_s'] or 0):.3f} s | device buffer {rec['device_latency_s']:.3f} s")
     print(f"  event->first sound {first:.3f} s (target median < {config.LATENCY_TARGET_P50_S} s)" if first is not None else "  no audio came back")
+    print(f"  cost {rec['tts_credits']} credits for {rec['tts_chars']} characters")
 
 
 def cmd_devices(args) -> None:
