@@ -81,6 +81,41 @@ Every spoken line now has "!" swapped for "." before it reaches ElevenLabs
 Questions keep their "?". Tilly's voice settings stay at her defaults (C not adopted). The
 measurements behind it are in `progress.md`.
 
+## 2026-11-07: triggers, pacing and cache (Brian)
+
+Brian's answers to `next-pieces.md`, as given:
+
+- **T1:** "frame-count based; exact number TBD once V2's perception rate is known (placeholder
+  # MEASURE:)." (`triggers.TARGET_LOST_FRAMES`)
+- **T2:** "yes, separate 'found' and 'reacquired' lines."
+- **T3:** "battery low at 20%, re-arms above 30%." (`BATTERY_LOW_PCT`, `BATTERY_REARM_PCT`)
+- **T4:** "yes, reuse tilt_deg and FALL_TILT_DEG so 'fell' means the same thing in sim and on
+  the dog." (the voice calls `ironbark_rl.brian.metrics.is_fallen` and doesn't modify it)
+- **P2:** "yes, a fall cuts off a line that's playing."
+- **P3:** "events during cooldown are dropped."
+- **P4:** "stale = its event is no longer true, OR it's older than the 1.5 s latency target."
+- **C1:** "3 variants per cached line, never the same one twice in a row."
+- **C2:** "Haiku handles any event not in the cache table."
+- **Pacing assumptions confirmed:** "both gaps count from when the previous line finishes;
+  the 4 s quiet also follows Haiku lines."
+
+Claude's choices while building, for Brian to veto (none of these were asked):
+- **`TARGET_LOST_FRAMES = 3`** as the T1 placeholder. That's 0.6 s at the replay's 5 Hz,
+  marked `# MEASURE:`.
+- **Interrupts:** only a fall interrupts (P2 named the fall). `battery_low` skips the
+  cooldown but waits for a line that's already playing to finish.
+- **`behavior_changed`** (e.g. IDLE → FOLLOW) is the one novel event, so Haiku has something to
+  say (C2). It's taken from Claude's C2 recommendation, which Brian accepted only in general
+  terms.
+- **Same-frame events** are handled urgent first, then cached, then Haiku. The rest are
+  dropped by P3 because the dog is already talking.
+- **Staleness is checked once**, when the line is ready to play (cached: right away; Haiku:
+  when its text comes back).
+- **Found and reacquired fire on the first visible frame** (no debounce; T1 covered only
+  "lost"). A one-frame flicker while lost would say "reacquired".
+- **"fell" fires on the upright → fallen transition** and re-arms once tilt drops back under
+  `FALL_TILT_DEG`. One noisy frame could trigger it.
+
 ## Context Claude found (for reference, not decisions)
 
 - **RemBeetle reuse.** Its ElevenLabs module (`tts/elevenlabs_tts.py`) is not in git; it

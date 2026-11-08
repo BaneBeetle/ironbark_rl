@@ -1,5 +1,8 @@
 # Voice: Brian's pieces, before they're built
 
+> **All questions answered (Brian, 2026-11-07).** See `decisions.md` for the answers and
+> the choices Claude made while building. This file stays as the pre-build record.
+
 Learning protocol: signatures with real example inputs and outputs first, then Brian's
 design calls, then the code. Nothing below is implemented yet. Recommendations are
 Claude's; the calls are Brian's.
