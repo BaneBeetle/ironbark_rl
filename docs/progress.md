@@ -1,5 +1,17 @@
 # Progress
 
+## 2026-11-08 (night): EXP-011 + seed replicates scored; Optuna reward-weight search running (Brian reads first; no interpretation here)
+
+Seeds 42/43/44, mean ± sample SD, delay + stale joints on (per-seed tables in each experiment file):
+
+| Experiment | Falls | Planar err [m/s] | Yaw err [rad/s] | Joint-target rate [rad/s] | CoT | Saturation | Flicker | Swing median [s] |
+|---|---|---|---|---|---|---|---|---|
+| EXP-010 (Brian's reward) | 0.000 ± 0.000 | 0.0359 ± 0.0021 | 0.1193 ± 0.0038 | 2.940 ± 0.061 | 1.553 ± 0.178 | 0.75% ± 0.05% | 14.63% ± 0.92% | 0.1827 ± 0.0023 |
+| EXP-011 (Luwu's reward) | 0.000 ± 0.000 | 0.0310 ± 0.0010 | 0.1183 ± 0.0081 | 2.398 ± 0.044 | 1.453 ± 0.044 | 0.95% ± 0.11% | 18.52% ± 1.11% | 0.1533 ± 0.0023 |
+
+- **Optuna search** (Brian's spec, [journal.md](journal.md); page [SEARCH-exp010-reward-weights.md](experiments/SEARCH-exp010-reward-weights.md)): `tools/reward_search.py run`, started 02:41. GP sampler over feet_air_time / action_rate / torques, EXP-010 as the known start point, reward guard before every trial (start weights: standing +0.0292, walking +0.0272). Trials are EXP-012 onward, ~60-70 min each. Pause: create `~/dev/ironbark_runs/optuna/PAUSE`; stop: `STOP`.
+- **Open (Brian):** verdicts on EXP-009/010/011; pick the top 2-3 search trials for seeds 43/44; milestone quiz; the queued IMU-freeze training experiment.
+
 ## 2026-11-07 (late): EXP-009 and EXP-010 scored; v2-archive merged (Brian reads first; no interpretation here)
 
 Scored with each experiment's latency on (Brian), seed 42, scoreboard v1 + `gait_check`:
