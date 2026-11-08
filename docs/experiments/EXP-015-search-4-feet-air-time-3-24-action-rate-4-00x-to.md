@@ -24,7 +24,7 @@ vs. EXP-010: three reward weights, picked by the search (Brian's search varies t
 
 Brian (2026-11-08): "Run seeds 43 and 44 for EXP-017, EXP-018 and EXP-015 (my top 3; I rank by saturation first, then tracking, then flicker)." Same weights, task and scoring as seed 42; one run at a time.
 
-- **Seed 43** (training 2026-11-08): `python tools/run.py train IronBark-S2-Walk-Flat-Brian-StaleJoints --env.scene.num-envs 4096 --agent.max-iterations 1500 --agent.seed 43 --agent.run-name EXP-015-s43 --env.rewards.feet_air_time.weight 3.24218 --env.rewards.action_rate.weight -0.32 --env.rewards.torques.weight -0.142453`. Run folder `~/dev/ironbark_runs/logs/rsl_rl/ironbark_s2_walk_brian_stale_joints/*_EXP-015-s43`, console log `~/dev/ironbark_runs/EXP-015-s43.log`.
+- **Seed 43** (trained and scored 2026-11-08, 44 min, no crash): `python tools/run.py train IronBark-S2-Walk-Flat-Brian-StaleJoints --env.scene.num-envs 4096 --agent.max-iterations 1500 --agent.seed 43 --agent.run-name EXP-015-s43 --env.rewards.feet_air_time.weight 3.24218 --env.rewards.action_rate.weight -0.32 --env.rewards.torques.weight -0.142453`. Run folder `~/dev/ironbark_runs/logs/rsl_rl/ironbark_s2_walk_brian_stale_joints/*_EXP-015-s43`, console log `~/dev/ironbark_runs/EXP-015-s43.log`.
 
 ## Results (scoreboard: `metrics.py`)
 
@@ -69,6 +69,46 @@ _Pending. Filled by the evaluation harness once training finishes._
 | episode length (steps) | 132 | 578 | 910 | 929 |
 
 Episode endings near iteration 1499: fell_over 3.6%, illegal_contact 12.5%, time_out 83.9%.
+
+**2026-11-08, scoreboard v1.** Run `2026-11-08_12-37-34_EXP-015-s43`, checkpoint `model_1499.pt` (iteration 1499), 32 dogs × 10 s per command, seed 0, mass 0.972 kg. Smoothness and CoT use only episodes that never fell; CoT is NaN by design where there's no ground speed (standing, turning in place).
+
+| Command (vx, vy, wz) | Fall rate | Planar err [m/s] | Yaw err [rad/s] | Joint-target rate [rad/s] | CoT |
+|---|---|---|---|---|---|
+| (+0.0, +0.0, +0.0) | 0.000 | 0.003 | 0.008 | 0.39 | nan |
+| (+0.2, +0.0, +0.0) | 0.000 | 0.033 | 0.110 | 2.50 | 1.04 |
+| (+0.4, +0.0, +0.0) | 0.000 | 0.052 | 0.101 | 3.50 | 1.25 |
+| (-0.2, +0.0, +0.0) | 0.000 | 0.037 | 0.074 | 2.40 | 0.95 |
+| (+0.0, +0.2, +0.0) | 0.000 | 0.042 | 0.103 | 2.54 | 1.38 |
+| (+0.0, -0.2, +0.0) | 0.000 | 0.036 | 0.114 | 2.62 | 1.46 |
+| (+0.0, +0.0, +0.5) | 0.000 | 0.029 | 0.124 | 1.94 | 1.89 |
+| (+0.0, +0.0, -0.5) | 0.000 | 0.029 | 0.120 | 2.06 | 2.22 |
+| **overall (mean of rows)** | 0.000 | 0.033 | 0.094 | 2.24 | 1.46 |
+
+**2026-11-08, gait diagnostics (not scoreboard).** Run `2026-11-08_12-37-34_EXP-015-s43`, checkpoint `model_1499.pt`, 32 dogs × 10 s per command (first 1 s skipped), seed 0. Saturation: requested torque above the 0.43 N·m cap.
+
+| Servo saturation | Swing p10 [s] | Swing median [s] | Swing p90 [s] | Flicker touchdowns (< 0.02 s) | Touchdowns / foot / s |
+|---|---|---|---|---|---|
+| 0.04% | 0.008 | 0.180 | 0.212 | 13.1% | 2.29 |
+
+**2026-11-08, training curves (TensorBoard).** Run `2026-11-08_12-37-34_EXP-015-s43`. Reward rows: each term's per-step contribution (weight × value × dt), mean over ±10 iterations.
+
+| | iter 0 | iter 100 | iter 400 | iter 1499 |
+|---|---|---|---|---|
+| track_lin_vel_xy | +0.00527 | +0.01161 | +0.01548 | +0.01591 |
+| total | -0.01072 | +0.00522 | +0.01383 | +0.01463 |
+| track_ang_vel_z | +0.00334 | +0.00479 | +0.00587 | +0.00604 |
+| action_rate | -0.00894 | -0.00379 | -0.00321 | -0.00319 |
+| torques | -0.00370 | -0.00275 | -0.00279 | -0.00277 |
+| lin_vel_z | -0.00433 | -0.00249 | -0.00095 | -0.00089 |
+| feet_air_time | -0.00068 | +0.00040 | +0.00086 | +0.00087 |
+| orientation | -0.00072 | -0.00144 | -0.00072 | -0.00070 |
+| ang_vel_xy | -0.00053 | -0.00075 | -0.00056 | -0.00051 |
+| base_height | -0.00038 | -0.00026 | -0.00007 | -0.00009 |
+| joint_acc | -0.00005 | -4.7e-05 | -0.00006 | -0.00006 |
+| undesired_contacts | -4.1e-07 | -4.3e-05 | -3.5e-06 | -2.9e-06 |
+| episode length (steps) | 132 | 515 | 910 | 922 |
+
+Episode endings near iteration 1499: fell_over 2.8%, illegal_contact 12.6%, time_out 84.6%.
 
 ## What I saw (Brian: viewer, curves)
 
