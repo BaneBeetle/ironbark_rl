@@ -25,6 +25,7 @@ vs. EXP-010: three reward weights, picked by the search (Brian's search varies t
 Brian (2026-11-08): "Add EXP-020 to the seed replicates (seeds 43 and 44)." Same weights, task and scoring as seed 42; one run at a time.
 
 - **Seed 43** (trained and scored 2026-11-08, 44 min, no crash): `python tools/run.py train IronBark-S2-Walk-Flat-Brian-StaleJoints --env.scene.num-envs 4096 --agent.max-iterations 1500 --agent.seed 43 --agent.run-name EXP-020-s43 --env.rewards.feet_air_time.weight 3.10615 --env.rewards.action_rate.weight -0.32 --env.rewards.torques.weight -0.093384`. Run folder `~/dev/ironbark_runs/logs/rsl_rl/ironbark_s2_walk_brian_stale_joints/*_EXP-020-s43`, console log `~/dev/ironbark_runs/EXP-020-s43.log`.
+- **Seed 44** (training 2026-11-08): `python tools/run.py train IronBark-S2-Walk-Flat-Brian-StaleJoints --env.scene.num-envs 4096 --agent.max-iterations 1500 --agent.seed 44 --agent.run-name EXP-020-s44 --env.rewards.feet_air_time.weight 3.10615 --env.rewards.action_rate.weight -0.32 --env.rewards.torques.weight -0.093384`. Run folder `~/dev/ironbark_runs/logs/rsl_rl/ironbark_s2_walk_brian_stale_joints/*_EXP-020-s44`, console log `~/dev/ironbark_runs/EXP-020-s44.log`.
 
 ## Results (scoreboard: `metrics.py`)
 
