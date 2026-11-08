@@ -4,7 +4,11 @@
 
 ## Hypothesis (Brian, before the run)
 
-> What will change on the scoreboard compared to the parent, and why?
+> Hypothesis: same pattern as without latency. EXP-010 and EXP-011 tie on servo strain and tracking, and EXP-010 wins on flicker, since the 0.07 s air-time threshold works the same with or without latency.
+
+Written 2026-11-07, before training.
+
+**Seed rule (Brian, verbatim):** ""Close" = any metric within seed noise (~5% tracking, ~9% smoothness/saturation, from EXP-000). If close, run seeds 43 and 44 for both." 
 
 ## Change (one variable)
 
