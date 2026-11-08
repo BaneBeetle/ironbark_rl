@@ -53,11 +53,12 @@ is_stale(Event("target_lost", ...), RobotState(..., target_visible=True)) -> Tru
 ```
 
 **Questions**
-- **P1. Cooldown length** (seconds; this runs on the PC, so wall-clock time is fine)? *Rec:
-  pick it from the credit budget too. 10,000 free credits/month at ~40 characters a line is
-  roughly 250–500 uncached lines.*
-- **P2. Urgent while talking:** does a fall cut off the current line, or wait for it to end?
-  *Rec: cut it off. A 2-second joke shouldn't delay "I fell".*
+- ~~**P1. Cooldown length**~~ **Answered (Brian, 2026-11-07):** 4 s after cached lines, at
+  least 30 s between Haiku lines, and urgent cached events (fall, battery) skip the wait. See
+  `decisions.md`.
+- **P2. Urgent while talking:** urgent events skip the cooldown (answered). Still open: does a
+  fall also cut off a line that's playing, or wait for it to end? *Rec: cut it off. A
+  2-second joke shouldn't delay "I fell".*
 - **P3. Events during cooldown:** drop them, or keep the newest and say it when cooldown ends?
   *Rec: drop. Saying it later is a stale line by definition.*
 - **P4. Staleness:** just "the event's condition is no longer true", or also a max age? *Rec:

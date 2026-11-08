@@ -53,6 +53,17 @@ OUTPUT_DEVICE: str | None = None
 PI_HOST = "raspberrypi.local"  # memory: lolly@raspberrypi.local (192.168.68.56)
 TELEMETRY_PORT = 5558  # Pi PUBs telemetry JSON here (CLAUDE.md wire protocol)
 
+# --- Speech pacing (Brian, 2026-11-07) ------------------------------------------------------
+# Wall-clock seconds are fine here: this runs on the PC, never on the Pi.
+# ASSUMED, for Brian to confirm: both gaps count from when the previous line finished playing,
+# and the 4 s quiet applies after any line (cached or Haiku).
+CACHED_LINE_COOLDOWN_S = 4.0  # quiet after a line before the next cached line
+HAIKU_LINE_MIN_SPACING_S = 30.0  # at least this long between two Haiku-generated lines
+URGENT_EVENTS = frozenset({"fell", "battery_low"})  # cached, and skip the cooldown
+
+# --- Budget ------------------------------------------------------------------------------
+ELEVENLABS_MONTHLY_CREDITS = 121_000  # Brian, 2026-11-07: Creator plan (key stays restricted, so not readable via API)
+
 # --- Latency -----------------------------------------------------------------------------
 LATENCY_TARGET_P50_S = 1.5  # Brian: event -> first sound, median; revisit after measuring
 MEASUREMENTS_DIR = REPO_ROOT / "docs" / "measurements"  # voice_latency_*.jsonl land here

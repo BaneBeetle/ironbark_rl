@@ -44,6 +44,28 @@ the Pi stays a thin player.
   (`say account`) and to shorten the cooldown if the budget allows. Claude proposes a
   number; the call is Brian's.
 
+## 2026-11-07: budget, pacing, few-shot persona (Brian)
+
+1. **Allowance:** "My ElevenLabs Creator allowance is 121000 credits/month (keeping the key
+   restricted)." (`config.ELEVENLABS_MONTHLY_CREDITS`) The key stays without `user_read`, so
+   `say account` can't read it; the number lives in config.
+2. **Pacing:** "Cooldown: 4 s after cached lines; 30 s minimum between Haiku-generated lines.
+   Urgent cached events (fall, battery) skip the wait." (`CACHED_LINE_COOLDOWN_S`,
+   `HAIKU_LINE_MIN_SPACING_S`, `URGENT_EVENTS`). This answers P1 and part of P2.
+   - Claude's assumptions, not yet confirmed: both gaps count from when the previous line
+     ends, and the 4 s quiet also follows Haiku lines.
+3. **Few-shot persona:** "Yes, add 2-3 cached lines to the persona prompt as few-shot style
+   examples. Then generate 5 fresh Haiku lines for different events so I can compare before
+   vs after." (persona v3)
+
+**Budget, from measured cost** (Claude): ~7 credits per spoken line (0.22 credits/character,
+measured from ElevenLabs' `character-cost` header).
+- 121,000 / 7 ≈ 17,000 uncached lines a month.
+- At the 30 s Haiku minimum, Haiku lines cost at most ~840 credits/hour, so the allowance
+  covers ~144 hours a month of Haiku talking nonstop at its fastest.
+- Cached lines are free after a one-time build of ~120 credits per voice.
+- So credits don't bind; the pacing is a taste call.
+
 ## Context Claude found (for reference, not decisions)
 
 - **RemBeetle reuse.** Its ElevenLabs module (`tts/elevenlabs_tts.py`) is not in git; it
