@@ -78,6 +78,39 @@ def test_player_writes_aligned_audio_and_times_first_sound():
     assert timing.first_sound_s == timing.first_write_s + 0.05
 
 
+def test_split_pcm_into_50ms_pieces():
+    from ironbark_voice.player import split_pcm
+
+    pieces = list(split_pcm(b"\x00" * 48_000, chunk_ms=50, sample_rate_hz=24_000))
+    assert len(pieces) == 20 and all(len(p) == 2_400 for p in pieces)
+
+
+def test_stop_cuts_playback_off_and_aborts_the_buffer():
+    import threading
+
+    stop = threading.Event()
+
+    class AbortableStream(FakeStream):
+        aborted = False
+
+        def abort(self):
+            self.aborted = True
+
+        def write(self, data):
+            super().write(data)
+            if len(self.written) == 2:
+                stop.set()  # a fall arrives while the second chunk plays
+
+    streams = []
+
+    def factory(**kw):
+        streams.append(AbortableStream(**kw))
+        return streams[-1]
+
+    timing = PcmPlayer(stream_factory=factory).play([b"\x01\x00"] * 10, stop=stop)
+    assert timing.interrupted and timing.num_bytes == 4 and streams[0].aborted
+
+
 def test_player_empty_clip_has_no_first_sound():
     timing = PcmPlayer(stream_factory=FakeStream).play([])
     assert timing.first_write_s is None and timing.first_sound_s is None

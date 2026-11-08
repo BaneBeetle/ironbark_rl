@@ -51,6 +51,7 @@ class PlaybackTiming:
     end_s: float  # playback finished (closing the stream waits for its buffer to drain)
     output_latency_s: float  # device buffer the OS reports: sound leaves the speaker this much after a write
     num_bytes: int
+    interrupted: bool = False  # cut off by a stop request (e.g. a fall, P2) before the clip ended
 
     @property
     def first_sound_s(self) -> float | None:
@@ -116,13 +117,22 @@ class PcmPlayer:
         # None = system default (Brian, 2026-11-07); a name is looked up once, here.
         self.device = resolve_output_device(device) if isinstance(device, str) else device
 
-    def play(self, chunks: Iterable[bytes]) -> PlaybackTiming:
+    def play(self, chunks: Iterable[bytes], stop=None) -> PlaybackTiming:
+        """Play until the chunks run out, or until `stop` (a threading.Event) is set.
+
+        A stop is noticed between chunks, so keep chunks short (split_pcm) for a quick cut-off.
+        """
         start = time.perf_counter()
         first_write = None
         num_bytes = 0
+        interrupted = False
         stream = self._stream_factory(samplerate=self.sample_rate_hz, channels=1, dtype="int16", device=self.device)
         with stream:  # opens and starts the device; closing waits for the buffer to drain
             for chunk in align_to_samples(chunks):
+                if stop is not None and stop.is_set():
+                    stream.abort()  # drop what's buffered too: a cut-off should be silent at once
+                    interrupted = True
+                    break
                 if first_write is None:
                     first_write = time.perf_counter()  # the latency harness's "first sound" anchor
                 stream.write(chunk)  # blocks while the device buffer is full, so this paces itself
@@ -134,4 +144,15 @@ class PcmPlayer:
             end_s=time.perf_counter(),
             output_latency_s=output_latency,
             num_bytes=num_bytes,
+            interrupted=interrupted,
         )
+
+
+def split_pcm(pcm: bytes, chunk_ms: int = 50, sample_rate_hz: int = config.TTS_SAMPLE_RATE_HZ) -> Iterator[bytes]:
+    """Cut a whole clip into short pieces so play() can notice a stop request within ~chunk_ms.
+
+    Example: 1 s of 24 kHz 16-bit audio (48,000 bytes), 50 ms -> 20 chunks of 2,400 bytes
+    """
+    step = int(sample_rate_hz * chunk_ms / 1000) * config.TTS_SAMPLE_WIDTH_BYTES  # whole samples per chunk
+    for i in range(0, len(pcm), step):
+        yield pcm[i:i + step]
