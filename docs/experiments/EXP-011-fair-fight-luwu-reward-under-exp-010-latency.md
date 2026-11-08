@@ -1,6 +1,6 @@
 # EXP-011: fair fight: Luwu reward under EXP-010 latency
 
-**Status:** planned · **Parent:** EXP-010
+**Status:** trained 2026-11-07 (seed 42, 1500 iterations, 69 min, no crash), scored with the staleness and delay on; seeds 43/44 queued for EXP-010 and EXP-011 (seed rule); verdict pending (Brian) · **Parent:** EXP-010
 
 ## Hypothesis (Brian, before the run)
 
@@ -36,6 +36,45 @@ Scored like EXP-010: the delay and the staleness stay on in the play config.
 ## Results (scoreboard: `metrics.py`)
 
 _Pending. Filled by the evaluation harness once training finishes._
+
+**2026-11-07, scoreboard v1.** Run `2026-11-07_21-32-37_EXP-011`, checkpoint `model_1499.pt` (iteration 1499), 32 dogs × 10 s per command, seed 0, mass 0.972 kg. Smoothness and CoT use only episodes that never fell; CoT is NaN by design where there's no ground speed (standing, turning in place).
+
+| Command (vx, vy, wz) | Fall rate | Planar err [m/s] | Yaw err [rad/s] | Joint-target rate [rad/s] | CoT |
+|---|---|---|---|---|---|
+| (+0.0, +0.0, +0.0) | 0.000 | 0.002 | 0.005 | 0.28 | nan |
+| (+0.2, +0.0, +0.0) | 0.000 | 0.035 | 0.107 | 2.88 | 1.27 |
+| (+0.4, +0.0, +0.0) | 0.000 | 0.049 | 0.131 | 4.08 | 1.49 |
+| (-0.2, +0.0, +0.0) | 0.000 | 0.036 | 0.102 | 2.36 | 1.02 |
+| (+0.0, +0.2, +0.0) | 0.000 | 0.037 | 0.156 | 2.98 | 1.82 |
+| (+0.0, -0.2, +0.0) | 0.000 | 0.037 | 0.137 | 3.07 | 1.79 |
+| (+0.0, +0.0, +0.5) | 0.000 | 0.024 | 0.171 | 1.99 | nan |
+| (+0.0, +0.0, -0.5) | 0.000 | 0.024 | 0.190 | 1.92 | nan |
+| **overall (mean of rows)** | 0.000 | 0.031 | 0.125 | 2.45 | 1.48 |
+
+**2026-11-07, gait diagnostics (not scoreboard).** Run `2026-11-07_21-32-37_EXP-011`, checkpoint `model_1499.pt`, 32 dogs × 10 s per command (first 1 s skipped), seed 0. Saturation: requested torque above the 0.43 N·m cap.
+
+| Servo saturation | Swing p10 [s] | Swing median [s] | Swing p90 [s] | Flicker touchdowns (< 0.02 s) | Touchdowns / foot / s |
+|---|---|---|---|---|---|
+| 1.07% | 0.008 | 0.152 | 0.200 | 18.8% | 2.53 |
+
+**2026-11-07, training curves (TensorBoard).** Run `2026-11-07_21-32-37_EXP-011`. Reward rows: each term's per-step contribution (weight × value × dt), mean over ±10 iterations.
+
+| | iter 0 | iter 100 | iter 400 | iter 1499 |
+|---|---|---|---|---|
+| episode length (steps) | 132 | 957 | 938 | 946 |
+
+Episode endings near iteration 1499: fell_over 3.2%, illegal_contact 7.6%, time_out 89.2%.
+
+**2026-11-07, seed-rule check (Brian's rule, mechanical).** EXP-011 vs EXP-010, seed 42, unrounded overall values, relative change vs EXP-010. Bands: 5% tracking, 9% smoothness/saturation.
+
+| Metric | EXP-010 | EXP-011 | Change | Band | Within |
+|---|---|---|---|---|---|
+| Planar err [m/s] | 0.0383 | 0.0305 | -20.3% | 5% | no |
+| Yaw err [rad/s] | 0.1228 | 0.1251 | +1.8% | 5% | **yes** |
+| Joint-target rate [rad/s] | 3.001 | 2.445 | -18.5% | 9% | no |
+| Servo saturation | 0.805% | 1.074% | +33.4% | 9% | no |
+
+One metric within its band, so "close": seeds 43 and 44 run for both. (Not in the rule, for reference: CoT 1.759 vs 1.478, -16.0%; flicker 15.1% vs 18.8%, +25.1%.)
 
 ## What I saw (Brian: viewer, curves)
 
