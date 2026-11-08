@@ -1,9 +1,12 @@
 // SYNTHETIC scenario for dev mode, not measured data. Each line is held for `hold` ticks
 // (5 Hz by default); fields carry over from the line above. Battery and tilt values are
-// made up to cross whatever thresholds Brian picks, not real hardware numbers.
+// made up to cross Brian's thresholds (battery 20 %, FALL_TILT_DEG), not real hardware numbers.
+// Timed so every cached event clears the 4 s cooldown, the fall lands while the battery line
+// is playing (to exercise the interrupt), and the final IDLE gives Haiku one line.
 {"hold": 10, "behavior": "IDLE", "target_visible": false, "action": "stop", "battery_pct": 80, "roll_deg": 0.5, "pitch_deg": -0.3, "imu_ready": true}
-{"hold": 25, "behavior": "FOLLOW", "target_visible": true, "action": "forward"}
-{"hold": 15, "target_visible": false, "action": "turn_left"}
-{"hold": 20, "target_visible": true, "action": "forward"}
-{"hold": 10, "battery_pct": 19}
-{"hold": 10, "action": "stop", "roll_deg": 70.0}
+{"hold": 35, "behavior": "FOLLOW", "target_visible": true, "action": "forward"}
+{"hold": 35, "target_visible": false, "action": "turn_left"}
+{"hold": 25, "target_visible": true, "action": "forward"}
+{"hold": 5, "battery_pct": 19}
+{"hold": 35, "action": "stop", "roll_deg": 70.0}
+{"hold": 25, "behavior": "IDLE", "roll_deg": 0.5}
