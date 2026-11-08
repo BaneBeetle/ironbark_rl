@@ -2,6 +2,16 @@
 
 Brian's decisions and verdicts, dated, in his words. Newest first. Numbers and run details are in [progress.md](progress.md) and the [experiment files](experiments/README.md).
 
+## 2026-11-08: EXP-020 added to the seed replicates; stage 2's constraints tightened
+
+> Add EXP-020 to the seed replicates (seeds 43 and 44). For stage 2, keep the flicker objective but tighten the constraints to: saturation ≤ 0.3% and planar ≤ 0.031 m/s (Luwu's 3-seed mean). Goal: beat the vendor on strain, tracking and flicker at once. Everything else approved.
+
+The message came in at ~10:40, with EXP-017-s44 training. Claude's calls where the message is silent (on the search page, for Brian to change):
+- EXP-020 goes after EXP-015, seed 43 then 44, like the other three. The replicate run stops after EXP-017-s44 (`optuna/STOP`) and restarts with EXP-020 added; seeds already scored are skipped. Stage 2 starts after EXP-020's two seeds.
+- The planar limit is Brian's 0.031 m/s; Luwu's unrounded 3-seed mean is 0.03104 m/s (EXP-011).
+- The stage-2 study's known points (EXP-015 to EXP-020) get their constraint values under the new limits.
+- The search page ranks every trial, both stages, under the newest limits (stage 2's), with each trial's stage-1 verdict in its own column. "Miss" stays each overshoot as a fraction of its limit, summed.
+
 ## 2026-11-08: top 3 search trials picked for seeds 43/44; search stage 2 (action_rate 4x–10x)
 
 > Pause the search after EXP-019. Run seeds 43 and 44 for EXP-017, EXP-018 and EXP-015 (my top 3; I rank by saturation first, then tracking, then flicker). Then resume with action_rate's range extended to 4x–10x, since all the top trials hit the 4x ceiling.
