@@ -12,6 +12,8 @@ The message came in with stage 2 already running (EXP-021, since 15:39). Claude'
 - (c) "2 nights" is 16 h (2 × 8 h) of recorded training time: stage-2 trials plus their confirmation seeds.
 - Under (b) or (c) the winner is rank 1 on the search page. When a rule fires the driver exits; locking the winner and the deployment-prep design questions then go through Brian.
 
+Asked whether these readings stand, Brian: "Use these"
+
 ## 2026-11-08: owner verify allowed despite the no-identity rule
 
 Claude asked whether to change `CLAUDE.md`'s no-identity rule to allow the owner verify in [roadmap.md](roadmap.md) Phase 1 (VLM verify with multi-reference photos). Brian:
