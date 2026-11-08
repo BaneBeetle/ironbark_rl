@@ -275,3 +275,45 @@ def test_imu_reads_without_commanding_joints(tmp_path):
     assert code == 0 and link.writes == []
     assert [r["call"] for r in imu] == ["read_imu"] * 6 + ["read_roll", "read_pitch"] * 3
     assert all(r["t1"] >= r["t0"] for r in imu) and imu[-1]["v"] == -0.25
+
+
+def run_map(tmp_path, argv, link, answers):
+    replies = iter(answers)
+    code = probe.main(["--out-dir", str(tmp_path), "map"] + argv, link=link,
+                      ui={"prompt": lambda m: next(replies), "stop": lambda: False})
+    (log,) = tmp_path.glob("joint_control_map_*.jsonl")
+    return code, [json.loads(line) for line in log.read_text().splitlines()]
+
+
+def test_map_records_one_answer_per_joint(tmp_path):
+    link = FakeLink()
+    code, rows = run_map(tmp_path, ["--joints", "11,12", "--samples", "5"], link, ["fl calf fwd", "fl thigh back"])
+    (summary,) = [r for r in rows if r.get("name") == "map_summary"]
+    assert code == 0 and summary["duplicates"] == {}
+    assert summary["answers"] == {"11": {"leg": "fl", "part": "calf", "plus_dir": "fwd"},
+                                  "12": {"leg": "fl", "part": "thigh", "plus_dir": "back"}}
+    stepped = {ids[0] for ids, _ in link.writes if len(ids) == 1}
+    assert stepped == {11, 12}  # only the joint being mapped moves on its own
+
+
+def test_map_repeat_skip_reprompt_and_minus_wiggle(tmp_path):
+    link = FakeLink(start={13: 30.0})  # no room up: joint 13 wiggles in the minus direction
+    answers = ["r", "nonsense", "fl hip in", "s"]  # 13: wiggle again, bad answer, then the answer; 21: skip
+    code, rows = run_map(tmp_path, ["--joints", "13,21", "--samples", "5", "--wiggles", "1"], link, answers)
+    (ans,) = [r for r in rows if r.get("name") == "map_answer"]
+    assert (ans["wiggle_sign"], ans["seen_dir"], ans["plus_dir"]) == (-1, "in", "out")
+    assert [r["joint"] for r in rows if r.get("name") == "map_skip"] == [21]
+    assert sum(1 for r in rows if r.get("phase") == "up" and r["cmd"] and r["joint"] == 13) == 2  # wiggled again on r
+
+
+def test_map_flags_two_ids_named_as_the_same_joint(tmp_path):
+    code, rows = run_map(tmp_path, ["--joints", "11,12", "--samples", "5", "--wiggles", "1"], FakeLink(),
+                         ["fr calf fwd", "fr calf back"])
+    (summary,) = [r for r in rows if r.get("name") == "map_summary"]
+    assert summary["duplicates"] == {"fr calf": [11, 12]}
+
+
+@pytest.mark.parametrize("text, parsed", [("FL Thigh Fwd", ("fl", "thigh", "fwd")), ("br hip out", ("br", "hip", "out")),
+                                          ("fl hip fwd", None), ("xx calf fwd", None), (" s ", "s")])
+def test_parse_map_answer(text, parsed):
+    assert probe.parse_map_answer(text) == parsed

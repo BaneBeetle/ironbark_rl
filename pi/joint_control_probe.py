@@ -6,6 +6,7 @@ all four feet off the ground, motor_controller stopped, a hand on the power swit
 
   cd ~/ironbark && .venv/bin/python joint_control_probe.py read                    # readback latency + max rate; no joint commands
   cd ~/ironbark && .venv/bin/python joint_control_probe.py imu                     # IMU refresh rate; no joint commands
+  cd ~/ironbark && .venv/bin/python joint_control_probe.py map                     # wiggle each joint id; you name the leg/joint
   cd ~/ironbark && .venv/bin/python joint_control_probe.py passive --leg 1         # torque OFF on one leg, move it by hand
   cd ~/ironbark && .venv/bin/python joint_control_probe.py step --joints leg1      # step response per joint, per motor_speed
   cd ~/ironbark && .venv/bin/python joint_control_probe.py sine --joints leg1      # tracking vs. frequency
@@ -52,6 +53,7 @@ import statistics
 import subprocess
 import sys
 import time
+from collections import defaultdict
 from pathlib import Path
 
 # ---------------------------------------------------------------------------------------------
@@ -94,6 +96,7 @@ SETTLE_SAMPLES = 40  # reads before a test; their median per joint is the start 
 PRE_SAMPLES = 100  # quiet reads after commanding the hold pose: >= 3 refreshes, so the last joint has settled
 STILL_CHECK_TAIL = 40  # the drift check uses only the last 40 reads (> 1 refresh): earlier ones can be stale
 STEP_SAMPLES = 150  # reads after each step edge. MEASURE: must outlast the rise; check in the plots
+MAP_WIGGLES = 2  # `map`: out-and-back moves per joint before asking (r repeats)
 READ_SAMPLES = 2000  # `read`: back-to-back read_motor() calls
 IMU_SAMPLES = 2000  # `imu`: reads per phase (read_imu blocks, then read_roll/read_pitch alternating)
 PASSIVE_MAX_SAMPLES = 20000  # `passive`: upper bound; Enter ends it earlier
@@ -458,7 +461,74 @@ def run_gait(s, args, ui):
         s.segment("reset_end", None, args.samples)
 
 
-TESTS = {"read": run_read, "imu": run_imu, "passive": run_passive, "step": run_step, "sine": run_sine, "rate": run_rate, "gait": run_gait}
+MAP_LEGS = ("fl", "fr", "br", "bl")  # front-left, front-right, back-right, back-left: the dog's own left and right
+MAP_PARTS = ("hip", "thigh", "calf")  # hip: sideways swing; thigh: upper leg; calf: lower leg
+MAP_DIRS = {"hip": ("out", "in"), "thigh": ("fwd", "back"), "calf": ("fwd", "back")}  # where the foot moves
+_OPPOSITE = {"out": "in", "in": "out", "fwd": "back", "back": "fwd"}
+
+
+def parse_map_answer(text):
+    """'fl thigh fwd' -> ("fl", "thigh", "fwd"); 'r' / 's' pass through; anything else -> None."""
+    words = text.strip().lower().split()
+    if words in (["r"], ["s"]):
+        return words[0]
+    if len(words) == 3 and words[0] in MAP_LEGS and words[1] in MAP_PARTS and words[2] in MAP_DIRS[words[1]]:
+        return tuple(words)
+    return None
+
+
+def run_map(s, args, ui):
+    """Wiggle one xgolib joint id at a time; Brian says which physical leg/joint moved and where the foot went.
+
+    Before any policy deployment (Brian, 2026-11-07): the sim-joint <-> xgolib-id mapping stays # MEASURE:
+    until this run confirms it; Claude then locks it in a tested config.
+    """
+    answers = {}
+    try:
+        s.adopt()
+        s.event("motor_speed", speed=args.speed)
+        s.link.speed(args.speed)
+        for jid in args.joints:
+            sign = s.step_sign(jid, args.amp_deg)
+            if sign is None:
+                s.event("skip", joint=jid, reason="no room for the wiggle inside the safety band", room=s.room(jid))
+                print(f"skip joint {jid}: no room for a {args.amp_deg} deg wiggle")
+                continue
+            while True:
+                print(f"\nJoint {jid}: {args.wiggles} wiggles of {args.amp_deg:g} deg. Watch which foot moves, and where.")
+                tags = {"joint": jid}
+                s.check_still(s.segment("pre", {jid: s.hold[jid]}, PRE_SAMPLES, **tags), f"joint {jid}")
+                for _ in range(args.wiggles):
+                    s.check_mover(s.segment("up", {jid: s.hold[jid] + sign * args.amp_deg}, args.samples, **tags), jid)
+                    s.segment("down", {jid: s.hold[jid]}, args.samples, **tags)
+                answer = None
+                while answer is None:
+                    answer = parse_map_answer(ui["prompt"](
+                        f"Joint {jid}: '<leg> <joint> <where the foot went>', legs {'/'.join(MAP_LEGS)}, joints "
+                        "hip (out/in) thigh (fwd/back) calf (fwd/back); r = wiggle again, s = skip: "))
+                    if answer is None:
+                        print("  not understood, e.g. 'fl thigh fwd'")
+                if answer == "r":
+                    continue
+                if answer == "s":
+                    s.event("map_skip", joint=jid)
+                    break
+                leg, part, seen = answer
+                plus = seen if sign > 0 else _OPPOSITE[seen]  # the wiggle went in the minus direction if sign < 0
+                answers[jid] = {"leg": leg, "part": part, "plus_dir": plus}
+                s.event("map_answer", joint=jid, leg=leg, part=part, seen_dir=seen, wiggle_sign=sign, plus_dir=plus)
+                break
+    finally:
+        s.restore()
+        taken = defaultdict(list)
+        for jid, a in answers.items():
+            taken[(a["leg"], a["part"])].append(jid)
+        duplicates = {f"{leg} {part}": ids for (leg, part), ids in taken.items() if len(ids) > 1}
+        s.event("map_summary", answers=answers, duplicates=duplicates)
+        print(json.dumps({"map": answers, "duplicates": duplicates}, indent=1))
+
+
+TESTS = {"read": run_read, "imu": run_imu, "map": run_map, "passive": run_passive, "step": run_step, "sine": run_sine, "rate": run_rate, "gait": run_gait}
 
 
 # ---------------------------------------------------------------------------------- plumbing
@@ -537,6 +607,12 @@ def build_parser():
     r.add_argument("--samples", type=int, default=READ_SAMPLES)
     im = sub.add_parser("imu", help="back-to-back IMU reads; no joint commands")
     im.add_argument("--samples", type=int, default=IMU_SAMPLES)
+    mp = sub.add_parser("map", help="wiggle each joint id; say which physical leg/joint moved")
+    mp.add_argument("--joints", type=parse_joints, default=parse_joints("all"))
+    mp.add_argument("--amp-deg", type=float, default=STEP_AMP_DEG)
+    mp.add_argument("--wiggles", type=int, default=MAP_WIGGLES)
+    mp.add_argument("--samples", type=int, default=STEP_SAMPLES)
+    mp.add_argument("--speed", type=int, default=MOTOR_SPEED_MAX)
     pa = sub.add_parser("passive", help="torque off on one leg; move it by hand")
     pa.add_argument("--leg", type=int, choices=[1, 2, 3, 4], required=True)
     pa.add_argument("--max-samples", type=int, default=PASSIVE_MAX_SAMPLES)
@@ -574,6 +650,8 @@ def validate(args):
             sys.exit(f"motor_speed must be in 1..{MOTOR_SPEED_MAX}")
     if any(p < 4 for p in getattr(args, "periods", [])):
         sys.exit("sine periods need at least 4 samples")
+    if getattr(args, "wiggles", 1) < 1:
+        sys.exit("--wiggles must be >= 1")
     if getattr(args, "read_every", 0) < 0:
         sys.exit("--read-every must be >= 0")
     if args.test == "gait" and not 0 < abs(args.gait_step) <= GAIT_STEP_MAX:

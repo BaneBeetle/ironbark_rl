@@ -173,6 +173,15 @@ def report_imu(log):
     return out
 
 
+def report_map(log):
+    """Brian's answers from the `map` run: xgolib id -> physical leg, joint, and the + direction of the foot."""
+    summary = next((e for e in log["events"] if e["name"] == "map_summary"), None)
+    skipped = [e["joint"] for e in log["events"] if e["name"] == "map_skip"]
+    if summary is None:
+        return {"error": "no map_summary event (run interrupted before the end?)", "skipped": skipped}
+    return {"answers": summary["answers"], "duplicates": summary["duplicates"], "skipped": skipped}
+
+
 def report_passive(log):
     leg = log["header"]["args"]["leg"]
     out = {"leg": leg}
@@ -343,7 +352,7 @@ def report_yaw(logs):
     return {"points": [{"test": n, "t_s": round(t, 1), "yaw": y} for t, y, n in pts], "rates": rates}
 
 
-REPORTS = {"read": report_read, "imu": report_imu, "passive": report_passive, "step": report_step, "sine": report_sine,
+REPORTS = {"read": report_read, "imu": report_imu, "map": report_map, "passive": report_passive, "step": report_step, "sine": report_sine,
            "rate_read_every_0": report_rate, "rate_read_every_1": report_rate, "gait": report_gait}
 
 

@@ -70,3 +70,10 @@ def test_imu_refresh_from_held_values():
     assert out["change_interval_ms"]["accel_x"]["median"] == pytest.approx(10.0)
     assert out["change_interval_ms"]["roll"]["median"] == pytest.approx(20.0)
     assert out["change_interval_ms"]["accel_z"] is None and out["failed"] == 0
+
+
+def test_report_map_reads_the_summary_and_skips():
+    events = [{"name": "map_skip", "joint": 21},
+              {"name": "map_summary", "answers": {"11": {"leg": "fl", "part": "calf", "plus_dir": "fwd"}}, "duplicates": {}}]
+    out = report.report_map({"events": events})
+    assert out == {"answers": {"11": {"leg": "fl", "part": "calf", "plus_dir": "fwd"}}, "duplicates": {}, "skipped": [21]}
