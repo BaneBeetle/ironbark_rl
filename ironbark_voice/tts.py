@@ -5,9 +5,23 @@ or a finished 12-word Haiku reply). ElevenLabs' latency guide says the WebSocket
 off when text arrives in pieces, and its buffering can add delay otherwise.
 """
 
+import re
 from collections.abc import Iterator
 
 from ironbark_voice import config
+
+
+def calm_punctuation(text: str) -> str:
+    """Swap "!" for "." (Brian's call, 2026-11-07, after hearing variant B).
+
+    Measured: with "!", 2 of 3 takes of a Tilly line spiked to ~560-600 Hz median pitch (the
+    squeak Brian flagged); with ".", 0 of 3 did (docs/voice/progress.md). A laid-back bro
+    doesn't need it anyway. Questions stay questions.
+
+    Example: "Yo! Let's roll!!" -> "Yo. Let's roll."   "Where'd you go?!" -> "Where'd you go?"
+    """
+    text = re.sub(r"[!?]*\?[!?]*", "?", text)  # any run containing "?" is still a question
+    return re.sub(r"!+", ".", text)  # what's left is pure "!": one or many become a period
 
 
 class ElevenLabsTTS:
@@ -36,6 +50,7 @@ class ElevenLabsTTS:
         # from a price table, and readable without the key's user_read permission.
         self.last_credits: int | None = None
         self.last_request_id: str | None = None
+        self.last_text: str | None = None  # what was actually sent, after calm_punctuation
 
     def stream_pcm(self, text: str) -> Iterator[bytes]:
         """Yield PCM byte chunks as they arrive, so playback can start before synthesis ends.
@@ -45,10 +60,12 @@ class ElevenLabsTTS:
         odd, so the player re-aligns them to whole samples). After the first chunk,
         last_credits holds what this line cost.
         """
+        # Every spoken line passes through here (cache build, Haiku, typed), so one rule covers all.
+        self.last_text = calm_punctuation(text)
         # with_raw_response exposes the headers; the plain .stream() call hides them.
         with self._client.text_to_speech.with_raw_response.stream(
             voice_id=self.voice_id,
-            text=text,
+            text=self.last_text,
             model_id=self.model_id,
             output_format=self.output_format,  # raw PCM: no decoder between network and speaker
         ) as response:

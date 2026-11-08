@@ -73,6 +73,14 @@ better but follow started on both too high pitched. the rest good." The live per
 to v2; v3 stays in `brain.PERSONAS` for later comparisons. One line per event, so this is a
 first preference, not a measured result.
 
+## 2026-11-07: no exclamation marks (Brian)
+
+After hearing A ("!"), B ("." instead) and C ("." + stability 0.75): "B sounds the best."
+Every spoken line now has "!" swapped for "." before it reaches ElevenLabs
+(`tts.calm_punctuation`, at the TTS boundary so cached, Haiku and typed lines all get it).
+Questions keep their "?". Tilly's voice settings stay at her defaults (C not adopted). The
+measurements behind it are in `progress.md`.
+
 ## Context Claude found (for reference, not decisions)
 
 - **RemBeetle reuse.** Its ElevenLabs module (`tts/elevenlabs_tts.py`) is not in git; it

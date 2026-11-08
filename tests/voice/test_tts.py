@@ -32,7 +32,7 @@ def test_stream_sends_model_format_and_voice():
     assert list(tts.stream_pcm("Yo, found you!")) == [b"\x01\x02"]
     assert raw.calls[0] == {
         "voice_id": "voice123",
-        "text": "Yo, found you!",
+        "text": "Yo, found you.",  # "!" swapped before sending (calm_punctuation)
         "model_id": config.TTS_MODEL,
         "output_format": config.TTS_OUTPUT_FORMAT,
     }
@@ -51,6 +51,23 @@ def test_missing_cost_header_is_none():
     tts = ElevenLabsTTS(voice_id="v", client=client)
     list(tts.stream_pcm("hi"))
     assert tts.last_credits is None
+
+
+def test_calm_punctuation_examples():
+    from ironbark_voice.tts import calm_punctuation
+
+    assert calm_punctuation("Alright, I've got you now, let's roll!") == "Alright, I've got you now, let's roll."
+    assert calm_punctuation("Yo! Let's roll!!") == "Yo. Let's roll."
+    assert calm_punctuation("Where'd you go?!") == "Where'd you go?"
+    assert calm_punctuation("Huh!?") == "Huh?"
+    assert calm_punctuation("Big dog's locked in. Lead the way.") == "Big dog's locked in. Lead the way."
+
+
+def test_exclamation_never_reaches_elevenlabs():
+    client, raw = fake_client([b"ab"])
+    tts = ElevenLabsTTS(voice_id="v", client=client)
+    list(tts.stream_pcm("Let's roll!"))
+    assert raw.calls[0]["text"] == "Let's roll." and tts.last_text == "Let's roll."
 
 
 def test_synthesize_joins_chunks():

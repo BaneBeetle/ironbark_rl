@@ -61,7 +61,8 @@ def speak(text: str, tts, player: PcmPlayer, event: str, source: str, event_s: f
     playback = player.play(tee(tts.stream_pcm(text), kept))  # plays while it streams
     if wav_path:
         write_wav(wav_path, b"".join(kept))
-    timing = LineTiming(event=event, source=source, text=text, event_s=event_s, text_ready_s=text_ready_s,
+    spoken = tts.last_text or text  # log what was said (after the "!" -> "." swap), not the draft
+    timing = LineTiming(event=event, source=source, text=spoken, event_s=event_s, text_ready_s=text_ready_s,
                         playback=playback, voice_id=tts.voice_id, tts_model=tts.model_id,
                         tts_credits=tts.last_credits, **haiku_usage)
     return latency_log.append(timing)
