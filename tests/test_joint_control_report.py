@@ -89,3 +89,18 @@ def test_frozen_stretches_and_zero_vectors():
     row = out["read_imu"]
     assert row["frozen_over_100ms_ms"] == [118] and row["zero_vectors"] == 1 and out["marks"] == [5]
     assert row["period_ms"]["median"] == pytest.approx(2.0)
+
+
+def test_imu_probe_report_states_phases_and_freeze_agreement():
+    rows = [{"phase": "imu_state", "call": "read_0x61", "t0": 0, "t1": 1, "v": 1}]
+    for i in range(40):  # read_imu freezes for i in 10..29; int16 roll freezes at the same time, int16 yaw never
+        t = 1_000_000 * (i + 1) * 10
+        x = float(min(i, 10) if i < 30 else i)
+        rows.append({"phase": "alongside", "call": "read_imu", "t0": t, "t1": t + 1, "i": i, "v": [x, 0, -9.8, 0.1, 0, 0, 0, 0, 0]})
+        rows.append({"phase": "alongside", "call": "int16_roll", "t0": t + 2, "t1": t + 3, "i": i, "v": int(x)})
+        rows.append({"phase": "alongside", "call": "int16_yaw", "t0": t + 2, "t1": t + 3, "i": i, "v": i})
+    out = report.report_imu_probe({"imu": rows, "events": []})
+    assert out["imu_state_0x61"] == [1]
+    assert out["agreement/int16_roll"]["same_repeat_or_change"] == 1.0
+    assert out["agreement/int16_yaw"]["imu_repeats_int16_changes"] == 19
+    assert out["alongside/read_imu"]["frozen_over_100ms_ms"] == [190]  # first to last identical read
