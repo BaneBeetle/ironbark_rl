@@ -2,6 +2,16 @@
 
 Brian's decisions and verdicts, dated, in his words. Newest first. Numbers and run details are in [progress.md](progress.md) and the [experiment files](experiments/README.md).
 
+## 2026-11-08: top 3 search trials picked for seeds 43/44; search stage 2 (action_rate 4x–10x)
+
+> Pause the search after EXP-019. Run seeds 43 and 44 for EXP-017, EXP-018 and EXP-015 (my top 3; I rank by saturation first, then tracking, then flicker). Then resume with action_rate's range extended to 4x–10x, since all the top trials hit the 4x ceiling.
+
+The message came in at ~09:10, after EXP-019 had been scored (08:49) and EXP-020 (stage-1 trial 9) had started, so EXP-020 runs to the end (~09:35) and the search stops after it.
+
+Claude's calls where the message is silent (on the search page, for Brian to change):
+- Seed runs in Brian's order, each seed 43 then 44: EXP-017, EXP-018, EXP-015. Same weights, task and scoring as seed 42 (`tools/reward_search.py replicate`); results in each entry, the index and the search page. They stay out of the study (seed 42 only).
+- Stage 2 is a new Optuna study (one study's ranges can't change): action_rate 4x–10x (−0.32 to −0.8), the other two ranges, the constraints, the objective, the ranking and the guard unchanged. The stage-1 trials at the 4x ceiling go in as known points, not retrained (EXP-015 to EXP-020); then 3 random trials in the new range, then the GP. Sampler seed 43 (42 would repeat stage 1's random draws of feet_air_time and torques). One ranked table covers both stages.
+
 ## 2026-11-08: Optuna search over three of Brian's reward weights (EXP-010's latency)
 
 > After the 4 seed runs finish and are scored, start an Optuna search (Bayesian optimization) on MY reward under EXP-010's latency conditions:
