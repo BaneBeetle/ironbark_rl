@@ -1,6 +1,6 @@
 # EXP-019: search 8: feet_air_time 3.33, action_rate 4.00x, torques 0.50x
 
-**Status:** search trial 8 (Optuna), training · **Parent:** EXP-010
+**Status:** search trial 8 (Optuna); trained 2026-11-08 (seed 42, 1500 iterations, 44 min, no crash), scored with the staleness and delay on; constraints pass; verdict pending (Brian) · **Parent:** EXP-010
 
 ## Hypothesis (Brian, before the run)
 
@@ -23,6 +23,46 @@ vs. EXP-010: three reward weights, picked by the search (Brian's search varies t
 ## Results (scoreboard: `metrics.py`)
 
 _Pending. Filled by the evaluation harness once training finishes._
+
+**2026-11-08, scoreboard v1.** Run `2026-11-08_08-04-14_EXP-019`, checkpoint `model_1499.pt` (iteration 1499), 32 dogs × 10 s per command, seed 0, mass 0.972 kg. Smoothness and CoT use only episodes that never fell; CoT is NaN by design where there's no ground speed (standing, turning in place).
+
+| Command (vx, vy, wz) | Fall rate | Planar err [m/s] | Yaw err [rad/s] | Joint-target rate [rad/s] | CoT |
+|---|---|---|---|---|---|
+| (+0.0, +0.0, +0.0) | 0.000 | 0.003 | 0.007 | 0.33 | nan |
+| (+0.2, +0.0, +0.0) | 0.000 | 0.040 | 0.084 | 2.98 | 1.30 |
+| (+0.4, +0.0, +0.0) | 0.000 | 0.063 | 0.097 | 4.08 | 1.47 |
+| (-0.2, +0.0, +0.0) | 0.000 | 0.033 | 0.083 | 2.89 | 1.26 |
+| (+0.0, +0.2, +0.0) | 0.000 | 0.034 | 0.114 | 2.99 | 1.76 |
+| (+0.0, -0.2, +0.0) | 0.000 | 0.040 | 0.106 | 3.04 | 1.80 |
+| (+0.0, +0.0, +0.5) | 0.000 | 0.029 | 0.094 | 2.39 | nan |
+| (+0.0, +0.0, -0.5) | 0.000 | 0.028 | 0.103 | 2.35 | nan |
+| **overall (mean of rows)** | 0.000 | 0.034 | 0.086 | 2.63 | 1.52 |
+
+**2026-11-08, gait diagnostics (not scoreboard).** Run `2026-11-08_08-04-14_EXP-019`, checkpoint `model_1499.pt`, 32 dogs × 10 s per command (first 1 s skipped), seed 0. Saturation: requested torque above the 0.43 N·m cap.
+
+| Servo saturation | Swing p10 [s] | Swing median [s] | Swing p90 [s] | Flicker touchdowns (< 0.02 s) | Touchdowns / foot / s |
+|---|---|---|---|---|---|
+| 0.79% | 0.008 | 0.184 | 0.208 | 14.1% | 2.32 |
+
+**2026-11-08, training curves (TensorBoard).** Run `2026-11-08_08-04-14_EXP-019`. Reward rows: each term's per-step contribution (weight × value × dt), mean over ±10 iterations.
+
+| | iter 0 | iter 100 | iter 400 | iter 1499 |
+|---|---|---|---|---|
+| total | -0.00902 | +0.00741 | +0.01479 | +0.01639 |
+| track_lin_vel_xy | +0.00504 | +0.01236 | +0.01573 | +0.01629 |
+| track_ang_vel_z | +0.00343 | +0.00463 | +0.00571 | +0.00605 |
+| action_rate | -0.00898 | -0.00437 | -0.00359 | -0.00328 |
+| torques | -0.00164 | -0.00161 | -0.00148 | -0.00142 |
+| feet_air_time | -0.00071 | +0.00055 | +0.00090 | +0.00090 |
+| lin_vel_z | -0.00433 | -0.00175 | -0.00096 | -0.00084 |
+| orientation | -0.00086 | -0.00130 | -0.00077 | -0.00064 |
+| ang_vel_xy | -0.00053 | -0.00086 | -0.00062 | -0.00052 |
+| base_height | -0.00038 | -0.00016 | -0.00007 | -0.00008 |
+| joint_acc | -0.00005 | -0.00006 | -0.00006 | -0.00006 |
+| undesired_contacts | -3.2e-07 | -2.0e-05 | -3.3e-06 | -3.1e-06 |
+| episode length (steps) | 132 | 644 | 932 | 944 |
+
+Episode endings near iteration 1499: fell_over 1.7%, illegal_contact 10.3%, time_out 88.0%.
 
 ## What I saw (Brian: viewer, curves)
 
