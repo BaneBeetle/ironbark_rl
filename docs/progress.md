@@ -5,7 +5,7 @@
 - Brian's Phase 1 read and decision are in [journal.md](journal.md). Path A stays alive only if the policy still walks with the real dog's latency in sim.
 - **Latency model** (Brian's numbers; `ironbark_rl/brian/latency_config.py`, `ironbark_rl/brian/obs.py`): 40 ms command delay; joint readback = round-robin sample-and-hold, 130 ms cycle. New tasks `IronBark-S2-Walk-Flat-Brian-CmdDelay` (EXP-009), `-StaleJoints` (EXP-010), `-StaleJoints-VelRef` (scoring EXP-005 only). Delays stay on when scoring. Tests: 143 + 4 sim pass.
 - **EXP-009** training (started ~this entry). Then: score it + EXP-005 under its conditions (`--tag cmd_delay`), then EXP-010 the same way.
-- Probe changes since Brian's run, **not deployed** (Pi offline): settle fix, adopt-all-12, round-to-nearest bytes (Brian), new `imu` test. The IMU refresh rate needs that `imu` run: the Phase 1 logs hold one yaw per run only.
+- Probe changes since Brian's run (settle fix, adopt-all-12, round-to-nearest bytes, new `imu` and `map` tests) are **deployed** (commit `9ad9f08`; only `--help` and the hash gate were run on the Pi). The IMU refresh rate needs Brian's `imu` run: the Phase 1 logs hold one yaw per run only. `map` (wiggle each xgolib id, Brian names the leg/joint) runs before any policy deployment; the sim-joint mapping stays `# MEASURE:` until then.
 - `eval.py` / `gait_check.py`: `--tag` scores a checkpoint under another task's conditions without overwriting its own results.
 
 ## 2026-11-07 (evening): Phase 1 measured (Brian ran the probe); decision pending
