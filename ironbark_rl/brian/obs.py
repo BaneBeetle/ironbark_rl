@@ -121,3 +121,97 @@ class stale_joint_vel(ManagerTermBase):  # noqa: N801
         self.readback.update()  # idempotent within a step
         return (self.readback.held - self.readback.held_last_step) / env.step_dt  # (num_envs, 12) rad/s
 
+
+
+# ---------------------------------------------------------------------------------------------------------
+# IMU freezes (scoring only; Brian, 2026-11-07). On the dog the whole IMU block sometimes repeats one value
+# for ~1 s, then updates live again (latency_config.IMU_FROZEN_MS / IMU_LIVE_MS). Each env runs its own
+# frozen/live alternation, each stretch's length drawn from the measured ones. While frozen, the actor's
+# IMU terms (base_ang_vel, projected_gravity) hold the value they had at the last live step.
+#
+# Example (one env, policy step 20 ms): live for 3 steps, then a 987 ms freeze starts:
+#     step               0      1      2      3      4    ...   51     52
+#     true gyro z      0.10   0.30   0.50   0.40   0.20  ...   0.00   0.10
+#     observed         0.10   0.30   0.50   0.50   0.50  ...   0.50   0.10   (frozen for steps 3-51)
+# ---------------------------------------------------------------------------------------------------------
+
+_FREEZE_ATTR = "_ironbark_imu_freeze"  # one shared alternation per env object, so gyro and gravity freeze together
+
+
+class ImuFreezeSchedule:
+    """Per env: is the IMU frozen right now? Advances once per policy step (idempotent within a step)."""
+
+    def __init__(self, env) -> None:
+        self.env = env  # clock: episode_length_buf, step_dt
+        device = env.device  # every buffer lives where the sim does
+        self.frozen_s = torch.tensor(config.IMU_FROZEN_MS, device=device) / 1000.0  # (38,) s: measured freezes
+        self.live_s = torch.tensor(config.IMU_LIVE_MS, device=device) / 1000.0  # (40,) s: measured live stretches
+        share = self.frozen_s.sum() / (self.frozen_s.sum() + self.live_s.sum())  # () 0.418: time frozen in the logs
+        self.frozen_share = float(share)  # used to start each env in a frozen or live stretch in that proportion
+        self.frozen = torch.zeros(env.num_envs, dtype=torch.bool, device=device)  # (num_envs,): frozen now?
+        self.remaining = torch.zeros(env.num_envs, device=device)  # (num_envs,) s: left in the current stretch
+        self.t_last = torch.zeros(env.num_envs, device=device)  # (num_envs,) s: env time at the last advance
+        self.fresh = torch.ones(env.num_envs, dtype=torch.bool, device=device)  # (num_envs,): just reset
+
+    def _draw(self, frozen: torch.Tensor) -> torch.Tensor:
+        """A stretch length for each entry: a random measured freeze if frozen, else a random live stretch."""
+        f = self.frozen_s[torch.randint(len(self.frozen_s), frozen.shape, device=frozen.device)]  # (n,) s
+        live = self.live_s[torch.randint(len(self.live_s), frozen.shape, device=frozen.device)]  # (n,) s
+        return torch.where(frozen, f, live)  # (n,) s
+
+    def reset(self, env_ids) -> None:
+        ids = slice(None) if env_ids is None else env_ids  # None means every env
+        self.fresh[ids] = True  # start a new alternation at the next advance
+
+    def advance(self) -> None:
+        t = self.env.episode_length_buf.float() * self.env.step_dt  # (num_envs,) s since each env's reset
+        start = self.fresh  # (num_envs,): envs starting over
+        n = int(start.sum())  # how many
+        if n:
+            begin_frozen = torch.rand(n, device=t.device) < self.frozen_share  # (n,): frozen in 41.8% of starts
+            self.frozen[start] = begin_frozen  # (n,)
+            self.remaining[start] = torch.rand(n, device=t.device) * self._draw(begin_frozen)  # (n,) s: part-way in
+            self.t_last[start] = t[start]  # (n,) s
+            self.fresh[start] = False  # running now
+        moved = (t > self.t_last) & ~start  # (num_envs,): time advanced since the last call
+        self.remaining -= torch.where(moved, t - self.t_last, torch.zeros_like(t))  # (num_envs,) s
+        self.t_last = torch.where(moved, t, self.t_last)  # (num_envs,) s
+        while True:  # stretches are >= 25 ms, a step is 20 ms: almost always 0 or 1 switch per step
+            over = self.remaining <= 0  # (num_envs,): this stretch ended during the step
+            if not bool(over.any()):
+                break
+            self.frozen = torch.where(over, ~self.frozen, self.frozen)  # (num_envs,): live <-> frozen
+            self.remaining = torch.where(over, self.remaining + self._draw(self.frozen), self.remaining)  # (num_envs,)
+
+
+def imu_freeze_schedule(env) -> ImuFreezeSchedule:
+    """The env's shared schedule (created on first use)."""
+    schedule = getattr(env, _FREEZE_ATTR, None)  # None until the first IMU term asks
+    if schedule is None:
+        schedule = ImuFreezeSchedule(env)  # one per env object
+        setattr(env, _FREEZE_ATTR, schedule)  # every IMU term finds the same one
+    return schedule
+
+
+class imu_frozen(ManagerTermBase):  # noqa: N801 (mjlab term naming)
+    """Wraps an IMU observation (params: inner = its function, inner_params = its params) with the freezes."""
+
+    def __init__(self, cfg, env) -> None:
+        super().__init__(env)  # ManagerTermBase keeps the env
+        self.schedule = imu_freeze_schedule(env)  # shared with the other IMU term
+        self.held = None  # (num_envs, k): last live value, allocated on the first call (k = 3 here)
+        self.need_start = torch.ones(env.num_envs, dtype=torch.bool, device=env.device)  # (num_envs,): just reset
+
+    def reset(self, env_ids=None) -> None:
+        self.schedule.reset(env_ids)  # harmless if the other IMU term already did
+        self.need_start[slice(None) if env_ids is None else env_ids] = True  # take the true value next call
+
+    def __call__(self, env, inner, inner_params) -> torch.Tensor:
+        true = inner(env, **inner_params)  # (num_envs, k): what a live IMU would report
+        self.schedule.advance()  # idempotent within a step
+        if self.held is None:
+            self.held = true.clone()  # (num_envs, k)
+        take = (~self.schedule.frozen | self.need_start)[:, None]  # (num_envs, 1): live, or just reset
+        self.held = torch.where(take, true, self.held)  # (num_envs, k): frozen envs keep their last live value
+        self.need_start[:] = False  # every env has a value now
+        return self.held.clone()  # (num_envs, k): clone, the manager adds noise in place

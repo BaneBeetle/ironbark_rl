@@ -118,3 +118,80 @@ def test_velocity_is_the_change_of_the_reading_per_step():
     assert sum(v != 0 for v in vs) == 2  # polls at 130 and 260 ms
     k = next(i for i, v in enumerate(vs) if v != 0)
     assert vs[k] == pytest.approx((ps[k] - ps[k - 1]) / DT)
+
+
+# ----------------------------------------------------------------------------------- IMU freezes
+
+def imu_env(num_envs):
+    env = FakeEnv(num_envs)
+    gyro = obs.imu_frozen(None, env)
+    grav = obs.imu_frozen(None, env)
+    gyro.reset(None)
+    grav.reset(None)
+    return env, gyro, grav
+
+
+def truth(env, k):
+    """A different true value every step and env: (num_envs, 3)."""
+    return lambda e: torch.full((env.num_envs, 3), float(k)) + torch.arange(env.num_envs)[:, None] * 1000.0
+
+
+def test_freeze_durations_are_the_logs():
+    import importlib.util
+    from pathlib import Path
+
+    spec = importlib.util.spec_from_file_location("report", Path(__file__).resolve().parents[2] / "tools" / "joint_control_report.py")
+    report = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(report)
+    frozen, live = report.imu_freeze_durations()
+    assert tuple(frozen) == config.IMU_FROZEN_MS and tuple(live) == config.IMU_LIVE_MS
+
+
+def test_frozen_share_and_stretch_lengths_match_the_logs():
+    env, gyro, grav = imu_env(256)
+    held = []
+    for k in range(1, 3001):  # 60 s per env
+        env.step(torch.zeros(256, 12))
+        out = gyro(env, inner=truth(env, k), inner_params={})
+        held.append((out[:, 0] != k + torch.arange(256) * 1000.0))  # (256,): not the fresh value = frozen
+    frozen = torch.stack(held)  # (steps, envs)
+    assert float(frozen.float().mean()) == pytest.approx(0.418, abs=0.03)
+    runs = []  # lengths of completed frozen runs, in ms
+    for e in range(256):
+        col, k = frozen[:, e].tolist(), 0
+        while k < len(col):
+            j = k
+            while j < len(col) and col[j] == col[k]:
+                j += 1
+            if col[k] and k > 1 and j < len(col):  # skip the stretch a reset started part-way through
+                runs.append((j - k + 1) * DT * 1000)  # a freeze of n repeated steps spans n+1 reads
+            k = j
+    assert min(runs) >= min(config.IMU_FROZEN_MS) - 20 and max(runs) <= max(config.IMU_FROZEN_MS) + 40
+
+
+def test_gyro_and_gravity_freeze_together_and_hold_the_last_live_value():
+    env, gyro, grav = imu_env(8)
+    for k in range(1, 400):
+        env.step(torch.zeros(8, 12))
+        g = gyro(env, inner=truth(env, k), inner_params={})
+        v = grav(env, inner=truth(env, k), inner_params={})
+        live = g[:, 0] == k + torch.arange(8) * 1000.0
+        assert torch.equal(live, v[:, 0] == k + torch.arange(8) * 1000.0)  # same envs frozen in both terms
+        if k > 1:  # step 1 after a reset always shows the true value (the dog has a reading), frozen or not
+            assert torch.equal(gyro.schedule.frozen, ~live)
+        if k > 1:
+            stuck = ~live
+            assert torch.equal(g[stuck], prev[stuck])  # frozen envs repeat their previous output
+        prev = g.clone()
+
+
+def test_imu_freeze_is_idempotent_within_a_step_and_resets_to_truth():
+    env, gyro, grav = imu_env(4)
+    env.step(torch.zeros(4, 12))
+    a = gyro(env, inner=truth(env, 1), inner_params={})
+    b = gyro(env, inner=truth(env, 1), inner_params={})
+    assert torch.equal(a, b)
+    gyro.reset(torch.tensor([2]))
+    env.episode_length_buf[2] = 0
+    out = gyro(env, inner=truth(env, 7), inner_params={})
+    assert float(out[2, 0]) == 7 + 2 * 1000.0  # a reset env starts from the true value

@@ -33,3 +33,17 @@ _POLL_ORDER = sorted(XGO_ID_TO_SIM_JOINT)  # [11, 12, 13, 21, ..., 43]
 def readback_slot(sim_joint_name: str) -> int:
     """Polling slot (0-11) of a sim joint, e.g. 'fr_thigh_joint' -> xgolib id 22 -> slot 4."""
     return _POLL_ORDER.index(SIM_JOINT_TO_XGO_ID[sim_joint_name])  # ID order is the firmware's poll order
+
+
+# IMU freezes (scoring only, no training; Brian, 2026-11-07: "Score EXP-010's policy with simulated IMU
+# freezes matching our logs (no retraining)"). The whole IMU block (accel, gyro, roll/pitch/yaw) repeats an
+# identical value for ~1 s at a time, then updates live for a while. Durations in ms, from every IMU run's
+# read_imu() series (docs/measurements/joint_control_imu*_20261108-*.jsonl), a "frozen" stretch being a
+# repeat run longer than 100 ms; the first and last stretch of each run are dropped (cut off by the run's
+# start or end). Recomputed from the logs by tests/brian/test_obs.py (tools/joint_control_report.py).
+# Overall the IMU was frozen 41.8% of the time.
+IMU_FROZEN_MS = (882, 882, 884, 886, 886, 966, 966, 980, 982, 983, 987, 987, 987, 987, 987, 987, 987, 987, 987,
+                 987, 987, 987, 987, 992, 992, 995, 999, 999, 999, 999, 999, 999, 1001, 1001, 1002, 1003, 1003, 1004)
+IMU_LIVE_MS = (25, 42, 46, 71, 98, 101, 118, 126, 202, 252, 273, 315, 378, 378, 420, 445, 483, 513, 546, 602, 630,
+               691, 763, 945, 966, 1004, 1047, 1186, 1596, 1876, 2121, 2276, 2670, 2870, 3108, 3213, 3258, 3388,
+               5923, 6630)

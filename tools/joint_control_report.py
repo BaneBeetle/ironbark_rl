@@ -196,6 +196,50 @@ def imu_call_stats(call, rows):
     return row
 
 
+# The IMU runs and phases behind latency_config.IMU_FROZEN_MS / IMU_LIVE_MS (Brian's freeze model, 2026-11-07).
+IMU_FREEZE_RUNS = {
+    "joint_control_imu_20261108-001338.jsonl": ("imu_block",),
+    "joint_control_imu_20261108-002931.jsonl": ("imu_block",),
+    "joint_control_imu-loop_20261108-003015.jsonl": ("loop",),
+    "joint_control_imu-probe_20261108-004747.jsonl": ("alongside", "slow"),
+    "joint_control_imu_20261108-005045.jsonl": ("imu_block",),
+}
+
+
+def imu_freeze_stretches(t_ms, V):
+    """[(kind, ms)] alternating 'F' (whole block repeated for > FROZEN_REPORT_MIN_MS) and 'L' (live).
+
+    The first and last stretch are dropped: the run's start or end cuts them off.
+    """
+    repeat = np.all(np.diff(V, axis=0) == 0, axis=1)  # pair k: read k+1 identical to read k
+    stretches, k = [], 0
+    while k < len(repeat):
+        j = k
+        while j < len(repeat) and repeat[j] == repeat[k]:
+            j += 1
+        span = t_ms[j] - t_ms[k]
+        kind = "F" if repeat[k] and span > FROZEN_REPORT_MIN_MS else "L"
+        if stretches and stretches[-1][0] == kind == "L":  # short repeats inside a live stretch stay live
+            stretches[-1] = ("L", stretches[-1][1], j)
+        else:
+            stretches.append((kind, k, j))
+        k = j
+    return [(kind, round(float(t_ms[b] - t_ms[a]))) for kind, a, b in stretches[1:-1]]
+
+
+def imu_freeze_durations(folder=REPO / "docs" / "measurements"):
+    """(frozen ms, live ms), sorted, pooled over IMU_FREEZE_RUNS."""
+    frozen, live = [], []
+    for name, phases in IMU_FREEZE_RUNS.items():
+        rows = [r for r in load(Path(folder) / name)["imu"] if r["call"] == "read_imu" and r["v"] not in ([], None)]
+        for phase in phases:
+            sel = [r for r in rows if r["phase"] == phase]
+            t_ms = np.array([(r["t0"] + r["t1"]) / 2e6 for r in sel])
+            for kind, ms in imu_freeze_stretches(t_ms, np.array([r["v"] for r in sel])):
+                (frozen if kind == "F" else live).append(ms)
+    return sorted(frozen), sorted(live)
+
+
 def report_imu(log):
     """Per IMU call: latency and rate; per channel: how often its value changes (its refresh)."""
     by_call = defaultdict(list)
