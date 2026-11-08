@@ -14,7 +14,7 @@ Scored with each experiment's latency on (Brian), seed 42, scoreboard v1 + `gait
 | EXP-010, delay + stale joints + measured IMU freezes (no retraining) | 0.000 | 0.040 | 0.132 | 3.00 | 1.70 | 0.78% | 25.4% | 2.68 |
 
 - Training-time endings near the last iteration: EXP-005 fell 0.8% / non-foot contact 5.6%; EXP-009 1.8% / 12.9%; EXP-010 3.8% / 12.0%. Final mean episode length 972 / 926 / 921 steps.
-- EXP-010 trained 65 min (a slow first ~30 min: GPU shared with other apps and two `aws_api_mcp_server` workers, which Brian had stopped).
+- EXP-010 trained 65 min (a slow first ~30 min: GPU shared with other apps and two `aws_api_mcp_server` workers, which Claude stopped at Brian's OK).
 - **IMU freeze model** (scoring only, `IronBark-S2-Walk-Flat-Brian-StaleJoints-ImuFreeze`): each env alternates frozen / live stretches drawn from the 38 measured freezes (882-1004 ms) and 40 live stretches (25 ms - 6.6 s); 41.8% frozen; gyro and gravity hold together.
 - **v2-archive merged** into main (`docs/v2-archive/`, merge `ea33fac`); CLAUDE.md now points there, and camera/lidar are PUSH -> PULL. Flags raised from MEASURED_FACTS / LESSONS / findings are in `docs/deployment-notes.md` and the corrected yaw-drift lines.
 - **Open (Brian):** reads and verdicts for EXP-009 and EXP-010; the Path A decision rule from his hypothesis; the queued IMU-freeze training experiment; the milestone quiz (protocol step 6) after his read.
