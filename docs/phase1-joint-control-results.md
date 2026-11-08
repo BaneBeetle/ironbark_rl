@@ -91,6 +91,18 @@ Back-to-back reads, no joint commands; `joint_control_imu_20261108-001338.jsonl`
 - `read_roll()` phase (5.6 s): the value changed on 99 of 1000 reads.
 - Not yet measured: the refresh with the dog still, and at a policy-like read rate (one IMU read per ~20 ms loop).
 
+## IMU reruns (2026-11-07, Pi clock 11-08 00:29-00:30; numbers only)
+
+**`imu --label still`** (`joint_control_imu_20261108-002931.jsonl`; dog left still, back-to-back reads):
+- `read_imu()` 4.10 ms median (p99 4.70), 238 calls/s, 0 failures. `read_roll()` / `read_pitch()` 2.62 ms.
+- Frozen stretches (whole block repeated exactly): 995-1002 ms (5 of them) and 748 ms; 77.5% of reads repeat the previous one. Live stretches between them: 38-1034 ms. While live, accel, roll, pitch and yaw change every read (~4.3 ms), gyro every ~8.3 ms.
+- 7 suspect reads (a whole accel or gyro vector exactly 0, or |gyro| > 1000 deg/s; max 1623.4 deg/s). Other reads: roll p1/p50/p99 = -10.1 / -1.6 / +0.5 deg, pitch -9.4 / -0.7 / -0.2 deg, |accel| 9.70 / 9.77 / 9.83 m/s^2.
+
+**`imu-loop`** (`joint_control_imu-loop_20261108-003015.jsonl`; each step: 12-joint hold write + `read_motor()` + `read_imu()`; Brian pressed Enter once, at step 760 of 1500, when he started tilting):
+- **Loop: 21.0 ms per step (p99 21.2), 47.6 Hz.** 12-joint write call 0.13 ms, `read_motor()` 16.2 ms (it waits behind the write), `read_imu()` 4.57 ms.
+- Frozen stretches: 987 ms (13 of them), 966 ms (2), 714 ms, 588 ms; 51% of reads repeat (41% before step 760, 62% after). Live stretches: 84-3171 ms. While live, every channel changes every step (~21 ms).
+- 6 suspect reads (same definition). Other reads: roll p1/p50/p99 = -55.0 / -1.4 / +68.6 deg, pitch -29.8 / -0.5 / +14.5 deg (tilting after step 760), |accel| 9.52 / 9.78 / 9.99 m/s^2.
+
 ## Open
 
 - Re-run `sine` with the fixed probe if Brian wants joints 12 and 13. The Pi went offline before the fixed probe could be deployed (it still has `8e1cab7`).
