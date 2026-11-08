@@ -148,6 +148,27 @@ def report_read(log):
 IMU_CHANNELS = ["accel_x", "accel_y", "accel_z", "gyro_x", "gyro_y", "gyro_z", "roll", "pitch", "yaw"]  # read_imu() order
 
 
+FROZEN_REPORT_MIN_MS = 100  # list frozen stretches longer than this (several policy steps)
+
+
+def frozen_stretches_ms(t, V):
+    """Lengths [ms] of the runs where the whole value vector repeats exactly (the register didn't update).
+
+    t: (n,) s read times; V: (n, channels) values.
+    """
+    same = np.all(np.diff(V, axis=0) == 0, axis=1)  # (n - 1,): read k+1 identical to read k
+    out, start = [], None
+    for k, repeat in enumerate(same):
+        if repeat and start is None:
+            start = k
+        elif not repeat and start is not None:
+            out.append(t[k] - t[start])
+            start = None
+    if start is not None:
+        out.append(t[-1] - t[start])
+    return np.array(out) * 1e3
+
+
 def report_imu(log):
     """Per IMU call: latency and rate; per channel: how often its value changes (its refresh)."""
     out = {}
@@ -157,9 +178,15 @@ def report_imu(log):
     for call, rows in by_call.items():
         t = np.array([(r["t0"] + r["t1"]) / 2e9 for r in rows])
         good = [r for r in rows if r["v"] not in ([], None)]
-        row = {"latency_ms": stats_ms([(r["t1"] - r["t0"]) / 1e9 for r in rows]),
+        row = {"latency_ms": stats_ms([(r["t1"] - r["t0"]) / 1e9 for r in rows]), "period_ms": stats_ms(np.diff(t)),
                "calls_per_s": round(float((len(t) - 1) / (t[-1] - t[0])), 1), "failed": len(rows) - len(good)}
         tg = np.array([(r["t0"] + r["t1"]) / 2e9 for r in good])
+        V_all = np.array([r["v"] for r in good], dtype=float).reshape(len(good), -1)  # (n, channels)
+        frozen = frozen_stretches_ms(tg, V_all)
+        row["frozen_share"] = round(float(np.mean(np.all(np.diff(V_all, axis=0) == 0, axis=1))), 3)
+        row["frozen_over_100ms_ms"] = sorted((round(float(x)) for x in frozen[frozen > FROZEN_REPORT_MIN_MS]), reverse=True)
+        if call == "read_imu":  # whole accel or gyro vector exactly zero: not a physical reading
+            row["zero_vectors"] = int(np.sum(np.all(V_all[:, 0:3] == 0, axis=1) | np.all(V_all[:, 3:6] == 0, axis=1)))
         if call == "read_imu":
             V = np.array([r["v"] for r in good])
             channels = {name: V[:, i] for i, name in enumerate(IMU_CHANNELS)}
@@ -170,6 +197,7 @@ def report_imu(log):
             gaps = change_intervals(tg, x)
             row["change_interval_ms"][name] = stats_ms(gaps) if gaps.size else None
         out[call] = row
+    out["marks"] = [e["i"] for e in log.get("events", []) if e["name"] == "mark"]  # imu-loop: Enter presses
     return out
 
 
@@ -352,7 +380,7 @@ def report_yaw(logs):
     return {"points": [{"test": n, "t_s": round(t, 1), "yaw": y} for t, y, n in pts], "rates": rates}
 
 
-REPORTS = {"read": report_read, "imu": report_imu, "map": report_map, "passive": report_passive, "step": report_step, "sine": report_sine,
+REPORTS = {"read": report_read, "imu": report_imu, "imu-loop": report_imu, "map": report_map, "passive": report_passive, "step": report_step, "sine": report_sine,
            "rate_read_every_0": report_rate, "rate_read_every_1": report_rate, "gait": report_gait}
 
 

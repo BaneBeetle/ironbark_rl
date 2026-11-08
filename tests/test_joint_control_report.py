@@ -77,3 +77,15 @@ def test_report_map_reads_the_summary_and_skips():
               {"name": "map_summary", "answers": {"11": {"leg": "fl", "part": "calf", "plus_dir": "fwd"}}, "duplicates": {}}]
     out = report.report_map({"events": events})
     assert out == {"answers": {"11": {"leg": "fl", "part": "calf", "plus_dir": "fwd"}}, "duplicates": {}, "skipped": [21]}
+
+
+def test_frozen_stretches_and_zero_vectors():
+    rows = []
+    for k in range(100):  # read every 2 ms; values update every read except reads 20-79 (120 ms frozen)
+        x = float(min(k, 20) if k < 80 else k)
+        v = [x, 0, -9.8, 0.1, 0, 0, 0, 0, 0] if k != 90 else [0, 0, 0, 0.1, 0, 0, 0, 0, 0]  # read 90: accel zeroed
+        rows.append({"call": "read_imu", "t0": k * 2_000_000, "t1": k * 2_000_000 + 1_000_000, "v": v})
+    out = report.report_imu({"imu": rows, "events": [{"name": "mark", "i": 5}]})
+    row = out["read_imu"]
+    assert row["frozen_over_100ms_ms"] == [118] and row["zero_vectors"] == 1 and out["marks"] == [5]
+    assert row["period_ms"]["median"] == pytest.approx(2.0)
