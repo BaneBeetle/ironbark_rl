@@ -1,0 +1,128 @@
+{
+  "camera_resolution": [
+    640,
+    480
+  ],
+  "yolo_conf_threshold": 0.5,
+  "v2_turn_bands": [
+    [
+      0.08,
+      220
+    ],
+    [
+      0.15,
+      160
+    ],
+    [
+      0.3,
+      100
+    ],
+    [
+      Infinity,
+      60
+    ]
+  ],
+  "v2_arrival_area_ratio": 0.55,
+  "stations": [
+    {
+      "distance_m": 1.0,
+      "frames": 529,
+      "stream_gaps": 0,
+      "detected": 518,
+      "hit_rate": 0.9792060491493384,
+      "target_rate": 0.8827977315689981,
+      "clipped_frac": 0.8976833976833977,
+      "multi_person_frac": 0.02895752895752896,
+      "off_x_mean": 35.729729729729726,
+      "off_x_std": 39.65094228705389,
+      "off_x_jump_median": 0.0,
+      "off_x_jump_p90": 1.0,
+      "area_mean": 0.15909774171492921,
+      "area_std": 0.055215900795454236,
+      "bbox_h_mean": 281.66409266409266,
+      "bbox_h_std": 81.53149842704813,
+      "turn_band_now_px": 100,
+      "deadband_3sigma_px": 118.95282686116167
+    },
+    {
+      "distance_m": 1.5,
+      "frames": 575,
+      "stream_gaps": 0,
+      "detected": 389,
+      "hit_rate": 0.6765217391304348,
+      "target_rate": 0.6747826086956522,
+      "clipped_frac": 1.0,
+      "multi_person_frac": 0.0,
+      "off_x_mean": 18.4987146529563,
+      "off_x_std": 12.418500312792771,
+      "off_x_jump_median": 1.0,
+      "off_x_jump_p90": 2.0,
+      "area_mean": 0.11805433938517566,
+      "area_std": 0.009391683939392556,
+      "bbox_h_mean": 280.73521850899743,
+      "bbox_h_std": 0.9234554344419376,
+      "turn_band_now_px": 160,
+      "deadband_3sigma_px": 37.25550093837831
+    },
+    {
+      "distance_m": 2.0,
+      "frames": 598,
+      "stream_gaps": 0,
+      "detected": 590,
+      "hit_rate": 0.9866220735785953,
+      "target_rate": 0.9866220735785953,
+      "clipped_frac": 1.0,
+      "multi_person_frac": 0.00847457627118644,
+      "off_x_mean": 13.72542372881356,
+      "off_x_std": 2.593184889532821,
+      "off_x_jump_median": 1.0,
+      "off_x_jump_p90": 2.0,
+      "area_mean": 0.09902091609286723,
+      "area_std": 0.0021061209301691166,
+      "bbox_h_mean": 263.00847457627117,
+      "bbox_h_std": 1.1296899433020113,
+      "turn_band_now_px": 160,
+      "deadband_3sigma_px": 7.779554668598463
+    },
+    {
+      "distance_m": 3.0,
+      "frames": 600,
+      "stream_gaps": 0,
+      "detected": 554,
+      "hit_rate": 0.9233333333333333,
+      "target_rate": 0.9166666666666666,
+      "clipped_frac": 0.9693140794223827,
+      "multi_person_frac": 0.0036101083032490976,
+      "off_x_mean": 13.88086642599278,
+      "off_x_std": 3.5132901835125896,
+      "off_x_jump_median": 1.0,
+      "off_x_jump_p90": 3.0,
+      "area_mean": 0.06750615199120036,
+      "area_std": 0.0049445805698557655,
+      "bbox_h_mean": 247.0956678700361,
+      "bbox_h_std": 1.984565717794612,
+      "turn_band_now_px": 220,
+      "deadband_3sigma_px": 10.539870550537769
+    },
+    {
+      "distance_m": 4.0,
+      "frames": 600,
+      "stream_gaps": 0,
+      "detected": 588,
+      "hit_rate": 0.98,
+      "target_rate": 0.9766666666666667,
+      "clipped_frac": 0.003401360544217687,
+      "multi_person_frac": 0.0017006802721088435,
+      "off_x_mean": 15.693877551020408,
+      "off_x_std": 11.454501681615044,
+      "off_x_jump_median": 0.0,
+      "off_x_jump_p90": 1.0,
+      "area_mean": 0.033313060250141725,
+      "area_std": 0.006919571906226014,
+      "bbox_h_mean": 173.34863945578232,
+      "bbox_h_std": 2.9771033585387716,
+      "turn_band_now_px": 220,
+      "deadband_3sigma_px": 34.363505044845134
+    }
+  ]
+}

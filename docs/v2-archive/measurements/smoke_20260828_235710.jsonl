@@ -1,0 +1,1 @@
+{"t": 1787957871.266, "stage": 1, "event": "yaw_static", "n": 1764, "call_rate_hz": 48.5, "update_rate_hz": 0.0, "drift_deg_over_window": 0.0, "drift_deg_per_min": 0.0, "bias_slope_deg_per_s": 0.0, "resid_std_deg": 0.0, "noise_std_deg": 0.0, "min": -0.0, "max": -0.0, "zero_returns": 1764}

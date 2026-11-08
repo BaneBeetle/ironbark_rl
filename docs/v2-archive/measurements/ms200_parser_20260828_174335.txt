@@ -1,0 +1,90 @@
+IronBark V2 — MS200 parser verification (no lidar hardware)
+
+1. pi/test_ms200_parser.py — spec-derived frames, stdlib only
+-------------------------------------------------------------
+1. checksum
+  [PASS] crc8 of a single 0x01 byte is table[1]
+  [PASS] crc8 of an empty buffer is 0
+  [PASS] frame is 47 bytes
+  [PASS] built frame's own checksum verifies
+  [PASS] header bytes are 0x54 0x2C
+
+2. round trip
+  [PASS] one frame parsed
+  [PASS] point count
+  [PASS] distances survive
+  [PASS] confidences survive
+  [PASS] start angle 0.00°
+  [PASS] end angle 11.00°
+  [PASS] speed passthrough (deg/s)
+
+3. angle interpolation
+  [PASS] first point at start angle
+  [PASS] step is 1.0° per point
+  [PASS] last point at end angle
+  [PASS] wrapped frame step still 1.0°
+  [PASS] angle before the wrap
+  [PASS] angle after the wrap folds to 0.0
+  [PASS] last wrapped angle
+
+4. resynchronisation
+  [PASS] leading garbage is skipped
+  [PASS] garbage counted as discarded
+  [PASS] split frame yields nothing on the first half
+  [PASS] ...and one frame once the rest arrives
+  [PASS] corrupted frame is rejected, the good one still parses
+  [PASS] crc failure counted
+  [PASS] payload-embedded header does not desync
+  [PASS] no spurious crc failures from the decoy
+
+5. scan assembly
+  [PASS] exactly one revolution closed
+  [PASS] revolution holds 360 points
+  [PASS] no crc failures across 31 frames
+  [PASS] frames parsed
+  [PASS] zero distance/confidence returns dropped
+  [PASS] dropped points counted
+  [PASS] fragment under 50 points is not published
+  [PASS] fragment counted as a short scan
+
+6. wire schema (must match V1's lidar_reader.py exactly)
+  [PASS] keys
+  [PASS] n is the point count
+  [PASS] point keys are a/d
+  [PASS] angle in degrees
+  [PASS] distance in millimetres
+  [PASS] ts is a float epoch
+
+All MS200 parser tests passed.
+
+2. ms200_reader.py --replay over a synthetic dump
+   (5 revolutions of a simulated room: 2.0 m forward, 1.2 m left,
+    1.5 m right, 3.0 m behind; plus 9 bytes of line noise and one
+    torn frame, to exercise resynchronisation)
+-------------------------------------------------------------
+[Replay] 7079 bytes from ms200_synth.bin
+[Replay] scan 1: 353 pts 0.0°..359.0° d_min=1182mm d_max=3345mm
+[Replay] scan 2: 352 pts 0.0°..359.0° d_min=1183mm d_max=3329mm
+[Replay] scan 3: 356 pts 0.0°..359.0° d_min=1177mm d_max=3331mm
+[Replay] scan 4: 355 pts 0.0°..359.0° d_min=1189mm d_max=3342mm
+[Replay] scans=4 frames_ok=150 crc_fail=1 discarded=29B short_scans=0 zero_points=31 speed=10.0 rev/s
+
+3. End-to-end into the UNCHANGED pc/lidar_map.py
+-------------------------------------------------------------
+[LidarMap] PULL socket bound on 127.0.0.1:50507
+
+has_data       : True
+scans received : 1
+points in scan : 353
+scan age       : 611 ms
+costmap        : built
+
+arc queries (cm)          expected  got
+  forward (±30°)            200     199.0  OK
+  left                        120     118.2  OK
+  right                       150     148.9  OK
+  rear                        240     239.4  OK
+
+get_direction_to_go(50) : backward
+find_best_direction(50) : angle=165.0° dist=299cm
+costmap best heading    : 0°
