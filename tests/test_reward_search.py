@@ -140,3 +140,27 @@ def test_study_starts_from_exp010_and_the_gp_takes_over():
     assert len(table) == len(study.trials)
     passed = [("| pass |" in line) for line in table]
     assert passed == sorted(passed, reverse=True)  # every pass above every fail
+
+
+def guard_result(standing=0.03, walking=0.4, negative_command=None):
+    by_command = [{"command": [0.2, 0.0, 0.0], "total": 0.5}]
+    if negative_command is not None:
+        by_command.append({"command": [0.0, 0.0, 0.5], "total": negative_command})
+    return {"standing_total": standing, "walking_total": walking, "walking_by_command": by_command}
+
+
+def test_guard_flags_negative_standing_or_walking_totals_only():
+    assert rs.guard_flags(guard_result()) == []
+    assert rs.guard_flags(guard_result(standing=-0.001)) == ["standing"]
+    assert rs.guard_flags(guard_result(standing=-0.1, walking=-0.2)) == ["standing", "walking"]
+    assert rs.guard_flags(guard_result(negative_command=-0.3)) == []  # one command below 0 is reported, not flagged
+    assert "negative commands (vx, vy, wz): (+0.0, +0.0, +0.5) -0.3000. OK" in rs.guard_text(guard_result(negative_command=-0.3))
+    assert "**FLAG: walking total negative**; trained anyway" in rs.guard_text(guard_result(walking=-0.01))
+    assert rs.guard_short(guard_result(standing=-0.01)) == "-0.0100 / +0.4000 **FLAG: standing**"
+
+
+def test_guard_line_goes_in_setup_before_the_run_folder():
+    text = rs.add_guard_line(template_entry(), rs.guard_line(guard_result()))
+    lines = text.split("\n")
+    i = next(k for k, line in enumerate(lines) if line.startswith("- Guard: "))
+    assert lines[i + 1].startswith("- Run folder:") and lines[i - 1].startswith("- Train:")

@@ -11,6 +11,10 @@ Control files in the study folder, checked between trials only (a running trial 
   PAUSE   wait with the GPU free until the file is removed (e.g. while another session renders)
   STOP    exit before the next trial
 
+Before training, every trial runs the reward guard (tools/reward_check.py) with its weights:
+standing still, and EXP-010's policy on the command grid. A negative standing or walking
+per-step total is flagged in the entry, the index and the table; the trial trains anyway (Brian).
+
 The driver commits each trial's entry before training and its results after scoring
 (only the files it wrote), and stops at the first failed trial.
 """
@@ -46,6 +50,7 @@ PARENT = "EXP-010"
 PARENT_RUN = "2026-11-07_20-02-00_EXP-010"  # seed 42, the start weights: the study's known point
 SEED, ITERATIONS, ENVS = 42, 1500, 4096
 CHECKPOINT = f"model_{ITERATIONS - 1}.pt"
+PARENT_CHECKPOINT = RUNS_DIR / "logs/rsl_rl" / EXPERIMENT_NAME / PARENT_RUN / CHECKPOINT  # the guard's walking policy
 
 SPEC = """\
 After the 4 seed runs finish and are scored, start an Optuna search (Bayesian optimization) on MY reward under EXP-010's latency conditions:
@@ -153,6 +158,40 @@ def summary_text(m: dict[str, float]) -> str:
 def constraints_text(m: dict[str, float]) -> str:
     failed = failed_constraints(m)
     return "constraints pass" if not failed else "constraints fail (" + ", ".join(failed) + ")"
+
+
+def guard_flags(g: dict) -> list[str]:
+    """Brian (2026-11-08): flag, but don't skip, a trial whose standing or walking per-step total is negative."""
+    return [name for name in ("standing", "walking") if g[f"{name}_total"] < 0]
+
+
+def guard_text(g: dict) -> str:
+    text = f"standing {g['standing_total']:+.4f}, walking {g['walking_total']:+.4f} per step"
+    negative = [c for c in g["walking_by_command"] if c["total"] < 0]
+    if negative:
+        text += "; negative commands (vx, vy, wz): " + ", ".join(
+            f"({c['command'][0]:+.1f}, {c['command'][1]:+.1f}, {c['command'][2]:+.1f}) {c['total']:+.4f}" for c in negative)
+    flags = guard_flags(g)
+    return text + (". OK" if not flags else f". **FLAG: {' and '.join(flags)} total negative**; trained anyway (Brian: flag, don't skip)")
+
+
+def guard_line(g: dict) -> str:
+    return (f"- Guard: `tools/reward_check.py {TASK} --checkpoint <{PARENT} run>/{CHECKPOINT}` with this trial's three weights "
+            f"(standing still; {PARENT}'s policy on the command grid): {guard_text(g)}")
+
+
+def add_guard_line(text: str, line: str) -> str:
+    old = "\n- Run folder:"
+    if text.count(old) != 1:
+        raise ValueError("no Run folder line")
+    return text.replace(old, "\n" + line + old, 1)
+
+
+def guard_short(g: dict | None) -> str:
+    if g is None:
+        return "–"
+    flags = guard_flags(g)
+    return f"{g['standing_total']:+.4f} / {g['walking_total']:+.4f}" + (f" **FLAG: {', '.join(flags)}**" if flags else "")
 
 
 def fill_entry(text: str, number: int, weights: dict[str, float], start: dict[str, float], cmd: str) -> str:
@@ -292,27 +331,32 @@ def search_doc(study, now: str) -> str:
         "(scoreboard v1 overall). Objective: minimize flicker (`gait_check` share of touchdowns after swings < 0.02 s).",
         "- Ranking (Brian): trials that pass both constraints first, lower flicker first; then trials that fail one, also by flicker.",
         f"- {PARENT} (seed 42, the start weights) is in the study as a known point: trained before the search, not retrained.",
-        "- **Claude's defaults (Brian may change):** "
+        f"- Reward guard (Brian, 2026-11-08): before each trial trains, `tools/reward_check.py` runs with the trial's weights: standing still "
+        f"(zero command, zero action) and {PARENT}'s policy on the command grid (\"walking\"). A negative standing or walking per-step total "
+        f"is flagged here, in the trial's entry and in the index; the trial trains anyway. {PARENT}'s row shows the guard at the start weights.",
+        "- **Claude's defaults (Brian approved, 2026-11-08):** "
         f"sampler Optuna GPSampler (Gaussian-process Bayesian optimization, constraint-aware), sampler seed {SAMPLER_SEED}; "
         f"the first {N_STARTUP_TRIALS} trials ({PARENT} included) are random, the GP picks after that; "
-        f"{'log' if LOG_SCALE else 'linear'} scale on all three ranges; the reward guard (`tools/reward_check.py`) is skipped, as in the feet_air_time sweep.",
+        f"{'log' if LOG_SCALE else 'linear'} scale on all three ranges.",
         f"- Study: `~/dev/ironbark_runs/optuna/{STUDY_NAME}.db`. Between trials the driver waits while `optuna/PAUSE` exists and exits if `optuna/STOP` exists.",
         "",
         f"## Ranked trials ({now})",
         "",
         "| Rank | Exp | feet_air_time | action_rate (x start) | torques (x start) | Constraints | Saturation | Planar err [m/s] | Flicker "
-        "| Falls | Yaw err [rad/s] | Joint-target rate [rad/s] | CoT | Swing median [s] |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+        "| Falls | Yaw err [rad/s] | Joint-target rate [rad/s] | CoT | Swing median [s] | Guard: standing / walking per step |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     for rank, r in enumerate(ranked(rows(study)), 1):
         w, m = r["weights"], r["metrics"]
+        g = study.user_attrs.get("parent_guard") if r["exp"] == PARENT else r.get("guard")
         failed = failed_constraints(m)
         exp = f"[{r['exp']}]({_entry_name(r['exp'])})" + (" (known point)" if r["exp"] == PARENT else f" (trial {r['number']})")
         lines.append(
             f"| {rank} | {exp} | {_num(w['feet_air_time'])} | {_num(w['action_rate'])} ({w['action_rate'] / start['action_rate']:.2f}x) "
             f"| {_num(w['torques'])} ({w['torques'] / start['torques']:.2f}x) | {'pass' if not failed else 'fail: ' + ', '.join(failed)} "
             f"| {m['saturated_share']:.2%} | {m['planar_error_mps']:.4f} | {m['flicker_share']:.1%} | {m['fall_rate']:.3f} "
-            f"| {m['yaw_rate_error_radps']:.3f} | {m['joint_target_rate_radps']:.2f} | {m['cost_of_transport']:.2f} | {m['swing_median_s']:.3f} |")
+            f"| {m['yaw_rate_error_radps']:.3f} | {m['joint_target_rate_radps']:.2f} | {m['cost_of_transport']:.2f} | {m['swing_median_s']:.3f} "
+            f"| {guard_short(g)} |")
     others = other_trials(study)
     if others:
         lines += ["", "Trials without scores:", ""]
@@ -397,6 +441,20 @@ def score(exp_id: str, run: Path) -> dict[str, float]:
     return read_metrics(run)
 
 
+def guard(name: str, weights: dict[str, float]) -> dict:
+    """tools/reward_check.py with these weights; its exit code 1 only means flagged."""
+    out, log = RUNS_DIR / f"{name}.guard.json", RUNS_DIR / f"{name}.guard.log"
+    out.unlink(missing_ok=True)
+    args = [PY, "tools/reward_check.py", TASK, "--checkpoint", str(PARENT_CHECKPOINT), "--json", str(out)]
+    for k in TUNED:
+        args += ["--weight", f"{k}={weights[k]:.6g}"]
+    with log.open("w", encoding="utf-8") as f:
+        rc = subprocess.run(args, cwd=REPO, stdout=f, stderr=subprocess.STDOUT).returncode
+    if rc not in (0, 1) or not out.exists():
+        raise TrialFailed(f"guard: exit {rc} (log {log})")
+    return json.loads(out.read_text(encoding="utf-8"))
+
+
 def wait_while_paused() -> None:
     if PAUSE_FILE.exists():
         print(f"PAUSED {datetime.datetime.now():%F %T}", flush=True)
@@ -419,6 +477,10 @@ def run_loop() -> int:
         if t.state == TrialState.RUNNING:
             study.tell(t.number, state=TrialState.FAIL)
             print(f"closed interrupted trial {t.number} ({t.user_attrs.get('exp')})", flush=True)
+    if "parent_guard" not in study.user_attrs:  # the guard at the start weights, for comparison
+        g = guard(f"{PARENT}-search-start", {k: start[k] for k in TUNED})
+        study.set_user_attr("parent_guard", g)
+        print(f"GUARD {PARENT} {guard_short(g)}", flush=True)
     refresh_doc(study)
     commit([SEARCH_DOC], "Search page: Optuna over feet_air_time, action_rate, torques under EXP-010's latency (Brian's spec)")
     while True:
@@ -435,9 +497,14 @@ def run_loop() -> int:
         trial.set_user_attr("weights", weights)
         exp_id, path = create_entry(trial.number, weights, start)
         trial.set_user_attr("exp", exp_id)
-        commit([path, INDEX], f"Add {exp_id} entry (search trial {trial.number}: {change_text(weights, start)})")
-        print(f"START {exp_id} trial {trial.number} {weights} {datetime.datetime.now():%F %T}", flush=True)
         try:
+            g = guard(exp_id, weights)
+            trial.set_user_attr("guard", g)
+            write(path, add_guard_line(path.read_text(encoding="utf-8"), guard_line(g)))
+            print(f"GUARD {exp_id} {guard_short(g)}", flush=True)
+            commit([path, INDEX], f"Add {exp_id} entry (search trial {trial.number}: {change_text(weights, start)})"
+                                  + (f"; guard FLAG: {', '.join(guard_flags(g))}" if guard_flags(g) else ""))
+            print(f"START {exp_id} trial {trial.number} {weights} {datetime.datetime.now():%F %T}", flush=True)
             run, minutes = train(exp_id, weights)
             print(f"TRAINED {exp_id} {minutes} min {run.name}", flush=True)
             m = score(exp_id, run)
@@ -446,7 +513,7 @@ def run_loop() -> int:
             study.tell(trial, state=TrialState.FAIL)
             write(path, set_status(path.read_text(encoding="utf-8"), f"search trial {trial.number} (Optuna); failed: {e}"))
             refresh_doc(study)
-            commit([path, SEARCH_DOC], f"{exp_id}: search trial {trial.number} failed")
+            commit([path, INDEX, SEARCH_DOC], f"{exp_id}: search trial {trial.number} failed")
             print(f"FAIL {exp_id} {e}", flush=True)
             return 1
         trial.set_user_attr("metrics", m)
@@ -454,11 +521,12 @@ def run_loop() -> int:
         trial.set_user_attr("run", run.name)
         trial.set_user_attr("minutes", minutes)
         study.tell(trial, m["flicker_share"])
+        flagged = f"; guard FLAG ({', '.join(guard_flags(g))} total negative)" if guard_flags(g) else ""
         status = (f"search trial {trial.number} (Optuna); trained {datetime.date.today()} (seed {SEED}, {ITERATIONS} iterations, "
-                  f"{minutes} min, no crash), scored with the staleness and delay on; {constraints_text(m)}; verdict pending (Brian)")
+                  f"{minutes} min, no crash), scored with the staleness and delay on; {constraints_text(m)}{flagged}; verdict pending (Brian)")
         write(path, set_status(path.read_text(encoding="utf-8"), status))
         write(INDEX, fill_index_verdict(INDEX.read_text(encoding="utf-8"), exp_id,
-                                        f"{summary_text(m)}; {constraints_text(m)}. Verdict pending (Brian)"))
+                                        f"{summary_text(m)}; {constraints_text(m)}{flagged}. Verdict pending (Brian)"))
         refresh_doc(study)
         commit([path, INDEX, SEARCH_DOC], f"Score {exp_id} (search trial {trial.number}): flicker {m['flicker_share']:.1%}, "
                                           f"saturation {m['saturated_share']:.2%}, planar {m['planar_error_mps']:.3f}; {constraints_text(m)}")
