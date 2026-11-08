@@ -20,6 +20,12 @@ vs. EXP-010: three reward weights, picked by the search (Brian's search varies t
 - Guard: `tools/reward_check.py IronBark-S2-Walk-Flat-Brian-StaleJoints --checkpoint <EXP-010 run>/model_1499.pt` with this trial's three weights (standing still; EXP-010's policy on the command grid): standing +0.0292, walking +0.0269 per step. OK
 - Run folder: `~/dev/ironbark_runs/logs/rsl_rl/ironbark_s2_walk_brian_stale_joints/*_EXP-015`
 
+### Seed replicates (same setup, different seed: measures the noise floor, rule 4)
+
+Brian (2026-11-08): "Run seeds 43 and 44 for EXP-017, EXP-018 and EXP-015 (my top 3; I rank by saturation first, then tracking, then flicker)." Same weights, task and scoring as seed 42; one run at a time.
+
+- **Seed 43** (training 2026-11-08): `python tools/run.py train IronBark-S2-Walk-Flat-Brian-StaleJoints --env.scene.num-envs 4096 --agent.max-iterations 1500 --agent.seed 43 --agent.run-name EXP-015-s43 --env.rewards.feet_air_time.weight 3.24218 --env.rewards.action_rate.weight -0.32 --env.rewards.torques.weight -0.142453`. Run folder `~/dev/ironbark_runs/logs/rsl_rl/ironbark_s2_walk_brian_stale_joints/*_EXP-015-s43`, console log `~/dev/ironbark_runs/EXP-015-s43.log`.
+
 ## Results (scoreboard: `metrics.py`)
 
 _Pending. Filled by the evaluation harness once training finishes._
