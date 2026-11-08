@@ -84,10 +84,10 @@ def test_demo_replay_events():
     assert events == [
         (10, "target_found"), (10, "behavior_changed"),
         (47, "target_lost"),
-        (80, "target_reacquired"),
-        (105, "battery_low"),
-        (110, "fell"),
-        (145, "behavior_changed"),
+        (85, "target_reacquired"),
+        (110, "battery_low"),
+        (115, "fell"),
+        (170, "behavior_changed"),
     ]
 
 

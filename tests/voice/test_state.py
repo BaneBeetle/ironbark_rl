@@ -31,12 +31,12 @@ def test_summary_skips_unknowns():
 
 def test_demo_replay_frames_and_carry_over():
     states = list(ReplaySource(DEMO, tick_hz=None).states())
-    assert len(states) == 10 + 35 + 35 + 25 + 5 + 35 + 25
+    assert len(states) == 10 + 35 + 40 + 25 + 5 + 55 + 25
     assert [s.frame for s in states] == list(range(len(states)))  # frames count up with no gaps
     lost = states[10 + 35]  # first tick of the "target out of view" line
     assert lost.target_visible is False and lost.action == "turn_left"
     assert lost.behavior == "FOLLOW" and lost.battery_pct == 80  # carried over
-    fallen = states[10 + 35 + 35 + 25 + 5]  # first tick of the fall line
+    fallen = states[10 + 35 + 40 + 25 + 5]  # first tick of the fall line
     assert fallen.roll_deg == 70.0 and fallen.battery_pct == 19
     assert states[-1].behavior == "IDLE" and states[-1].roll_deg == 0.5
 
