@@ -6,6 +6,8 @@ Claude wrote this file; every value is Brian's call (he chose each recommendatio
 design questions).
 """
 
+from ironbark_rl.assets.s2_joint_map import SIM_JOINT_TO_XGO_ID, XGO_ID_TO_SIM_JOINT
+
 # EXP-009. Time from a joint command leaving the Pi to the servo starting to move.
 # Brian chose 40 ms over his first estimate of ~100 ms: the earliest of 18 measured step responses moved
 # 50 ms after the command, and the sine lag (88 ms) minus the mean readback age (~52 ms) is ~36 ms.
@@ -23,17 +25,11 @@ JOINT_REFRESH_PERIOD_S = 0.130
 # slots where the absent arm (51-53) would be (the 43 -> 11 gap was ~3 slots long in the rate log).
 READBACK_SLOTS = 15
 
-# Slot of each sim joint in that cycle. xgolib numbers leg 1-4 x joint 1-3 and labels its joint limits
-# lower / middle / upper; the measured stance (joint 1 ~19 deg, joint 2 ~40 deg, joint 3 ~0 deg) fits
-# calf / thigh / hip. The leg order follows the vendor MJCF's (fl, fr, br, bl).
-# MEASURE: which physical leg and joint each xgolib id drives (probe `step`: watch which joint moves).
-# With a random phase per env, each joint's reading age is uniform over 0-130 ms whatever its slot;
-# only the timing between joints depends on this mapping.
-XGO_LEG_ORDER = ("fl", "fr", "br", "bl")  # xgolib legs 1, 2, 3, 4
-XGO_JOINT_ORDER = ("calf", "thigh", "hip")  # xgolib joints 1, 2, 3
+# Slot of each sim joint in that cycle: its xgolib id's position in ID order (11, 12, 13, 21, ..., 43).
+# The id <-> sim joint map was verified on the dog by Brian (ironbark_rl/assets/s2_joint_map.py).
+_POLL_ORDER = sorted(XGO_ID_TO_SIM_JOINT)  # [11, 12, 13, 21, ..., 43]
 
 
 def readback_slot(sim_joint_name: str) -> int:
-    """Polling slot (0-11) of a sim joint such as 'fr_thigh_joint' -> leg 2, joint 2 -> slot 4."""
-    leg, part, _ = sim_joint_name.split("_")  # "fr", "thigh", "joint"
-    return 3 * XGO_LEG_ORDER.index(leg) + XGO_JOINT_ORDER.index(part)  # ID order: leg-major, then joint
+    """Polling slot (0-11) of a sim joint, e.g. 'fr_thigh_joint' -> xgolib id 22 -> slot 4."""
+    return _POLL_ORDER.index(SIM_JOINT_TO_XGO_ID[sim_joint_name])  # ID order is the firmware's poll order
