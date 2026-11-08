@@ -94,7 +94,7 @@ def template_entry(exp_id="EXP-099"):
 def test_entry_records_the_weights_and_command():
     w = {"feet_air_time": 4.21738, "action_rate": -0.151234, "torques": -0.0911}
     cmd = "python " + " ".join(rs.train_args("EXP-099", w))
-    text = rs.fill_entry(template_entry(), 3, w, START, cmd)
+    text = rs.fill_entry(template_entry(), "trial 3", w, START, cmd)
     assert "**Status:** search trial 3 (Optuna), training · **Parent:** EXP-010" in text
     assert "feet_air_time 3 -> 4.217; action_rate -0.08 -> -0.1512 (1.89x); torques -0.125 -> -0.0911 (0.73x)" in text
     assert f"- Train: `{cmd}`" in text and "--env.rewards.torques.weight -0.0911" in cmd
@@ -106,7 +106,7 @@ def test_index_row_edits_touch_only_that_row():
     index = ("| [EXP-098](x.md) | d | t | vs. EXP-010: _fill in_ | _pending_ |\n"
              "| [EXP-099](y.md) | d | t | vs. EXP-010: _fill in_ | _pending_ |\n")
     w = {"feet_air_time": 2.0, "action_rate": -0.16, "torques": -0.125}
-    out = rs.fill_index_change(index, "EXP-099", 4, w, START)
+    out = rs.fill_index_change(index, "EXP-099", "trial 4", w, START)
     assert out.split("\n")[0] == index.split("\n")[0]
     assert out.split("\n")[1].endswith("| vs. EXP-010: search trial 4: feet_air_time 3 -> 2; action_rate -0.08 -> -0.16 (2.00x); "
                                        "torques -0.125 -> -0.125 (1.00x) | _pending_ |")
@@ -231,3 +231,53 @@ def test_search_page_lists_replicates_only_for_scored_trials():
     lines = rs.replicate_section(trials, {"EXP-099": {"43": metrics(sat=0.010), "44": metrics(sat=0.012)}, "EXP-123": {"43": metrics()}})
     rows_ = [line for line in lines if line.startswith("| [")]
     assert len(rows_) == 1 and rows_[0].startswith("| [EXP-099](") and "| 42/43/44 | " in rows_[0] and "1.00% ± 0.20%" in rows_[0]
+
+
+def test_stage2_spans_brians_new_action_rate_range():
+    d = rs.distributions(2)
+    assert (d["action_rate_scale"].low, d["action_rate_scale"].high) == (4.0, 10.0)
+    assert (d["feet_air_time"].low, d["feet_air_time"].high) == (1.0, 7.5) and (d["torques_scale"].low, d["torques_scale"].high) == (0.5, 2.0)
+    low = rs.trial_weights({"feet_air_time": 3.0, "action_rate_scale": 4.0, "torques_scale": 1.0}, START)
+    high = rs.trial_weights({"feet_air_time": 3.0, "action_rate_scale": 10.0, "torques_scale": 1.0}, START)
+    assert (low["action_rate"], high["action_rate"]) == (-0.32, -0.8)
+    assert rs.trial_label(1, 7) == "trial 7" and rs.trial_label(2, 7) == "stage-2 trial 7"
+
+
+def add_scored(study, exp, params, m, stage=1):
+    from optuna.trial import create_trial
+
+    w = rs.trial_weights(params, START)
+    c = list(rs.constraint_values(m))
+    study.add_trial(create_trial(params=params, distributions=rs.distributions(stage), value=m["flicker_share"],
+                                 user_attrs={"exp": exp, "weights": w, "metrics": m, "constraints": c},
+                                 system_attrs={"constraints": tuple(c)}))
+
+
+def test_stage2_starts_from_the_stage1_trials_at_the_4x_ceiling():
+    from optuna.trial import TrialState
+
+    s1 = rs.load_study(storage=None, parent_metrics=metrics(sat=0.00805, planar=0.0383, flicker=0.1506))
+    add_scored(s1, "EXP-100", {"feet_air_time": 3.2, "action_rate_scale": 4.0, "torques_scale": 1.1}, metrics(flicker=0.126))
+    add_scored(s1, "EXP-101", {"feet_air_time": 3.5, "action_rate_scale": 3.9999999, "torques_scale": 2.0}, metrics(flicker=0.129))
+    add_scored(s1, "EXP-102", {"feet_air_time": 2.1, "action_rate_scale": 3.6, "torques_scale": 1.4}, metrics(flicker=0.149))
+    s2 = rs.load_stage2(s1, storage=None)
+    assert s2.user_attrs["known_points"] == ["EXP-100", "EXP-101"]  # EXP-010 (1x) and EXP-102 (3.6x) are outside 4x-10x
+    assert [t.params["action_rate_scale"] for t in s2.trials] == [4.0, 4.0]
+    assert all(t.state == TrialState.COMPLETE and "constraints" in t.system_attrs for t in s2.trials)
+    assert s2.sampler._n_startup_trials == 2 + rs.STAGES[2].random_trials
+    for k in range(rs.STAGES[2].random_trials + 1):  # random start, then the GP once
+        trial = s2.ask(rs.distributions(2))
+        w = rs.trial_weights(trial.params, s2.user_attrs["start_weights"])
+        assert -0.8 <= w["action_rate"] <= -0.32
+        m = metrics(flicker=0.12 + 0.001 * k)
+        trial.set_user_attr("exp", f"EXP-{110 + k}")
+        trial.set_user_attr("weights", w)
+        trial.set_user_attr("metrics", m)
+        trial.set_user_attr("constraints", list(rs.constraint_values(m)))
+        s2.tell(trial, m["flicker_share"])
+    doc = rs.search_doc(s1, "now", stage2=s2)
+    table = [line for line in doc.splitlines() if line.startswith("| ") and line[2].isdigit()]
+    exps =[line.split("[")[1].split("]")[0] for line in table]
+    assert sorted(exps) == sorted(["EXP-010", "EXP-100", "EXP-101", "EXP-102", "EXP-110", "EXP-111", "EXP-112", "EXP-113"])  # each once
+    assert any("(stage-2 trial 2)" in line for line in table) and any("(trial 1)" in line for line in table)
+    assert "known points, not retrained (EXP-100, EXP-101)" in doc and "## Brian's change: stage 2" in doc

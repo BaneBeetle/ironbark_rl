@@ -4,8 +4,12 @@ Brian's spec (2026-11-08) is quoted in SPEC and in the search page (SEARCH_DOC).
 numbered experiment (docs/experiments/EXP-NNN-*.md), trained with seed 42 on EXP-010's task and
 scored like EXP-010. The study lives in ~/dev/ironbark_runs/optuna/; the ranked table in SEARCH_DOC.
 
-  python tools/reward_search.py run      # loop until STOP: ask -> entry -> train -> score -> tell -> table
-  python tools/reward_search.py table    # rewrite the search page from the study (CPU only)
+Stages (one Optuna study each, since a study's ranges can't change): stage 1 = Brian's spec
+(action_rate 0.5x-4x); stage 2 = Brian's change (action_rate 4x-10x), seeded with the stage-1
+trials at the 4x ceiling as known points. The search page ranks the trials of both together.
+
+  python tools/reward_search.py run [--stage 1|2]   # loop until STOP: ask -> entry -> train -> score -> tell -> table
+  python tools/reward_search.py table    # rewrite the search page from the studies (CPU only)
   python tools/reward_search.py replicate EXP-017 EXP-018 EXP-015 --seeds 43 44   # Brian's picks, other seeds
 
 Control files in the study folder, checked between trials only (a running trial always finishes):
@@ -35,6 +39,7 @@ import statistics
 import subprocess
 import sys
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
@@ -68,6 +73,11 @@ After the 4 seed runs finish and are scored, start an Optuna search (Bayesian op
 - Leave the GPU free when the website session asks.
 - Morning summary: ranked table of trials. Don't interpret. I'll pick the top 2–3 to re-run with seeds 43/44."""
 
+# Brian, 2026-11-08 (verbatim), after the first 8 trials: the search's stage 2.
+SPEC_2 = ("Pause the search after EXP-019. Run seeds 43 and 44 for EXP-017, EXP-018 and EXP-015 (my top 3; I rank by "
+          "saturation first, then tracking, then flicker). Then resume with action_rate's range extended to 4x–10x, "
+          "since all the top trials hit the 4x ceiling.")
+
 # Brian's spec.
 FEET_AIR_TIME_RANGE = (1.0, 7.5)  # absolute weight
 ACTION_RATE_SCALE_RANGE = (0.5, 4.0)  # x action_rate's weight at the search's start
@@ -78,6 +88,26 @@ PLANAR_ERROR_MAX_MPS = 0.035  # planar tracking <= 0.035 m/s (scoreboard v1 over
 LOG_SCALE = True  # the ranges are multiples, so sample ratios evenly
 N_STARTUP_TRIALS = 4  # random trials before the GP takes over, EXP-010 included (Optuna's default 10 = ~11 h of random)
 SAMPLER_SEED = 42
+
+
+@dataclass(frozen=True)
+class Stage:
+    number: int
+    study_name: str
+    action_rate_scale_range: tuple[float, float]  # x action_rate's weight at the search's start
+    random_trials: int  # random trials after the known points, before the GP picks (Claude's default)
+    sampler_seed: int  # a new seed per stage, so a stage's random start doesn't repeat the last one's draws
+
+
+STAGES = {
+    1: Stage(1, STUDY_NAME, ACTION_RATE_SCALE_RANGE, N_STARTUP_TRIALS - 1, SAMPLER_SEED),  # Brian's spec; EXP-010 is the known point
+    2: Stage(2, "exp010_reward_weights_ar4to10", (4.0, 10.0), 3, SAMPLER_SEED + 1),  # Brian (2026-11-08): action_rate 4x–10x
+}
+LATEST_STAGE = 2
+
+
+def storage_url(stage: int) -> str:
+    return f"sqlite:///{(STUDY_DIR / (STAGES[stage].study_name + '.db')).as_posix()}"
 
 # Brian, 2026-11-08, verbatim (the part about seeds; the rest of the message is in docs/journal.md).
 REPLICATE_REQUEST = ("Run seeds 43 and 44 for EXP-017, EXP-018 and EXP-015 (my top 3; I rank by saturation first, "
@@ -104,12 +134,12 @@ def config_weights(path: Path = REWARD_CONFIG) -> dict[str, float]:
     return dict(module.WEIGHTS)
 
 
-def distributions():
+def distributions(stage: int = 1):
     from optuna.distributions import FloatDistribution
 
     return {
         "feet_air_time": FloatDistribution(*FEET_AIR_TIME_RANGE, log=LOG_SCALE),
-        "action_rate_scale": FloatDistribution(*ACTION_RATE_SCALE_RANGE, log=LOG_SCALE),
+        "action_rate_scale": FloatDistribution(*STAGES[stage].action_rate_scale_range, log=LOG_SCALE),
         "torques_scale": FloatDistribution(*TORQUES_SCALE_RANGE, log=LOG_SCALE),
     }
 
@@ -122,6 +152,10 @@ def trial_weights(params: dict[str, float], start: dict[str, float]) -> dict[str
         "torques": start["torques"] * params["torques_scale"],
     }
     return {k: float(f"{v:.6g}") for k, v in w.items()}
+
+
+def trial_label(stage: int, number: int) -> str:
+    return f"trial {number}" if stage == 1 else f"stage-{stage} trial {number}"
 
 
 def override_args(weights: dict[str, float]) -> list[str]:
@@ -229,12 +263,12 @@ def guard_short(g: dict | None) -> str:
     return f"{g['standing_total']:+.4f} / {g['walking_total']:+.4f}" + (f" **FLAG: {', '.join(flags)}**" if flags else "")
 
 
-def fill_entry(text: str, number: int, weights: dict[str, float], start: dict[str, float], cmd: str) -> str:
+def fill_entry(text: str, label: str, weights: dict[str, float], start: dict[str, float], cmd: str) -> str:
     """new_experiment.py's template -> a search-trial entry (status, hypothesis note, change, train command)."""
     edits = [
-        ("**Status:** planned", f"**Status:** search trial {number} (Optuna), training"),
+        ("**Status:** planned", f"**Status:** search {label} (Optuna), training"),
         ("> What will change on the scoreboard compared to the parent, and why?",
-         f"> Search trial {number}: no per-trial hypothesis. Brian's search spec (2026-11-08), verbatim, is on "
+         f"> Search {label}: no per-trial hypothesis. Brian's search spec (2026-11-08), verbatim, is on "
          f"[{SEARCH_DOC.name}]({SEARCH_DOC.name})."),
         (f"vs. {PARENT}:\n",
          f"vs. {PARENT}: three reward weights, picked by the search (Brian's search varies them together): "
@@ -252,9 +286,9 @@ def fill_entry(text: str, number: int, weights: dict[str, float], start: dict[st
     return text
 
 
-def fill_index_change(index: str, exp_id: str, number: int, weights: dict[str, float], start: dict[str, float]) -> str:
+def fill_index_change(index: str, exp_id: str, label: str, weights: dict[str, float], start: dict[str, float]) -> str:
     old = f"| vs. {PARENT}: _fill in_ | _pending_ |"
-    return _edit_row(index, exp_id, old, f"| vs. {PARENT}: search trial {number}: {change_text(weights, start)} | _pending_ |")
+    return _edit_row(index, exp_id, old, f"| vs. {PARENT}: search {label}: {change_text(weights, start)} | _pending_ |")
 
 
 def fill_index_verdict(index: str, exp_id: str, text: str) -> str:
@@ -392,10 +426,10 @@ def fill_index_seeds(index: str, exp_id: str, text: str) -> str:
 
 # ---------- study ----------
 
-def make_sampler():
+def make_sampler(n_startup_trials: int = N_STARTUP_TRIALS, seed: int = SAMPLER_SEED):
     import optuna
 
-    return optuna.samplers.GPSampler(seed=SAMPLER_SEED, n_startup_trials=N_STARTUP_TRIALS,
+    return optuna.samplers.GPSampler(seed=seed, n_startup_trials=n_startup_trials,
                                      constraints_func=lambda t: t.user_attrs["constraints"])
 
 
@@ -422,10 +456,56 @@ def load_study(storage: str = STORAGE, parent_metrics: dict | None = None):
     return study
 
 
+def carried_over(trials: list[dict], stage: int = 2) -> list[dict]:
+    """Earlier trials inside this stage's action_rate range (the ones at the old 4x ceiling): known points, not retrained."""
+    lo, hi = STAGES[stage].action_rate_scale_range
+    return [r for r in trials if r["exp"] != PARENT and lo * (1 - 1e-6) <= r["params"]["action_rate_scale"] <= hi * (1 + 1e-6)]
+
+
+def load_stage2(stage1, storage: str | None):
+    """Stage 2's study. Created on first use with the stage-1 trials at the 4x ceiling as known points;
+    the GP picks after those plus Stage.random_trials random ones."""
+    import optuna
+    from optuna.trial import create_trial
+
+    stage = STAGES[2]
+    study = optuna.create_study(study_name=stage.study_name, storage=storage, direction="minimize", load_if_exists=True)
+    if "start_weights" not in study.user_attrs:
+        study.set_user_attr("start_weights", stage1.user_attrs["start_weights"])
+        study.set_user_attr("parent_guard", stage1.user_attrs.get("parent_guard"))
+        lo, hi = stage.action_rate_scale_range
+        known = carried_over(rows(stage1))
+        for r in known:
+            params = {**r["params"], "action_rate_scale": min(max(r["params"]["action_rate_scale"], lo), hi)}
+            attrs = {k: v for k, v in r.items() if k not in ("number", "params")}
+            study.add_trial(create_trial(
+                params=params, distributions=distributions(2), value=r["metrics"]["flicker_share"],
+                user_attrs={**attrs, "note": f"known point: stage-1 trial {r['number']}, not retrained"},
+                system_attrs={"constraints": tuple(r["constraints"])},
+            ))
+        study.set_user_attr("known_points", [r["exp"] for r in known])
+    study.sampler = make_sampler(len(study.user_attrs["known_points"]) + stage.random_trials, stage.sampler_seed)
+    return study
+
+
+def existing_stage2(stage1):
+    path = STUDY_DIR / (STAGES[2].study_name + ".db")
+    return load_stage2(stage1, storage_url(2)) if path.exists() else None
+
+
 def rows(study) -> list[dict]:
     from optuna.trial import TrialState
 
-    return [{"number": t.number, **t.user_attrs} for t in study.trials if t.state == TrialState.COMPLETE]
+    return [{"number": t.number, "params": dict(t.params), **t.user_attrs} for t in study.trials if t.state == TrialState.COMPLETE]
+
+
+def all_rows(study, stage2=None) -> list[dict]:
+    """Every scored trial once, labeled by stage (stage 2's copies of stage-1 trials left out)."""
+    out = [{**r, "label": "known point" if r["exp"] == PARENT else trial_label(1, r["number"])} for r in rows(study)]
+    if stage2 is not None:
+        known = set(stage2.user_attrs.get("known_points", []))
+        out += [{**r, "label": trial_label(2, r["number"])} for r in rows(stage2) if r["exp"] not in known]
+    return out
 
 
 def other_trials(study) -> list[dict]:
@@ -434,8 +514,10 @@ def other_trials(study) -> list[dict]:
     return [{"number": t.number, "state": t.state.name, **t.user_attrs} for t in study.trials if t.state != TrialState.COMPLETE]
 
 
-def search_doc(study, now: str, replicates: dict | None = None) -> str:
+def search_doc(study, now: str, replicates: dict | None = None, stage2=None) -> str:
     start = study.user_attrs["start_weights"]
+    s2 = STAGES[2]
+    known2 = ", ".join(stage2.user_attrs.get("known_points", [])) if stage2 is not None else "not created yet"
     lines = [
         "# Search: three reward weights under EXP-010's latency (Optuna)",
         "",
@@ -444,6 +526,10 @@ def search_doc(study, now: str, replicates: dict | None = None) -> str:
         "## Brian's spec (2026-11-08, verbatim)",
         "",
         *[("> " + line) if line else ">" for line in SPEC.split("\n")],
+        "",
+        "## Brian's change: stage 2 (2026-11-08, verbatim)",
+        "",
+        f"> {SPEC_2}",
         "",
         "## Setup",
         "",
@@ -456,6 +542,14 @@ def search_doc(study, now: str, replicates: dict | None = None) -> str:
         f"({_num(start['torques'] * TORQUES_SCALE_RANGE[0])} to {_num(start['torques'] * TORQUES_SCALE_RANGE[1])}). "
         "Every other weight stays as `reward_config.py` had it at the search's start (checked before every trial). "
         "The weights go in as command-line overrides; `reward_config.py` isn't edited.",
+        f"- **Stage 2** (Brian, 2026-11-08): action_rate {s2.action_rate_scale_range[0]:g}–{s2.action_rate_scale_range[1]:g}x "
+        f"({_num(start['action_rate'] * s2.action_rate_scale_range[0])} to {_num(start['action_rate'] * s2.action_rate_scale_range[1])}); "
+        "the other two ranges, the constraints, the objective, the ranking and the guard are unchanged. "
+        f"Claude's defaults, for Brian to change: a new study (`{s2.study_name}`; one study's ranges can't change); "
+        f"the stage-1 trials at the 4x ceiling go in as known points, not retrained ({known2}); then {s2.random_trials} random "
+        f"trials in the new range, then the GP; same sampler and log scale, sampler seed {s2.sampler_seed} "
+        f"(seed {SAMPLER_SEED} would repeat stage 1's random draws of the other two weights). Stage-2 trials are labeled \"stage-2 trial N\" "
+        "(Optuna's numbering in the new study, the known points first).",
         f"- Constraints (unrounded): servo saturation <= {SATURATION_MAX:.1%} (`gait_check`) and planar error <= {PLANAR_ERROR_MAX_MPS} m/s "
         "(scoreboard v1 overall). Objective: minimize flicker (`gait_check` share of touchdowns after swings < 0.02 s).",
         "- Ranking (Brian): trials that pass both constraints first, lower flicker first; then trials that fail, by how far they miss "
@@ -469,7 +563,8 @@ def search_doc(study, now: str, replicates: dict | None = None) -> str:
         f"sampler Optuna GPSampler (Gaussian-process Bayesian optimization, constraint-aware), sampler seed {SAMPLER_SEED}; "
         f"the first {N_STARTUP_TRIALS} trials ({PARENT} included) are random, the GP picks after that; "
         f"{'log' if LOG_SCALE else 'linear'} scale on all three ranges.",
-        f"- Study: `~/dev/ironbark_runs/optuna/{STUDY_NAME}.db`. Between trials the driver waits while `optuna/PAUSE` exists and exits if `optuna/STOP` exists.",
+        f"- Studies: `~/dev/ironbark_runs/optuna/{STUDY_NAME}.db` (stage 1), `{s2.study_name}.db` (stage 2). "
+        "Between trials the driver waits while `optuna/PAUSE` exists and exits if `optuna/STOP` exists.",
         "",
         f"## Ranked trials ({now})",
         "",
@@ -477,22 +572,23 @@ def search_doc(study, now: str, replicates: dict | None = None) -> str:
         "| Falls | Yaw err [rad/s] | Joint-target rate [rad/s] | CoT | Swing median [s] | Guard: standing / walking per step |",
         "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
-    for rank, r in enumerate(ranked(rows(study)), 1):
+    trials = all_rows(study, stage2)
+    for rank, r in enumerate(ranked(trials), 1):
         w, m = r["weights"], r["metrics"]
         g = study.user_attrs.get("parent_guard") if r["exp"] == PARENT else r.get("guard")
-        exp = f"[{r['exp']}]({_entry_name(r['exp'])})" + (" (known point)" if r["exp"] == PARENT else f" (trial {r['number']})")
+        exp = f"[{r['exp']}]({_entry_name(r['exp'])}) ({r['label']})"
         lines.append(
             f"| {rank} | {exp} | {_num(w['feet_air_time'])} | {_num(w['action_rate'])} ({w['action_rate'] / start['action_rate']:.2f}x) "
             f"| {_num(w['torques'])} ({w['torques'] / start['torques']:.2f}x) | {constraints_cell(m)} | {constraint_miss(m):.1%} "
             f"| {m['saturated_share']:.2%} | {m['planar_error_mps']:.4f} | {m['flicker_share']:.1%} | {m['fall_rate']:.3f} "
             f"| {m['yaw_rate_error_radps']:.3f} | {m['joint_target_rate_radps']:.2f} | {m['cost_of_transport']:.2f} | {m['swing_median_s']:.3f} "
             f"| {guard_short(g)} |")
-    others = other_trials(study)
+    others = [(1, o) for o in other_trials(study)] + ([(2, o) for o in other_trials(stage2)] if stage2 is not None else [])
     if others:
         lines += ["", "Trials without scores:", ""]
-        lines += [f"- trial {o['number']} ({o.get('exp', 'no entry')}): {o['state'].lower()}" + (f", {o['reason']}" if o.get("reason") else "")
-                  for o in others]
-    lines += replicate_section(rows(study), replicates or {})
+        lines += [f"- {trial_label(s, o['number'])} ({o.get('exp', 'no entry')}): {o['state'].lower()}"
+                  + (f", {o['reason']}" if o.get("reason") else "") for s, o in others]
+    lines += replicate_section(trials, replicates or {})
     return "\n".join(lines) + "\n"
 
 
@@ -548,8 +644,9 @@ def write(path: Path, text: str) -> None:
     path.write_text(text, encoding="utf-8", newline="\n")  # the repo is LF-only
 
 
-def create_entry(number: int, weights: dict[str, float], start: dict[str, float]) -> tuple[str, Path]:
-    title = (f"search {number}: feet_air_time {weights['feet_air_time']:.2f}, action_rate "
+def create_entry(stage: int, number: int, weights: dict[str, float], start: dict[str, float]) -> tuple[str, Path]:
+    label = trial_label(stage, number)
+    title = (f"search {number if stage == 1 else f's{stage}-{number}'}: feet_air_time {weights['feet_air_time']:.2f}, action_rate "
              f"{weights['action_rate'] / start['action_rate']:.2f}x, torques {weights['torques'] / start['torques']:.2f}x")
     out = subprocess.run([PY, "tools/new_experiment.py", title, "--parent", PARENT, "--task", TASK,
                           "--experiment-name", EXPERIMENT_NAME, "--seed", str(SEED), "--iterations", str(ITERATIONS),
@@ -557,8 +654,8 @@ def create_entry(number: int, weights: dict[str, float], start: dict[str, float]
     path = REPO / re.search(r"created (\S+\.md)", out).group(1)
     exp_id = path.name[:7]
     cmd = "python " + " ".join(train_args(exp_id, weights))
-    write(path, fill_entry(path.read_text(encoding="utf-8"), number, weights, start, cmd))
-    write(INDEX, fill_index_change(INDEX.read_text(encoding="utf-8"), exp_id, number, weights, start))
+    write(path, fill_entry(path.read_text(encoding="utf-8"), label, weights, start, cmd))
+    write(INDEX, fill_index_change(INDEX.read_text(encoding="utf-8"), exp_id, label, weights, start))
     return exp_id, path
 
 
@@ -617,15 +714,17 @@ def load_replicates() -> dict:
     return json.loads(REPLICATES.read_text(encoding="utf-8")) if REPLICATES.exists() else {}
 
 
-def refresh_doc(study) -> None:
-    write(SEARCH_DOC, search_doc(study, f"{datetime.datetime.now():%Y-%m-%d %H:%M}", load_replicates()))
+def refresh_doc(study, stage2=None) -> None:
+    write(SEARCH_DOC, search_doc(study, f"{datetime.datetime.now():%Y-%m-%d %H:%M}", load_replicates(), stage2))
 
 
-def run_loop() -> int:
+def run_loop(stage: int = LATEST_STAGE) -> int:
     from optuna.trial import TrialState
 
     STUDY_DIR.mkdir(parents=True, exist_ok=True)
-    study = load_study()
+    study1 = load_study()
+    stage2 = load_stage2(study1, storage_url(2)) if stage == 2 else existing_stage2(study1)
+    study = study1 if stage == 1 else stage2
     start = study.user_attrs["start_weights"]
     for t in study.trials:  # a trial left RUNNING by a killed driver: close it so the sampler ignores it
         if t.state == TrialState.RUNNING:
@@ -635,8 +734,8 @@ def run_loop() -> int:
         g = guard(f"{PARENT}-search-start", {k: start[k] for k in TUNED})
         study.set_user_attr("parent_guard", g)
         print(f"GUARD {PARENT} {guard_short(g)}", flush=True)
-    refresh_doc(study)
-    commit([SEARCH_DOC], "Search page: Optuna over feet_air_time, action_rate, torques under EXP-010's latency (Brian's spec)")
+    refresh_doc(study1, stage2)
+    commit([SEARCH_DOC], f"Search page: stage {stage} (Optuna over feet_air_time, action_rate, torques under EXP-010's latency)")
     while True:
         wait_while_paused()
         if STOP_FILE.exists():
@@ -646,28 +745,29 @@ def run_loop() -> int:
         if now_weights != start:
             print(f"FAIL reward_config.py changed since the search started: {now_weights} vs {start}", flush=True)
             return 1
-        trial = study.ask(distributions())
+        trial = study.ask(distributions(stage))
+        label = trial_label(stage, trial.number)
         weights = trial_weights(trial.params, start)
         trial.set_user_attr("weights", weights)
-        exp_id, path = create_entry(trial.number, weights, start)
+        exp_id, path = create_entry(stage, trial.number, weights, start)
         trial.set_user_attr("exp", exp_id)
         try:
             g = guard(exp_id, weights)
             trial.set_user_attr("guard", g)
             write(path, add_guard_line(path.read_text(encoding="utf-8"), guard_line(g)))
             print(f"GUARD {exp_id} {guard_short(g)}", flush=True)
-            commit([path, INDEX], f"Add {exp_id} entry (search trial {trial.number}: {change_text(weights, start)})"
+            commit([path, INDEX], f"Add {exp_id} entry (search {label}: {change_text(weights, start)})"
                                   + (f"; guard FLAG: {', '.join(guard_flags(g))}" if guard_flags(g) else ""))
-            print(f"START {exp_id} trial {trial.number} {weights} {datetime.datetime.now():%F %T}", flush=True)
+            print(f"START {exp_id} {label} {weights} {datetime.datetime.now():%F %T}", flush=True)
             run, minutes = train(exp_id, weights)
             print(f"TRAINED {exp_id} {minutes} min {run.name}", flush=True)
             m = score(exp_id, run)
         except TrialFailed as e:
             trial.set_user_attr("reason", str(e))
             study.tell(trial, state=TrialState.FAIL)
-            write(path, set_status(path.read_text(encoding="utf-8"), f"search trial {trial.number} (Optuna); failed: {e}"))
-            refresh_doc(study)
-            commit([path, INDEX, SEARCH_DOC], f"{exp_id}: search trial {trial.number} failed")
+            write(path, set_status(path.read_text(encoding="utf-8"), f"search {label} (Optuna); failed: {e}"))
+            refresh_doc(study1, stage2)
+            commit([path, INDEX, SEARCH_DOC], f"{exp_id}: search {label} failed")
             print(f"FAIL {exp_id} {e}", flush=True)
             return 1
         trial.set_user_attr("metrics", m)
@@ -676,13 +776,13 @@ def run_loop() -> int:
         trial.set_user_attr("minutes", minutes)
         study.tell(trial, m["flicker_share"])
         flagged = f"; guard FLAG ({', '.join(guard_flags(g))} total negative)" if guard_flags(g) else ""
-        status = (f"search trial {trial.number} (Optuna); trained {datetime.date.today()} (seed {SEED}, {ITERATIONS} iterations, "
+        status = (f"search {label} (Optuna); trained {datetime.date.today()} (seed {SEED}, {ITERATIONS} iterations, "
                   f"{minutes} min, no crash), scored with the staleness and delay on; {constraints_text(m)}{flagged}; verdict pending (Brian)")
         write(path, set_status(path.read_text(encoding="utf-8"), status))
         write(INDEX, fill_index_verdict(INDEX.read_text(encoding="utf-8"), exp_id,
                                         f"{summary_text(m)}; {constraints_text(m)}{flagged}. Verdict pending (Brian)"))
-        refresh_doc(study)
-        commit([path, INDEX, SEARCH_DOC], f"Score {exp_id} (search trial {trial.number}): flicker {m['flicker_share']:.1%}, "
+        refresh_doc(study1, stage2)
+        commit([path, INDEX, SEARCH_DOC], f"Score {exp_id} (search {label}): flicker {m['flicker_share']:.1%}, "
                                           f"saturation {m['saturated_share']:.2%}, planar {m['planar_error_mps']:.3f}; {constraints_text(m)}")
         print(f"SCORED {exp_id} flicker {m['flicker_share']:.4f} sat {m['saturated_share']:.4f} planar {m['planar_error_mps']:.4f} "
               f"{constraints_text(m)} {datetime.datetime.now():%F %T}", flush=True)
@@ -692,7 +792,8 @@ def replicate_loop(exp_ids: list[str], seeds: list[int]) -> int:
     """Brian's picks, re-trained with other seeds one at a time (same weights, task and scoring); resumable."""
     STUDY_DIR.mkdir(parents=True, exist_ok=True)
     study = load_study()
-    by_exp = {r["exp"]: r for r in rows(study)}
+    stage2 = existing_stage2(study)
+    by_exp = {r["exp"]: r for r in all_rows(study, stage2)}
     missing = [e for e in exp_ids if e not in by_exp or e == PARENT]
     if missing or not seeds or SEED in seeds:
         print(f"FAIL not scored search trials: {missing}; seeds {seeds} (seed {SEED} is the search's own)", flush=True)
@@ -731,7 +832,7 @@ def replicate_loop(exp_ids: list[str], seeds: list[int]) -> int:
                 text = add_to_status(text, f"seeds {'/'.join(map(str, seeds))} trained and scored {today} (Brian's pick)")
                 write(INDEX, fill_index_seeds(INDEX.read_text(encoding="utf-8"), exp, seed_summary(per_seed)))
             write(path, text)
-            refresh_doc(study)
+            refresh_doc(study, stage2)
             commit([path, INDEX, SEARCH_DOC], f"Score {name} (seed replicate, Brian's pick): flicker {m['flicker_share']:.1%}, "
                                               f"saturation {m['saturated_share']:.2%}, planar {m['planar_error_mps']:.3f}")
             print(f"SCORED {name} flicker {m['flicker_share']:.4f} sat {m['saturated_share']:.4f} planar {m['planar_error_mps']:.4f} "
@@ -745,17 +846,19 @@ def main() -> None:
     p.add_argument("mode", choices=("run", "table", "replicate"))
     p.add_argument("exps", nargs="*", help="replicate: the search trials to re-run, e.g. EXP-017 EXP-018 EXP-015")
     p.add_argument("--seeds", type=int, nargs="+", default=[43, 44], help="replicate: the other seeds")
+    p.add_argument("--stage", type=int, choices=sorted(STAGES), default=LATEST_STAGE, help="run: which stage's study")
     args = p.parse_args()
     for stream in (sys.stdout, sys.stderr):
         stream.reconfigure(encoding="utf-8", errors="replace")
     if args.mode == "table":
         STUDY_DIR.mkdir(parents=True, exist_ok=True)
-        refresh_doc(load_study())
+        study = load_study()
+        refresh_doc(study, existing_stage2(study))
         print(f"wrote {SEARCH_DOC.relative_to(REPO)}")
         return
     if args.mode == "replicate":
         sys.exit(replicate_loop(args.exps, args.seeds))
-    sys.exit(run_loop())
+    sys.exit(run_loop(args.stage))
 
 
 if __name__ == "__main__":
