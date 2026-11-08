@@ -13,6 +13,10 @@ Brian's decisions and verdicts, dated, in his words. Newest first. Numbers and r
 
 Claude's defaults where the spec is silent (listed on the search page for Brian to change): Optuna GPSampler (Gaussian-process BO, constraint-aware), sampler seed 42; first 4 trials random, EXP-010 (seed 42, start weights) counted as one known point; log scale on all three ranges; failing trials ordered by flicker below the passing ones; reward guard skipped, as in the feet_air_time sweep. Driver: `tools/reward_search.py`; page: [SEARCH-exp010-reward-weights.md](experiments/SEARCH-exp010-reward-weights.md).
 
+Brian's changes before the start (2026-11-08): "Two changes before ~03:20: (1) run the reward guard for every trial (penalty weights go up to 4x, so the fall-on-purpose trap is possible), and flag but don't skip any trial whose standing or walking total goes negative; (2) rank failing trials by how far they miss the constraints, not by flicker. Everything else approved."
+
+How they're built: the guard runs before each trial trains, with the trial's weights, standing still and on EXP-010's policy over the command grid ("walking"). "How far they miss" is read as each constraint's overshoot as a fraction of its limit, summed (e.g. saturation 0.99% and planar 0.0385 m/s = 10% + 10% = 20%); flicker breaks a tie.
+
 ## 2026-11-07: EXP-011, the fair fight (Luwu's reward under EXP-010's latency)
 
 > Fair fight: train Luwu's reward with EXP-010's latency conditions (40 ms delay + stale joints, same actor obs as EXP-010) as EXP-011, seed 42, then score it under the same conditions. If it's close to EXP-010, run seeds 43 and 44 for both.
