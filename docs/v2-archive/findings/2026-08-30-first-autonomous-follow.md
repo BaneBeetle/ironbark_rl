@@ -56,8 +56,8 @@ behaviour:
 - `V2_ARRIVAL_AREA_RATIO = 0.55` can't be reached on the S2's wide lens
   (area is 0.159 at 1 m). FOLLOW therefore never declared arrival and kept
   closing in to under 1 m.
-- Under 1 m the person is clipped by the frame in 90% of frames and the
-  target's x-offset jitters by σ ≈ 40 px. Centring there is noisy whatever
+- At 1 m the person is clipped by the frame in 90% of frames and the
+  target's x-offset jitters by σ ≈ 40 px (closer was not measured). Centring there is noisy whatever
   the turn controller does.
 
 ## Gaps for anyone repeating it

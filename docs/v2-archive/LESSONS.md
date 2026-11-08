@@ -12,9 +12,11 @@ evidence. Paths are relative to this folder; `commit <sha>` refers to
 2. **No threshold crosses a hardware change unmeasured.** The arrival
    ratio that worked on the OAK-D can't be reached on the S2's lens, and
    that one number broke FOLLOW.
-3. **Command-until-countermanded motion has dead time.** The yaw turn
-   doesn't show up until 0.78 s after the command. Design control around
-   it rather than stacking more hysteresis on top.
+3. **Command-until-countermanded motion has dead time.** V1's hysteresis
+   turned into overshoot on the S2 (`findings/turn-overcorrection.md`).
+   Measure the latency with an external reference — the yaw register
+   can't tell you — and control proportionally rather than stacking
+   hysteresis.
 4. **Every socket pair gets a live end-to-end check.** ZMQ never complains
    about the wrong direction, the wrong port or a missing peer — V2
    teleop silently did nothing.
@@ -26,6 +28,9 @@ evidence. Paths are relative to this folder; `commit <sha>` refers to
    from V1 code that rode along: dead fields, inherited entry conditions,
    inherited thresholds.
 8. **Keep the smoke-test gate.** It was the best decision in V2.
+9. **The last safety line has to survive the Pi.** The watchdog ran on the
+   Pi, and the S2 holds its last setpoint, so a Pi hang mid-motion leaves
+   nothing to send `stop()` (`findings/2026-09-30-pi-hang.md`).
 
 ---
 
@@ -123,9 +128,11 @@ promise a demo length until a sustained-load test exists.
 ### A6. Continuous motion plus perception latency means dead time
 
 **What happened:** On the S2 a turn keeps going until something
-countermands it. In the stage 3 trace yaw doesn't move until **0.78 s**
-after `turnleft(40)`, then wobbles: 32 of 141 samples step backward during
-a counter-clockwise turn. FOLLOW stacks a 100 ms command cadence and
+countermands it. In the first autonomous FOLLOW run, centring turns
+overshot and oscillated. In the stage 3 trace yaw doesn't move until
+0.78 s after `turnleft(40)`, but that figure is confounded by the frozen
+register (A3), so it isn't a clean latency. Once moving, yaw wobbles: 32 of
+141 samples step backward during a counter-clockwise turn. FOLLOW stacks a 100 ms command cadence and
 3-frame commit hysteresis on top of perception latency.
 `ACTION_COMMIT_FRAMES` was a V1 fix for flapping between buffered gait
 bursts, and on a continuous machine it only adds delay. The commit that
@@ -135,10 +142,28 @@ close range.
 **Evidence:** stage 3 `yaw_sample` series; `reference/config.py`
 (`ACTION_COMMIT_FRAMES`, `CMD_INTERVAL`); commit `7f44ec8`.
 
-**For V3:** Measure the command-to-motion latency per action before
-designing control. Prefer proportional commands (the S2's `turn(±v)`
-takes a rate) over bang-bang turns with deadbands. Treat yaw during gait
-as noisy.
+**For V3:** Measure the command-to-motion and stop latency per action,
+against an external reference (video, optical flow), before designing
+control. Prefer proportional commands (the S2's `turn(±v)` takes a rate)
+over bang-bang turns with deadbands. Treat yaw during gait as noisy. Full
+diagnosis and V2's unapplied tuning ladder: `findings/turn-overcorrection.md`.
+
+### A7. The watchdog lived on the machine that hung
+
+**What happened:** Partway through a teleop session the Pi disappeared
+from the network (no mDNS, ping or SSH; solid green LED) while
+`motor_controller` was running. The cause was never found. The controller's
+1.5 s watchdog runs on the Pi, and the S2 keeps executing its last
+velocity setpoint until `stop()` (smoke Q1), so a hang mid-motion leaves
+nothing to stop the dog. The Mac's deadman can't help, because its stops
+go to the Pi.
+
+**Evidence:** `findings/2026-09-30-pi-hang.md`; smoke stage 2.
+
+**For V3:** Use motion commands that expire on their own, an MCU-side
+timeout or a physical kill. Make the journal persistent and log
+`vcgencmd get_throttled` during sessions, so the next hang leaves
+evidence.
 
 ## B. What came along from V1
 
@@ -269,6 +294,19 @@ negative.
 **For V3:** Age data by the receiver's own clock only. If cross-host
 timing is ever needed, measure the offset explicitly, as V2 did with
 round-trip samples.
+
+### C6. The camera stalls after a power cycle and V2 couldn't recover
+
+**What happened:** After a dog power cycle the USB camera stopped
+delivering frames (V4L2 `select()` timeouts) until its USB device was
+unbound and rebound. V2's `cam_sender` would have waited ~5 minutes
+(30 reads × OpenCV's 10 s default timeout) before reopening, and reopening
+doesn't clear the stall.
+
+**Evidence:** `findings/usb-camera-stall.md`.
+
+**For V3:** Detect a stall in seconds, escalate to a USB reset, and show
+camera health in telemetry.
 
 ## D. Process
 

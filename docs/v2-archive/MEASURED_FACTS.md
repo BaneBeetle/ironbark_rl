@@ -25,7 +25,7 @@ trixie, Python 3.13.5.
 | Movement persists until `stop()` | Yes; walked the full 8 s window, never self-stopped | measured | same file, stage 2 `motion_window` + operator verdict |
 | Turn rate vs commanded step | `turnleft(40)` → **39.2 °/s** over 385.6° in 9.8 s | measured | same file, stage 3 `yaw_turn` |
 | Turn rate excluding startup | **42.5 °/s**, from the first yaw change to the end | measured | stage 3 `yaw_sample` series, derived for this archive |
-| Turn onset latency | yaw first changes **0.78 s** after `turnleft(40)` is issued | measured | stage 3 `yaw_sample` series (constant 35.77° until t=0.779 s) |
+| Yaw-visible turn onset | yaw first changes **0.78 s** after `turnleft(40)` is issued. **Not** a clean motion latency: it can't be separated from a register still in a ~1 s frozen stretch (see § IMU and `findings/turn-overcorrection.md`) | measured, confounded | stage 3 `yaw_sample` series (constant 35.77° until t=0.779 s) |
 | Yaw wobble while turning | 32 of 141 samples step **backward** during a CCW turn | measured | stage 3 `yaw_sample` series |
 | Concurrent reads mid-motion | OK — `read_battery` 3.2 ms while walking | measured | stage 2 `concurrent_read` |
 | `attitude('p', 8)` mid-walk | composes: pitch −0.3° → **7.3°**, gait smooth | measured | stage 4 `compose` + operator verdict |
@@ -127,7 +127,7 @@ they are PUSH/PULL, and a PUB sender never connects to the PULL receiver.
 | `V2_TELEM_EVERY_TICKS` | 5 → **10 Hz** telemetry | design | |
 | `V2_BATTERY_EVERY_TICKS` | 250 → ~5 s | design | |
 | roll/pitch read cadence | every 25 ticks → ~2 Hz | code | `reference/motor_controller.py` |
-| `V2_CMD_WATCHDOG_TICKS` | **75 ticks ≈ 1.5 s** of Mac silence → `stop()` | design | count predicate, not wall-clock |
+| `V2_CMD_WATCHDOG_TICKS` | **75 ticks ≈ 1.5 s** of Mac silence → `stop()` | design | count predicate, not wall-clock. Runs **on the Pi**, so it can't cover a Pi hang (`findings/2026-09-30-pi-hang.md`) |
 | Startup | `imu(0)`, `pace("normal")`; refuses motion until imu_ready latches | code | `reference/motor_controller.py` |
 | Shutdown | `stop()` + `attitude('p', 0)` | code | same |
 | Identical setpoint | not re-sent (serial hygiene, not buffer protection) | code | same |
@@ -144,6 +144,7 @@ they are PUSH/PULL, and a PUB sender never connects to the PULL receiver.
 | Exposure | as-shipped auto exposure is correct (frame mean 114/255); every gain/exposure/YUYV override overexposed | measured | same |
 | Connect burst | up to SNDHWM (5) queued frames flush at once, one seen 3.87 s stale | measured | same |
 | FOV | unpublished by Yahboom | — | `phase1-briefing.md` §3 |
+| USB ID / stall | `05a3:9230`; stops delivering frames after a dog power cycle; USB unbind/bind clears it | observed | `findings/usb-camera-stall.md` |
 
 ## Perception on the dog's camera (static ladder, 2026-09-04)
 

@@ -25,9 +25,14 @@ Start with the two synthesised files:
 | `measurements/*.txt` | Mac-only verification logs: FOLLOW dry run, MS200 parser, deadman | `docs/measurements/` |
 | `reference/motor_controller.py` | V2 Pi controller: wire protocol, IMU-ready latch, watchdog | `pi/motor_controller.py` |
 | `reference/config.py` | Where motor_controller's `V2_*` constants actually live | `config.py` |
+| `findings/2026-08-30-first-autonomous-follow.md` | First autonomous FOLLOW run: setup, what worked, what didn't | written for this archive |
+| `findings/turn-overcorrection.md` | Turn overshoot diagnosis, the frozen-yaw connection, V2's unapplied tuning ladder | written for this archive |
+| `findings/usb-camera-stall.md` | Camera stalls after a dog power cycle; the USB rebind fix | written for this archive |
+| `findings/2026-09-30-pi-hang.md` | Pi dropped off the network mid-session; cause unknown; the watchdog gap | written for this archive |
 
-All files come from branch `claude/ironbark-v2-oracle-handoff-e29f1a` at
-`7f44ec8`, the newest V2 commit (2026-09-04).
+Everything outside `findings/` comes from branch
+`claude/ironbark-v2-oracle-handoff-e29f1a` at `7f44ec8`, the newest V2
+commit (2026-09-04).
 
 ## Read before trusting
 
@@ -41,7 +46,8 @@ All files come from branch `claude/ironbark-v2-oracle-handoff-e29f1a` at
   `<PI_TAILSCALE_IP>`. No `.env`, API key or token was ever in these
   files; `ANTHROPIC_API_KEY` appears only as a variable name. Everything else is verbatim, so the scrubbed files no longer match
   the V2 blobs byte-for-byte.
-- **Only repo-tracked V2 material is here.** Findings from dog sessions
-  after 2026-09-04 that were never committed to the V2 repo are not.
+- **`findings/` was written after the fact from session notes, not from
+  traces.** None of those sessions committed a log, so their numbers are
+  observations and estimates, and each file says which.
 - **Some V2 claims were later corrected.** In particular V2's "343 Hz
   read_yaw" and "−0.009 °/s drift" — see `MEASURED_FACTS.md` § IMU.
