@@ -40,7 +40,8 @@ PERSONA_V3 = PERSONA_V2 + "\n\nThree of your lines, to show the vibe. Match the 
 )
 
 PERSONAS = {"v2": PERSONA_V2, "v3": PERSONA_V3}  # name -> prompt, for A/B comparisons
-PERSONA = PERSONAS["v3"]  # the one the dog uses
+# The one the dog uses. Brian, 2026-11-07, after hearing the v2-vs-v3 A/B: "v2 better".
+PERSONA = PERSONAS["v2"]
 
 
 @dataclass(frozen=True)

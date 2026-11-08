@@ -43,7 +43,8 @@ def test_request_is_fast_haiku_with_persona():
 def test_v3_is_v2_plus_style_examples():
     from ironbark_voice.brain import PERSONA_V2, PERSONA_V3, STYLE_EXAMPLES
 
-    assert PERSONA == PERSONA_V3 and PERSONA_V3.startswith(PERSONA_V2)
+    assert PERSONA == PERSONA_V2  # Brian picked v2 after the A/B (2026-11-07)
+    assert PERSONA_V3.startswith(PERSONA_V2)
     assert all(line in PERSONA_V3 for line in STYLE_EXAMPLES)
     assert all(len(line.split()) <= config.MAX_WORDS_PER_LINE for line in STYLE_EXAMPLES)  # examples obey the cap
 

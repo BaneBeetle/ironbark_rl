@@ -66,6 +66,13 @@ measured from ElevenLabs' `character-cost` header).
 - Cached lines are free after a one-time build of ~120 credits per voice.
 - So credits don't bind; the pacing is a taste call.
 
+## 2026-11-07: persona A/B verdict (Brian)
+
+After listening to v2 vs v3 (`docs/voice/persona_ab/2026-11-07_1911_v2_vs_v3.jsonl`): "v2
+better but follow started on both too high pitched. the rest good." The live persona goes back
+to v2; v3 stays in `brain.PERSONAS` for later comparisons. One line per event, so this is a
+first preference, not a measured result.
+
 ## Context Claude found (for reference, not decisions)
 
 - **RemBeetle reuse.** Its ElevenLabs module (`tts/elevenlabs_tts.py`) is not in git; it
