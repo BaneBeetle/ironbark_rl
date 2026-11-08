@@ -39,7 +39,7 @@ Brian's requirements before any policy deployment:
 
 Notes:
 - xgolib's timed commands (`move_x(step, runtime=…)` and the like) don't survive a Pi hang: they `time.sleep(runtime)` on the Pi and then send 0 (read in `xgolib_dog.py`). Only a board-side timeout would, and none is known.
-- On 2026-11-07 the Pi was unreachable twice (at the start of the session and right after the Phase 1 probe run); whether it hung or was switched off wasn't recorded.
+- On 2026-11-07 the Pi was unreachable twice (at the start of the session and right after the Phase 1 probe run). Brian: both times he had powered it off; neither was a hang.
 
 ## Sessions
 

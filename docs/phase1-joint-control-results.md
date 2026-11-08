@@ -119,7 +119,7 @@ Back-to-back reads, no joint commands; `joint_control_imu_20261108-001338.jsonl`
 
 ## Open
 
-- Re-run `sine` with the fixed probe if Brian wants joints 12 and 13. The Pi went offline before the fixed probe could be deployed (it still has `8e1cab7`).
+- Re-run `sine` with the fixed probe if Brian wants joints 12 and 13. The Pi went offline before the fixed probe could be deployed (it still has `8e1cab7`). Brian, 2026-11-07: he had powered it off, not a hang. (Later the same day the fixed probe was deployed.)
 - The real servo response is hidden under the 105 ms refresh. Seeing it needs an external measurement (`# MEASURE:` e.g. high-speed video of a leg against a protractor) or a faster readback path.
 
 ## Brian's read (2026-11-07, verbatim)

@@ -19,7 +19,7 @@
 - **`motor()` preempts the firmware gait**, and every joint drives to its last joint-mode setpoint (unsent joints jumped ~8°). `stop()` returns control to the firmware.
 - Yaw between runs: +71° over 177 s on a stand (0.4 °/s typical, vs −0.009 °/s on a clean boot in the V2 smoke log). Correction: that −0.009 °/s was measured on a frozen register (V2 archive), so it's no baseline.
 
-**Probe fixes from this run:** `e1cc046` (the sine abort was a false positive: a stale reading) and `f9a9f4f` (send all 12 joints' measured angles first). 24 + 5 new tests; 117 pass. **Not yet deployed:** the Pi went offline right after the run and still has `8e1cab7`.
+**Probe fixes from this run:** `e1cc046` (the sine abort was a false positive: a stale reading) and `f9a9f4f` (send all 12 joints' measured angles first). 24 + 5 new tests; 117 pass. **Not yet deployed:** the Pi went offline right after the run and still has `8e1cab7` (Brian had powered it off; deployed later that day).
 
 **Open (Brian):** his read on the numbers, then Path A / B / hybrid; whether to re-run `sine` for joints 12 and 13; whether the yaw drift needs a power cycle on the stand before the next FOLLOW session. Then the "why" quiz for this milestone.
 
