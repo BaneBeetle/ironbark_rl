@@ -243,6 +243,22 @@ def test_stage2_spans_brians_new_action_rate_range():
     assert rs.trial_label(1, 7) == "trial 7" and rs.trial_label(2, 7) == "stage-2 trial 7"
 
 
+def test_stage2_constraints_are_brians_tighter_limits():
+    assert (rs.STAGES[2].saturation_max, rs.STAGES[2].planar_error_max_mps) == (0.003, 0.031)
+    assert (rs.STAGES[1].saturation_max, rs.STAGES[1].planar_error_max_mps) == (0.009, 0.035)  # stage 1 unchanged
+    assert rs.failed_constraints(metrics(sat=0.003, planar=0.031), 2) == []  # inclusive
+    assert rs.failed_constraints(metrics(sat=0.0031, planar=0.031), 2) == ["saturation"]
+    assert rs.failed_constraints(metrics(sat=0.003, planar=0.0311), 2) == ["planar"]
+    m = metrics(sat=0.0033, planar=0.0341)  # passes stage 1, misses stage 2 by 10% + 10%
+    assert rs.constraints_text(m) == "constraints pass"
+    assert rs.constraint_miss(m, 2) == pytest.approx(0.2)
+    assert rs.constraints_text(m, 2) == "stage-2 constraints fail (saturation +10.0%, planar +10.0% over the limit)"
+    assert rs.constraints_text(metrics(sat=0.002, planar=0.030), 2) == "stage-2 constraints pass"
+    rows = [{"exp": "A", "metrics": metrics(sat=0.008, planar=0.034, flicker=0.10)},  # passes stage 1 only
+            {"exp": "B", "metrics": metrics(sat=0.002, planar=0.030, flicker=0.14)}]  # passes both
+    assert [r["exp"] for r in rs.ranked(rows)] == ["A", "B"] and [r["exp"] for r in rs.ranked(rows, 2)] == ["B", "A"]
+
+
 def add_scored(study, exp, params, m, stage=1):
     from optuna.trial import create_trial
 
@@ -264,6 +280,10 @@ def test_stage2_starts_from_the_stage1_trials_at_the_4x_ceiling():
     assert s2.user_attrs["known_points"] == ["EXP-100", "EXP-101"]  # EXP-010 (1x) and EXP-102 (3.6x) are outside 4x-10x
     assert [t.params["action_rate_scale"] for t in s2.trials] == [4.0, 4.0]
     assert all(t.state == TrialState.COMPLETE and "constraints" in t.system_attrs for t in s2.trials)
+    for t in s2.trials:  # metrics() = saturation 0.8%, planar 0.034: re-judged against stage 2's 0.3% and 0.031
+        assert t.system_attrs["constraints"] == pytest.approx((0.008 - 0.003, 0.034 - 0.031))
+        assert t.user_attrs["constraints"] == pytest.approx([0.008 - 0.003, 0.034 - 0.031])
+    assert s1.trials[1].user_attrs["constraints"] == pytest.approx([0.008 - 0.009, 0.034 - 0.035])  # stage 1's stay
     assert s2.sampler._n_startup_trials == 2 + rs.STAGES[2].random_trials
     for k in range(rs.STAGES[2].random_trials + 1):  # random start, then the GP once
         trial = s2.ask(rs.distributions(2))
@@ -273,7 +293,7 @@ def test_stage2_starts_from_the_stage1_trials_at_the_4x_ceiling():
         trial.set_user_attr("exp", f"EXP-{110 + k}")
         trial.set_user_attr("weights", w)
         trial.set_user_attr("metrics", m)
-        trial.set_user_attr("constraints", list(rs.constraint_values(m)))
+        trial.set_user_attr("constraints", list(rs.constraint_values(m, 2)))
         s2.tell(trial, m["flicker_share"])
     doc = rs.search_doc(s1, "now", stage2=s2)
     table = [line for line in doc.splitlines() if line.startswith("| ") and line[2].isdigit()]
@@ -281,3 +301,7 @@ def test_stage2_starts_from_the_stage1_trials_at_the_4x_ceiling():
     assert sorted(exps) == sorted(["EXP-010", "EXP-100", "EXP-101", "EXP-102", "EXP-110", "EXP-111", "EXP-112", "EXP-113"])  # each once
     assert any("(stage-2 trial 2)" in line for line in table) and any("(trial 1)" in line for line in table)
     assert "known points, not retrained (EXP-100, EXP-101)" in doc and "## Brian's change: stage 2" in doc
+    assert "## Brian's change: stage 2's constraints" in doc and "saturation <= 0.3%, planar <= 0.031 m/s" in doc
+    assert "| Constraints (stage 2) | Miss | Stage 1 |" in doc
+    row = next(line for line in table if "[EXP-100]" in line).split(" | ")
+    assert row[5:8] == ["fail: saturation +166.7%, planar +9.7%", "176.3%", "pass"]  # stage 2's verdict, its miss, stage 1's

@@ -5,8 +5,9 @@ numbered experiment (docs/experiments/EXP-NNN-*.md), trained with seed 42 on EXP
 scored like EXP-010. The study lives in ~/dev/ironbark_runs/optuna/; the ranked table in SEARCH_DOC.
 
 Stages (one Optuna study each, since a study's ranges can't change): stage 1 = Brian's spec
-(action_rate 0.5x-4x); stage 2 = Brian's change (action_rate 4x-10x), seeded with the stage-1
-trials at the 4x ceiling as known points. The search page ranks the trials of both together.
+(action_rate 0.5x-4x); stage 2 = Brian's changes (action_rate 4x-10x; saturation <= 0.3%, planar
+<= 0.031 m/s), seeded with the stage-1 trials at the 4x ceiling as known points. The search page
+ranks the trials of both together, against the latest stage's limits.
 
   python tools/reward_search.py run [--stage 1|2]   # loop until STOP: ask -> entry -> train -> score -> tell -> table
   python tools/reward_search.py table    # rewrite the search page from the studies (CPU only)
@@ -77,6 +78,9 @@ After the 4 seed runs finish and are scored, start an Optuna search (Bayesian op
 SPEC_2 = ("Pause the search after EXP-019. Run seeds 43 and 44 for EXP-017, EXP-018 and EXP-015 (my top 3; I rank by "
           "saturation first, then tracking, then flicker). Then resume with action_rate's range extended to 4x–10x, "
           "since all the top trials hit the 4x ceiling.")
+# Brian, 2026-11-08 (verbatim), before stage 2 started: its constraints.
+SPEC_3 = ("For stage 2, keep the flicker objective but tighten the constraints to: saturation ≤ 0.3% and planar ≤ 0.031 m/s "
+          "(Luwu's 3-seed mean). Goal: beat the vendor on strain, tracking and flicker at once.")
 
 # Brian's spec.
 FEET_AIR_TIME_RANGE = (1.0, 7.5)  # absolute weight
@@ -84,6 +88,9 @@ ACTION_RATE_SCALE_RANGE = (0.5, 4.0)  # x action_rate's weight at the search's s
 TORQUES_SCALE_RANGE = (0.5, 2.0)  # x torques' weight at the search's start
 SATURATION_MAX = 0.009  # servo saturation <= 0.9% (gait_check saturated_share)
 PLANAR_ERROR_MAX_MPS = 0.035  # planar tracking <= 0.035 m/s (scoreboard v1 overall)
+# Brian's stage-2 constraints (SPEC_3): tighter than Luwu's reward under the same latency (EXP-011, seeds 42/43/44).
+STAGE2_SATURATION_MAX = 0.003  # servo saturation <= 0.3% (EXP-011's 3-seed mean is 0.95%)
+STAGE2_PLANAR_ERROR_MAX_MPS = 0.031  # planar <= 0.031 m/s, Brian's rounding of EXP-011's 3-seed mean (0.03104)
 # Claude's defaults, listed on the search page for Brian to change.
 LOG_SCALE = True  # the ranges are multiples, so sample ratios evenly
 N_STARTUP_TRIALS = 4  # random trials before the GP takes over, EXP-010 included (Optuna's default 10 = ~11 h of random)
@@ -97,11 +104,15 @@ class Stage:
     action_rate_scale_range: tuple[float, float]  # x action_rate's weight at the search's start
     random_trials: int  # random trials after the known points, before the GP picks (Claude's default)
     sampler_seed: int  # a new seed per stage, so a stage's random start doesn't repeat the last one's draws
+    saturation_max: float  # constraint: gait_check saturated_share <= this
+    planar_error_max_mps: float  # constraint: scoreboard v1 overall planar error <= this
 
 
 STAGES = {
-    1: Stage(1, STUDY_NAME, ACTION_RATE_SCALE_RANGE, N_STARTUP_TRIALS - 1, SAMPLER_SEED),  # Brian's spec; EXP-010 is the known point
-    2: Stage(2, "exp010_reward_weights_ar4to10", (4.0, 10.0), 3, SAMPLER_SEED + 1),  # Brian (2026-11-08): action_rate 4x–10x
+    1: Stage(1, STUDY_NAME, ACTION_RATE_SCALE_RANGE, N_STARTUP_TRIALS - 1, SAMPLER_SEED,  # Brian's spec; EXP-010 is the known point
+             SATURATION_MAX, PLANAR_ERROR_MAX_MPS),
+    2: Stage(2, "exp010_reward_weights_ar4to10", (4.0, 10.0), 3, SAMPLER_SEED + 1,  # Brian (2026-11-08): action_rate 4x–10x
+             STAGE2_SATURATION_MAX, STAGE2_PLANAR_ERROR_MAX_MPS),  # Brian (2026-11-08): tighter constraints
 }
 LATEST_STAGE = 2
 
@@ -170,32 +181,34 @@ def train_args(run_name: str, weights: dict[str, float], seed: int = SEED) -> li
             "--agent.seed", str(seed), "--agent.run-name", run_name, *override_args(weights)]
 
 
-def constraint_values(m: dict[str, float]) -> tuple[float, float]:
-    """Optuna's convention: <= 0 is feasible."""
-    return (m["saturated_share"] - SATURATION_MAX, m["planar_error_mps"] - PLANAR_ERROR_MAX_MPS)
+def constraint_values(m: dict[str, float], stage: int = 1) -> tuple[float, float]:
+    """Optuna's convention: <= 0 is feasible. Each stage has its own limits."""
+    s = STAGES[stage]
+    return (m["saturated_share"] - s.saturation_max, m["planar_error_mps"] - s.planar_error_max_mps)
 
 
-def failed_constraints(m: dict[str, float]) -> list[str]:
-    sat, planar = constraint_values(m)
+def failed_constraints(m: dict[str, float], stage: int = 1) -> list[str]:
+    sat, planar = constraint_values(m, stage)
     return [name for name, c in (("saturation", sat), ("planar", planar)) if c > 0]
 
 
-def overshoots(m: dict[str, float]) -> dict[str, float]:
+def overshoots(m: dict[str, float], stage: int = 1) -> dict[str, float]:
     """How far each constraint is missed, as a fraction of its limit (0 = met)."""
-    return {"saturation": max(0.0, m["saturated_share"] / SATURATION_MAX - 1.0),
-            "planar": max(0.0, m["planar_error_mps"] / PLANAR_ERROR_MAX_MPS - 1.0)}
+    s = STAGES[stage]
+    return {"saturation": max(0.0, m["saturated_share"] / s.saturation_max - 1.0),
+            "planar": max(0.0, m["planar_error_mps"] / s.planar_error_max_mps - 1.0)}
 
 
-def constraint_miss(m: dict[str, float]) -> float:
+def constraint_miss(m: dict[str, float], stage: int = 1) -> float:
     """Brian (2026-11-08): failing trials rank by how far they miss the constraints. Claude's reading: the overshoots summed."""
-    return sum(overshoots(m).values())
+    return sum(overshoots(m, stage).values())
 
 
-def ranked(rows: list[dict]) -> list[dict]:
+def ranked(rows: list[dict], stage: int = 1) -> list[dict]:
     """Brian: trials failing a constraint rank below all that pass, passing ones by flicker (lower first),
-    failing ones by how far they miss (smaller first; flicker breaks a tie)."""
+    failing ones by how far they miss (smaller first; flicker breaks a tie). Against one stage's limits."""
     def key(r):
-        miss = constraint_miss(r["metrics"])
+        miss = constraint_miss(r["metrics"], stage)
         return (miss > 0, miss, r["metrics"]["flicker_share"])
 
     return sorted(rows, key=key)
@@ -219,14 +232,20 @@ def summary_text(m: dict[str, float]) -> str:
             f"saturation {m['saturated_share']:.2%}")
 
 
-def constraints_cell(m: dict[str, float]) -> str:
-    over = {k: v for k, v in overshoots(m).items() if v > 0}
+def constraints_cell(m: dict[str, float], stage: int = 1) -> str:
+    over = {k: v for k, v in overshoots(m, stage).items() if v > 0}
     return "pass" if not over else "fail: " + ", ".join(f"{k} +{v:.1%}" for k, v in over.items())
 
 
-def constraints_text(m: dict[str, float]) -> str:
-    cell = constraints_cell(m)
-    return "constraints pass" if cell == "pass" else f"constraints {cell.replace('fail: ', 'fail (')} over the limit)"
+def constraints_text(m: dict[str, float], stage: int = 1) -> str:
+    cell = constraints_cell(m, stage)
+    which = "constraints" if stage == 1 else f"stage-{stage} constraints"
+    return f"{which} pass" if cell == "pass" else f"{which} {cell.replace('fail: ', 'fail (')} over the limit)"
+
+
+def limits_text(stage: int) -> str:
+    s = STAGES[stage]
+    return f"saturation <= {s.saturation_max:.1%}, planar <= {s.planar_error_max_mps} m/s"
 
 
 def guard_flags(g: dict) -> list[str]:
@@ -478,10 +497,11 @@ def load_stage2(stage1, storage: str | None):
         for r in known:
             params = {**r["params"], "action_rate_scale": min(max(r["params"]["action_rate_scale"], lo), hi)}
             attrs = {k: v for k, v in r.items() if k not in ("number", "params")}
+            c = list(constraint_values(r["metrics"], 2))  # Brian's stage-2 limits, not the stage-1 values stored with the trial
             study.add_trial(create_trial(
                 params=params, distributions=distributions(2), value=r["metrics"]["flicker_share"],
-                user_attrs={**attrs, "note": f"known point: stage-1 trial {r['number']}, not retrained"},
-                system_attrs={"constraints": tuple(r["constraints"])},
+                user_attrs={**attrs, "constraints": c, "note": f"known point: stage-1 trial {r['number']}, not retrained"},
+                system_attrs={"constraints": tuple(c)},
             ))
         study.set_user_attr("known_points", [r["exp"] for r in known])
     study.sampler = make_sampler(len(study.user_attrs["known_points"]) + stage.random_trials, stage.sampler_seed)
@@ -531,6 +551,10 @@ def search_doc(study, now: str, replicates: dict | None = None, stage2=None) -> 
         "",
         f"> {SPEC_2}",
         "",
+        "## Brian's change: stage 2's constraints (2026-11-08, verbatim)",
+        "",
+        f"> {SPEC_3}",
+        "",
         "## Setup",
         "",
         f"- Task `{TASK}` ({PARENT}'s conditions: 40 ms command delay, 130 ms round-robin joint readback, actor joint velocity dropped), "
@@ -544,17 +568,19 @@ def search_doc(study, now: str, replicates: dict | None = None, stage2=None) -> 
         "The weights go in as command-line overrides; `reward_config.py` isn't edited.",
         f"- **Stage 2** (Brian, 2026-11-08): action_rate {s2.action_rate_scale_range[0]:g}–{s2.action_rate_scale_range[1]:g}x "
         f"({_num(start['action_rate'] * s2.action_rate_scale_range[0])} to {_num(start['action_rate'] * s2.action_rate_scale_range[1])}); "
-        "the other two ranges, the constraints, the objective, the ranking and the guard are unchanged. "
+        f"constraints tightened (Brian) to {limits_text(2)}; the other two ranges, the objective, the ranking and the guard are unchanged. "
         f"Claude's defaults, for Brian to change: a new study (`{s2.study_name}`; one study's ranges can't change); "
         f"the stage-1 trials at the 4x ceiling go in as known points, not retrained ({known2}); then {s2.random_trials} random "
         f"trials in the new range, then the GP; same sampler and log scale, sampler seed {s2.sampler_seed} "
         f"(seed {SAMPLER_SEED} would repeat stage 1's random draws of the other two weights). Stage-2 trials are labeled \"stage-2 trial N\" "
-        "(Optuna's numbering in the new study, the known points first).",
-        f"- Constraints (unrounded): servo saturation <= {SATURATION_MAX:.1%} (`gait_check`) and planar error <= {PLANAR_ERROR_MAX_MPS} m/s "
-        "(scoreboard v1 overall). Objective: minimize flicker (`gait_check` share of touchdowns after swings < 0.02 s).",
+        "(Optuna's numbering in the new study, the known points first). The known points carry constraint values under stage 2's limits.",
+        f"- Constraints (unrounded): servo saturation (`gait_check`) and planar error (scoreboard v1 overall); stage 1 {limits_text(1)}, "
+        f"stage 2 {limits_text(2)} ({STAGE2_PLANAR_ERROR_MAX_MPS} is Brian's rounding of EXP-011's 3-seed mean, 0.03104). "
+        "Objective: minimize flicker (`gait_check` share of touchdowns after swings < 0.02 s).",
         "- Ranking (Brian): trials that pass both constraints first, lower flicker first; then trials that fail, by how far they miss "
         "(Brian, 2026-11-08): each constraint's overshoot as a fraction of its limit, summed (Claude's reading; the Miss column), "
-        "smaller first, flicker breaking a tie.",
+        f"smaller first, flicker breaking a tie. The table ranks every trial, both stages, against stage {LATEST_STAGE}'s limits "
+        "(Claude's call); the Stage 1 column keeps each trial's verdict under stage 1's.",
         f"- {PARENT} (seed 42, the start weights) is in the study as a known point: trained before the search, not retrained.",
         f"- Reward guard (Brian, 2026-11-08): before each trial trains, `tools/reward_check.py` runs with the trial's weights: standing still "
         f"(zero command, zero action) and {PARENT}'s policy on the command grid (\"walking\"). A negative standing or walking per-step total "
@@ -568,19 +594,20 @@ def search_doc(study, now: str, replicates: dict | None = None, stage2=None) -> 
         "",
         f"## Ranked trials ({now})",
         "",
-        "| Rank | Exp | feet_air_time | action_rate (x start) | torques (x start) | Constraints | Miss | Saturation | Planar err [m/s] | Flicker "
-        "| Falls | Yaw err [rad/s] | Joint-target rate [rad/s] | CoT | Swing median [s] | Guard: standing / walking per step |",
-        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+        f"| Rank | Exp | feet_air_time | action_rate (x start) | torques (x start) | Constraints (stage {LATEST_STAGE}) | Miss | Stage 1 "
+        "| Saturation | Planar err [m/s] | Flicker | Falls | Yaw err [rad/s] | Joint-target rate [rad/s] | CoT | Swing median [s] "
+        "| Guard: standing / walking per step |",
+        "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
     ]
     trials = all_rows(study, stage2)
-    for rank, r in enumerate(ranked(trials), 1):
+    for rank, r in enumerate(ranked(trials, LATEST_STAGE), 1):
         w, m = r["weights"], r["metrics"]
         g = study.user_attrs.get("parent_guard") if r["exp"] == PARENT else r.get("guard")
         exp = f"[{r['exp']}]({_entry_name(r['exp'])}) ({r['label']})"
         lines.append(
             f"| {rank} | {exp} | {_num(w['feet_air_time'])} | {_num(w['action_rate'])} ({w['action_rate'] / start['action_rate']:.2f}x) "
-            f"| {_num(w['torques'])} ({w['torques'] / start['torques']:.2f}x) | {constraints_cell(m)} | {constraint_miss(m):.1%} "
-            f"| {m['saturated_share']:.2%} | {m['planar_error_mps']:.4f} | {m['flicker_share']:.1%} | {m['fall_rate']:.3f} "
+            f"| {_num(w['torques'])} ({w['torques'] / start['torques']:.2f}x) | {constraints_cell(m, LATEST_STAGE)} "
+            f"| {constraint_miss(m, LATEST_STAGE):.1%} | {constraints_cell(m, 1)} | {m['saturated_share']:.2%} | {m['planar_error_mps']:.4f} | {m['flicker_share']:.1%} | {m['fall_rate']:.3f} "
             f"| {m['yaw_rate_error_radps']:.3f} | {m['joint_target_rate_radps']:.2f} | {m['cost_of_transport']:.2f} | {m['swing_median_s']:.3f} "
             f"| {guard_short(g)} |")
     others = [(1, o) for o in other_trials(study)] + ([(2, o) for o in other_trials(stage2)] if stage2 is not None else [])
@@ -771,21 +798,21 @@ def run_loop(stage: int = LATEST_STAGE) -> int:
             print(f"FAIL {exp_id} {e}", flush=True)
             return 1
         trial.set_user_attr("metrics", m)
-        trial.set_user_attr("constraints", list(constraint_values(m)))
+        trial.set_user_attr("constraints", list(constraint_values(m, stage)))
         trial.set_user_attr("run", run.name)
         trial.set_user_attr("minutes", minutes)
         study.tell(trial, m["flicker_share"])
         flagged = f"; guard FLAG ({', '.join(guard_flags(g))} total negative)" if guard_flags(g) else ""
         status = (f"search {label} (Optuna); trained {datetime.date.today()} (seed {SEED}, {ITERATIONS} iterations, "
-                  f"{minutes} min, no crash), scored with the staleness and delay on; {constraints_text(m)}{flagged}; verdict pending (Brian)")
+                  f"{minutes} min, no crash), scored with the staleness and delay on; {constraints_text(m, stage)}{flagged}; verdict pending (Brian)")
         write(path, set_status(path.read_text(encoding="utf-8"), status))
         write(INDEX, fill_index_verdict(INDEX.read_text(encoding="utf-8"), exp_id,
-                                        f"{summary_text(m)}; {constraints_text(m)}{flagged}. Verdict pending (Brian)"))
+                                        f"{summary_text(m)}; {constraints_text(m, stage)}{flagged}. Verdict pending (Brian)"))
         refresh_doc(study1, stage2)
         commit([path, INDEX, SEARCH_DOC], f"Score {exp_id} (search {label}): flicker {m['flicker_share']:.1%}, "
-                                          f"saturation {m['saturated_share']:.2%}, planar {m['planar_error_mps']:.3f}; {constraints_text(m)}")
+                                          f"saturation {m['saturated_share']:.2%}, planar {m['planar_error_mps']:.3f}; {constraints_text(m, stage)}")
         print(f"SCORED {exp_id} flicker {m['flicker_share']:.4f} sat {m['saturated_share']:.4f} planar {m['planar_error_mps']:.4f} "
-              f"{constraints_text(m)} {datetime.datetime.now():%F %T}", flush=True)
+              f"{constraints_text(m, stage)} {datetime.datetime.now():%F %T}", flush=True)
 
 
 def replicate_loop(exp_ids: list[str], seeds: list[int]) -> int:
