@@ -2,7 +2,7 @@
 
 Brian owns every decision here. Claude recommends and records. Newest decisions go at the bottom of each section with date and Brian's words.
 
-Sections: §1 decided (the dated log); §2 Claude's defaults (plumbing choices, approved 2026-11-08); §3 Brian's numbers (set 2026-11-08; the two gains wait on M-6); §4 design questions (answered 2026-11-08); §5 the `# MEASURE:` register (what must be measured, how, and which decision it unblocks).
+Sections: §1 decided (the dated log); §2 Claude's defaults (C-1 to C-13 approved 2026-11-08; C-14 to C-19 awaiting Brian); §3 Brian's numbers (set 2026-11-08; the two gains wait on M-6); §4 design questions (D-10 to D-16 answered 2026-11-08; D-17 to D-22 open); §5 the `# MEASURE:` register (what must be measured, how, and which decision it unblocks).
 
 ---
 
@@ -24,7 +24,9 @@ Claude sent nine questions with a recommendation each; Brian: **"Go with all rec
 | D-8 | Velocity semantics | Body frame, m/s / m/s / rad/s; each command carries `ttl_ticks` and expires to zero; the Pi clamps to the trained ranges (vx −0.5…0.6, vy ±0.3, wz ±0.8). **The lidar reflex blocks only** (clamps vx), never steers | The safety layer never originates motion |
 | D-9 | Versioning | `v` int per message type; `hello` compares versions and lists socket pairs; the Pi refuses mismatched types and says so in `health`. JSON until a measured need for msgpack | Fail loudly at startup, before anything is armed |
 
-Carried in from earlier calls (deployment-notes.md, journal.md), unchanged: policy loop on the Pi; IMU sanity filter; round-to-nearest bytes; all-12-first on `adopt`; `XGO_DOG` direct (no `reset()`); never `calibration()`; no wall-clock on the Pi; dead reckoning from commanded turns, not IMU yaw; hostnames not IPs; receiver-clock ageing only; persistent journal + `get_throttled` logging; kill switch within reach; stand test of Pi-silence in both modes before deployment; voice pacing (4 s / 30 s / falls interrupt / battery queues), `FALL_TILT_DEG = 46`, `BATTERY_LOW_PCT = 20` re-arm 30.
+Carried in from earlier calls (deployment-notes.md, journal.md), unchanged: policy loop on the Pi; IMU sanity filter; round-to-nearest bytes; all-12-first on `adopt`; `XGO_DOG` direct (no `reset()`); never `calibration()`; no wall-clock on the Pi; dead reckoning from commanded turns, not IMU yaw; hostnames not IPs; receiver-clock ageing only; persistent journal + `get_throttled` logging; kill switch within reach; stand test of Pi-silence in both modes before deployment; voice pacing (4 s / 30 s / falls interrupt / battery queues), `FALL_TILT_DEG = 46`, `BATTERY_LOW_PCT = 20`, re-arm above 30.
+
+Wording in the table above that the reviews later corrected (the decisions stand): D-5's "standing is the trained behaviour" is unverified (M-28; see the entry below). D-7's board is a YB-MVE02-V2.0 whose chip is unconfirmed as a CSK4002, and "mic availability is unknown" is now "the board's mic is not reachable over its USB".
 
 ### 2026-11-08: defaults, numbers and D-10 to D-16 (Brian)
 
@@ -42,6 +44,32 @@ While filling in §3 and §4, Claude flagged two things: `IMU_STALE_TICKS = 75` 
 
 > Both flags: keep IMU_STALE_TICKS = 75 (a brief pause is the safe failure); approve your D-13 reading (re-verify while visible, sweep only from LOST).
 
+### 2026-11-08: review by the voice session (corrections; no decision here)
+
+Brian told Claude it can ask the other sessions. The voice session checked commit `17f2c92` against its code and measurements (`docs/voice/oracle-questions.md`, `s2-voice-module.md`, `decisions.md` on `feature/voice`). What changed:
+
+- **Corrected to match what Brian had already decided.** T3 re-arms "above 30%" (the docs said ≥ 30). D-6's `verify_result` is published as `owner_verified` / `owner_rejected`. failure-modes §10 no longer claims a cached-line fallback: cached events never call an API, and a failed Haiku line is logged and dropped. architecture §4.5 no longer calls STT a Phase 2 item: the PC-side loop (mic → Scribe → Haiku → Tilly) is built.
+- **Measured facts taken in.** The dog has no speaker or microphone the Pi can reach: the speaker plugs into the voice board (a YB-MVE02-V2.0, seen on USB as CH340 serial only) and a clip to the Pi's HifiBerry output was inaudible. The board's wake word works and sends `$B000#` at 115200 baud. D-7's "keyword events first" stands; its "mic availability is unknown" is now "not reachable through the board's USB".
+- **Gaps fixed in `interfaces.md`**, as defaults C-14 to C-19 in §2 (awaiting Brian).
+- **New questions for Brian:** D-17 to D-22 in §4. Five of them are the voice session's logged Oracle questions.
+
+### 2026-11-08: after the joint-control session's review (Brian)
+
+The joint-control session checked the same commit against the Phase 1 logs and the training configs. Brian, verbatim:
+
+> To the Oracle (via the RL agent's review): before I merge, update the docs: (1) release stance is unmeasured; M-8 must cover the no-reset() case. (2) IMU freezes are scoring-only today; plan to train with them in the domain-randomization phase. (3) "policy stands" is unverified: add an eval of walk→stop transitions and plan more stand commands in training. (4) tick budget is 17–19 ms per the review; battery reads get their own tick, confirmed by M-2. (5) Decision: a monotonic clock is allowed on the Pi for loop pacing ONLY; decisions still use tick/frame counts. (6) Flag M-4 as the first hardware session, since a new default pose means retraining every policy.
+
+| # | Where it landed |
+|---|---|
+| 1 | architecture §3.2 (`release` blocked until measured), C-5 amended, M-8 extended, failure-modes §15 |
+| 2 | architecture §3.3 and §5.2, failure-modes §4, interfaces §9. The plan is a training experiment in the domain-randomization phase (Phase 2A week 5); its design is Brian's when it is written up |
+| 3 | architecture §3.3, failure-modes §1, new gate row M-28 (walk → stop eval). More stand commands in training (`rel_standing_envs` is 0 today): the amount is Brian's, as its own experiment |
+| 4 | architecture §3.1 and §5.3, C-2 amended, `BATTERY_EVERY_TICKS` in §3.1, M-2 rewritten |
+| 5 | architecture §1 rule 4 and §3.1, interfaces §9. `CLAUDE.md`'s hard rule ("No wall-clock logic in Pi-side code") still reads as absolute; this entry is the exception until that file says so |
+| 6 | M-4 marked first in §5, interfaces §9, architecture §6 |
+
+Also from that review, corrected without needing a call: `adopt` waits ≥ 8 ticks (the cycle measured 126–144 ms), is not atomic, and is what `BOOT` → `IDLE_HOLD` runs; the IMU at 25 Hz is coarser, not finer, than its live refresh; vendor calls no probe has logged (`action(id)`, `unload_allmotor` / `load_allmotor`, stationary `attitude`) are blocked until one has; the adapter sets `motor_speed` itself; the ONNX holds its own normaliser; `default_joint_pos` is still the Mini2S placeholder; M-11 reworded; new register rows M-24 to M-28. Checked and confirmed by the same review: the measured serial components, the adapter's construction and rounding, and the 35-float layout against EXP-025's exported model.
+
 ---
 
 ## 2. Claude's defaults (approved by Brian, 2026-11-08)
@@ -51,10 +79,10 @@ Plumbing choices made while writing the docs. None is a `brian/` design decision
 | # | Default | Why | Where |
 |---|---|---|---|
 | C-1 | **The Pi binds every socket; the PC connects to `PI_HOST`.** PUB/SUB roles are unchanged (the PC's command PUB *connects* to the Pi's SUB bind) | The Pi needs no PC address (fixes LESSONS C4 and the 2026-09-30 address-drift step); no inbound Windows firewall rule; one config value on the PC | interfaces §2 |
-| C-2 | **Alternate `read_imu()` and `read_motor()` on even/odd ticks** so each 20 ms tick fits (14 / 18 ms measured components, vs 21 ms with both) | A 47.6 Hz loop is a 5 % rate error against the 50 Hz training; joint readback at 25 Hz loses nothing (105–130 ms refresh) | architecture §3.1; see D-10 |
+| C-2 | **Alternate `read_imu()` and `read_motor()` on even/odd ticks** so each 20 ms tick fits. Amended 2026-11-08 (Brian, after the review): the budget is 17–19 ms inferred / 18.0 ms measured, not 14 / 18; battery reads get their own tick; a monotonic clock paces the loop | A 47.6 Hz loop is a 5 % rate error against the 50 Hz training; joint readback at 25 Hz loses little (105–130 ms refresh). The IMU at 25 Hz is coarser than its live refresh | architecture §3.1; see D-10, M-2 |
 | C-3 | **`CONFLATE=1` on the PC's camera and lidar PULL sockets** | V2 saw a 3.87 s-stale frame burst on connect | interfaces §2 |
 | C-4 | **Camera, lidar and audio are separate Pi processes**, reporting to the runtime over `ipc://`; the runtime publishes one consolidated `health` | Keeps JPEG encoding and serial parsing out of the 50 Hz process; one place for the operator to look | architecture §2 |
-| C-5 | **`firmware_stance` is read at boot** (the board owns the legs after power-on) and the `release` handoff pre-positions the joints there before `stop()` | Makes the snap on `stop()` ≈ 0 instead of the ~8° jumps Phase 1 saw | architecture §3.2 |
+| C-5 | **The `release` handoff pre-positions the joints at the pose `stop()` returns them to**, then calls `stop()`. Amended 2026-11-08 (Brian, after the review): that pose is unmeasured. The approved text read it at boot, and the logs contradict that (boot pose vs post-`stop()` pose: 7–8° at the calves, 4–5° at the thighs, and that `stop()` followed a `reset()`). `release` is blocked until M-8 | Keeps the snap on `stop()` small instead of the ~8° jumps Phase 1 saw | architecture §3.2 |
 | C-6 | **Action groups are an allow-list file** (`name`, xgolib `id`, `budget_ticks`, `min_battery_pct`); the brain sees names only | The ids are vendor numbers nobody has verified; a budget in ticks bounds every firmware action | interfaces §7 |
 | C-7 | **`ESTOP` holds, then unloads after `FALL_UNLOAD_TICKS` when fallen**; never unloads while upright | Unloading upright drops the dog; servos fighting the floor after a fall overheat (V1's death) | architecture §3.2 |
 | C-8 | **`REST` = lie-down action group then `unload_allmotor()`**, requested by the brain or operator, never automatic | It is a firmware motion, so it goes through the arbiter like any action | architecture §3.2 |
@@ -63,6 +91,17 @@ Plumbing choices made while writing the docs. None is a `brian/` design decision
 | C-11 | **Camera message format kept from V2** (`<qI` + JPEG) | It is measured and works; the stats move to `health` | interfaces §8 |
 | C-12 | **Owner photos live outside the repo** (`OWNER_PHOTOS_DIR`) | Privacy; they are not code | interfaces §10 |
 | C-13 | **Unknown fields are rejected, not tolerated** | LESSONS B1: V2 carried nine dead fields | interfaces §1 |
+
+### Added 2026-11-08 after the reviews: awaiting Brian
+
+| # | Default | Why | Where | Brian |
+|---|---|---|---|---|
+| C-14 | **Only S1–S3 block arming.** A camera, lidar or audio self-test failure raises a degraded notice and blocks only the behaviour that needs that stream | The first draft let a dead speaker block arming, against failure-modes §10 ("no effect on motion") | interfaces §3 | |
+| C-15 | **One writer on the command socket: a `gateway` in the HUD process.** The follow controller and the brain publish `cmd_request` on the PC bus; the gateway adds `deadman` and forwards, and sends zero velocity while disarmed | With several writers `last_cmd_seq` means nothing; disarming becomes one choke point on the PC | interfaces §12 | |
+| C-16 | **`seq` counts per topic, and every paired event has a level** in a periodic message from its owner (`state.active`, `owner.state`, `goal`) | An event-only subscriber saw constant gaps; a `battery_low` lost in a link blip would never fire again, breaking "never dropped" | interfaces §1, §4; failure-modes §14 | |
+| C-17 | **Audio stream rules.** Sender: `IMMEDIATE=1`, bounded high-water mark, non-blocking send, drop the line if it would block. Player: receives on its own thread; `stop` discards queued PCM and drops the device buffer. A zero-length `final` chunk is allowed; "ended" means final received and drained | Otherwise a link drop replays up to ~50 s of old speech, and a `stop` queues behind a 3 s clip | interfaces §8 | |
+| C-18 | **A `voice_module_reader` process on the Pi owns the voice board's serial port** and publishes `keyword` through the runtime | Voice session's question 4: no process owned it | architecture §2 | |
+| C-19 | **PC-origin events are published by their owner on the PC bus** (tracker `:5571`, brain `:5572`, topic `event`); subscribers merge them with the Pi's. The HUD can publish the goal, so supervised FOLLOW runs with no brain | The first draft gave these events no socket, so `target_*` could not reach the voice | interfaces §12 | |
 
 ---
 
@@ -88,7 +127,7 @@ Each constant: what it controls, the measured context, Claude's recommendation w
 | `ADOPT_RAMP_TICKS` | measured pose → policy default pose | | 50 (1 s) | **50** |
 | `STAND_TICKS` | zero-velocity settle before `release` or `IDLE_HOLD` | one gait cycle ≈ 0.4 s | 25 (0.5 s) | **25** |
 | `BATTERY_CRITICAL_PCT` | velocity zero, rest requested | firmware lockout at 9 %; load sag suspected | 12 | **12** |
-| `BATTERY_EVERY_TICKS` | battery read cadence | V2 used 250 (5 s); a read costs ~3 ms in a tick | 250, on an `imu` tick | **250**, on an `imu` tick |
+| `BATTERY_EVERY_TICKS` | battery read cadence | V2 used 250 (5 s); a read costs ~3 ms in a tick | 250, on an `imu` tick | **250**, on its own tick with no other read (changed 2026-11-08 after the review: on an IMU tick it would overrun) |
 
 **Flag (Claude, 2026-11-08); Brian the same day: keep 75.** `IMU_STALE_TICKS = 75` clears one measured freeze (≤ 1004 ms) but not two back to back. Under C-2 the IMU is read every 40 ms, and the shortest measured live stretch between freezes is 25 ms (1 of the 40 in `latency_config.IMU_LIVE_MS`), so a read can miss it and see ~2 s of identical values; velocity would zero until the next accepted read. Expected to be rare, roughly one freeze in a hundred. Brian: "keep IMU_STALE_TICKS = 75 (a brief pause is the safe failure)." M-2 still counts how often it happens at the real cadence, as a measurement, not a reopened decision.
 
@@ -130,7 +169,7 @@ How the tracker constants compose (arithmetic, for the builder): with a verify e
 
 | # | Question | Options | Rec | Brian (2026-11-08) |
 |---|---|---|---|---|
-| D-10 | Should the sim's joint-readback model mirror the 40 ms read cadence of C-2? | (a) leave `JOINT_REFRESH_PERIOD_S = 0.130` as is; (b) add the 2-tick read cadence to `stale_joint_pos`; (c) decide after the parity test | (c): the parity test (week 6) shows whether the extra ≤ 40 ms of staleness moves the policy; retrain only if it does | **(c)** |
+| D-10 | Should the sim's joint-readback model mirror the 40 ms read cadence of C-2? | (a) leave `JOINT_REFRESH_PERIOD_S = 0.130` as is; (b) add the 2-tick read cadence to `stale_joint_pos`; (c) decide after the parity test | (c): the parity test (week 6) shows whether the extra ≤ 40 ms of staleness moves the policy; retrain only if it does | **(c)**. The review adds the 40 ms IMU hold from C-2 to the same test; the question as asked covered joints only |
 | D-11 | Pitch scan during rescan | (a) never (yaw sweep only); (b) stationary `ACTION` with `attitude('p')` after the yaw sweep fails (C-9); (c) add body pitch to the policy's command and retrain | (b) | **(b)** |
 | D-12 | VLM model for owner verify | Haiku 5.5 (fast, cheap) vs a larger model | Haiku 5.5 first; promote only if M-12's held-out accuracy says so | **"Haiku first"** |
 | D-13 | Verify failure policy | reject → unlock immediately, or reject → keep following at low confidence until the next verify | unlock after 2 consecutive rejects; one reject lowers confidence to `RESCAN_CONFIDENCE` | **as recommended**, with the reading Brian approved the same day ("re-verify while visible, sweep only from LOST"): after one reject with the target still in view, the tracker re-verifies on the next frame and does not sweep; the yaw sweep runs only from `LOST` |
@@ -138,31 +177,54 @@ How the tracker constants compose (arithmetic, for the builder): with a verify e
 | D-15 | Session logging | what the PC records every session | all of `state`, `health`, `event`, `tracks`, `owner`, `velocity` to JSONL + the camera stream to MJPEG, by session id; it is the dataset for Path B-style learning later and the evidence after any hang | **yes** |
 | D-16 | Gamepad (roadmap, later) | `velocity` with `src: teleop` through the same arbiter | yes, nothing new on the Pi | **yes** |
 
+### Open (added 2026-11-08 from the voice session's review)
+
+| # | Question | Options | Rec | Brian |
+|---|---|---|---|---|
+| D-17 | **Audio hardware on the dog.** Measured: no speaker or mic the Pi can reach | (a) one USB speakerphone on the Pi (mic + speaker + echo cancellation); (b) a separate USB speaker and USB mic; (c) keep both on the PC for Phase 1 and decide later; (d) the voice board's own speaker, canned phrases only | (c) now, since voice out and listening already work on the PC; (a) when the dog should talk from its own body, because echo cancellation in one device is what lets the mic stay open while it speaks. Yahboom warns about the Pi's USB current limit: measure the draw first | |
+| D-18 | **Pacing of the brain's `say` / `ask_owner`** | (a) both obey the 30 s Haiku spacing; (b) both skip the gaps like replies; (c) `ask_owner` is heard like a cached line, `say` obeys the 30 s spacing | (c): `ask_owner` is the verify fallback and must be heard; free chatter stays paced | |
+| D-19 | **Which events the voice speaks.** "Haiku handles any event not in the cache table" was written for 6 events; the catalogue now has about 25, and `speech_*` would loop | (a) a voice-owned speak list: cached = found / lost / reacquired / `battery_low` / `fell`, Haiku = `behavior_changed`, everything else silent; (b) the rule as written | (a). Add cached lines for `owner_verify_needed` ("that you, bro?") and `battery_critical`; `battery_critical` queues like `battery_low`; `estop` stays silent; only `fell` interrupts, as now | |
+| D-20 | **Dog mic → PC** (voice questions 1 and 3; only matters once D-17 puts a mic on the dog) | (a) reserve a stream now: Pi PUSH (binds) → PC PULL on 5561, the audio framing of S6, sent only while a gate is open (opened by a wake `keyword` or a PC `mic_ctl open`, closed by `mic_ctl close` or a tick budget); the Pi shuts the gate itself while it is playing; (b) voice-activity detection on the Pi; (c) decide with D-17 | (c), with (a) as the shape to start from. Nothing is built until there is a mic | |
+| D-21 | **Can speech cause motion?** (voice question 5) Today it cannot | (a) never; (b) only to reduce it: a heard "stop" / "stay" sets goal `STAY` through the brain's path, with no safety role; "follow me" reaches the brain as input like any other; (c) speech as a command channel | (b). A spoken stop is never a safety mechanism: recognition can miss and adds ≥ 0.4 s. The HUD e-stop and the power button stay the stops. The voice process still sends no commands | |
+| D-22 | **Who else learns what was said?** (voice question 7) Today it is private to the voice | (a) keep it private; (b) publish "a person is speaking" start / stop, no text, so the brain can hold its chatter; (c) also give the brain the text as `speech_text`, never logged | (b) and (c) together if D-21 is (b); transcripts are never written to committed logs, the voice's existing rule | |
+
+Answered by the docs without a call: voice question 2 (PC → dog speaker) is S6; question 4 (who owns the voice board's port) is C-18; question 6 (`behavior` and `target_visible` for the voice) is the event stream plus its levels (C-16, C-19).
+
 ---
 
 ## 5. `# MEASURE:` register
 
 Every unmeasured number the architecture depends on, with the procedure and the decision it unblocks. This list is the **stand-test gate** (LESSONS D1): nothing deploys until the rows marked **gate** are green. Brian runs everything that moves the dog.
 
+**M-4 is the first hardware session** (Brian, 2026-11-08): the policy's default pose is still the Mini2S placeholder, and if the S2's joint zeros force a different one, every policy trained so far has to be retrained. Everything else in the gate is cheaper to learn second.
+
 | # | Measure | How | Unblocks | Gate |
 |---|---|---|---|---|
 | M-1 | Board behaviour when the Pi stops sending mid-motion, joint mode and gait mode | dog on the stand; probe commands a motion then `kill -STOP`s itself; video the legs; log whether the pose holds, the gait continues, and any board-side timeout | D-5, failure-modes §2 | **gate** |
-| M-2 | Composed tick time of the C-2 schedule | probe `imu-loop` variant alternating reads; p50/p99 per tick over 1500 ticks; count IMU freezes that read longer than `IMU_STALE_TICKS` at this 25 Hz cadence | C-2, D-10, `IMU_STALE_TICKS` | **gate** |
+| M-2 | Composed tick time of the C-2 schedule. Done so far: both reads every tick (`imu-loop`, 21.0 ms). The alternating schedule has never run | a new probe mode (none exists): even ticks write + `read_imu()`, odd ticks write + `read_motor()`, one battery-only tick every 250, paced to 20 ms by the monotonic clock; p50/p99 per tick kind over 1500 ticks, overruns counted; try the obs/policy work between write and read; count IMU freezes that read longer than `IMU_STALE_TICKS` at this 25 Hz cadence | C-2, D-10, `IMU_STALE_TICKS`, the 17–19 ms inference | **gate** |
 | M-3 | Gyro unit and bias | rotate the dog by a known angle on the stand, integrate `read_imu()` gyro z; compare °/s vs rad/s; bias at rest over 60 s | obs slot 0–2 | **gate** |
-| M-4 | Joint sign and zero offset per joint vs the sim | probe `map` with foot directions answered; command 0° per joint vs the MJCF default pose | action mapping, obs slots 11–22 | **gate** |
+| M-4 | Joint sign and zero offset per joint vs the sim. Done: the id → joint map (`map_20261108-001412`). Open: sign and zero offset (every foot-direction prompt was skipped) | probe `map` with foot directions answered; command 0° per joint vs the MJCF default pose | action mapping, obs slots 11–22, whether `default_joint_pos` survives (if not: retrain everything) | **gate, first** |
 | M-5 | Real gyro and accel ranges during walking | first tethered steps, `state` log | `GYRO_MAX_DPS`, accel band | before unsupervised |
 | M-6 | Command-to-motion and stop latency, external reference | high-speed video of the dog against floor marks for step velocity commands; compare against the 40 ms model | `KP_YAW`, `KP_RANGE`, §5.2 budget | before FOLLOW |
 | M-7 | `K_TURN` (achieved / commanded yaw rate) | video of in-place turns at 0.2/0.4/0.8 rad/s | dead reckoning | before FOLLOW |
-| M-8 | `adopt` and `release` handoffs | stand: readback before/after; max joint jump; ramp smoothness | D-4 | **gate** |
+| M-8 | `adopt` and `release` handoffs. Logged so far: `adopt` from the boot pose only (final change ≤ 0.8°). Boot pose and post-`stop()` pose differ (calves 7–8°, thighs 4–5°), and that `stop()` followed a `reset()` | stand, **with no `reset()` that boot**: (a) where `stop()` leaves the legs after joint mode, vs the boot pose; (b) `adopt` from that stance; (c) `release` with the joints pre-positioned there: max joint jump, ramp smoothness, readback before/after | D-4, C-5, `ACTION`, `REST` | **gate** |
 | M-9 | Lidar UART port, scan rate, points per scan, lidar-to-nose offset | trace the cable; `ms200_reader --dump`; tape measure | §3.3 reflex | Phase 2 |
 | M-10 | xgolib `action()` ids, each group's duration and whether it ends standing | read `xgolib_dog.py` on the Pi; time each allow-listed group on the stand | C-6 allow-list | before personality |
-| M-11 | Whether the firmware accepts 2 Mbaud and how it is switched | xgolib `__init__` hints; try `XGO_DOG(port, 2000000)` read-only | C-2 headroom | optional |
+| M-11 | Whether the board can run above 115200 baud at all | xgolib has no call that changes the firmware's baud (`__change_baud` only reopens the host side), so opening the port at 2 Mbaud tests nothing unless the board is already there. Ask Yahboom, or look for a firmware-side switch | C-2 headroom | optional |
 | M-12 | Owner verify accuracy | held-out photo set: owner vs others, same room, same lighting; accuracy and latency per model | D-12, D-13 | before FOLLOW |
-| M-13 | Pi-side audio device and playback latency | `aplay -l`; round-trip via `speech_started` | voice on the Pi | before voice on dog |
-| M-14 | CSK4002 wiring and whether raw audio is exposed | trace the module's connector; Yahboom tutorial | D-7 | Phase 2 |
+| M-13 | Pi-side audio device and playback latency. Measured 2026-11-08: none usable (HifiBerry output inaudible; the speaker plugs into the voice board) | after D-17 adds a device: `aplay -l`, an audible test line, device latency, round trip via `speech_started` | voice on the Pi, `AUDIO_DEVICE` | before voice on dog |
+| M-14 | Voice board wiring and whether raw audio is exposed. Measured 2026-11-08 (voice session, Brian): board YB-MVE02-V2.0; its "USB connect" port is CH340 serial only, no capture device; wake word → `$B000#` at 115200 | still open: the board's "Program" micro-USB port; which chip it is | D-7, D-17, D-20 | Phase 2 |
 | M-15 | Pi-side detector rate (for a later move) | `yolo benchmark` NCNN export on the Pi 5 | D-2 revisit | optional |
 | M-16 | Sustained-load battery runtime | one full session with `battery_pct` logged, policy standing and walking | session planning | before demos |
 | M-17 | Wi-Fi one-way `velocity` latency | `noop` → `last_cmd_seq` round trip on the PC clock, halved | §5.2 budget | before FOLLOW |
 | M-18 | YOLO + tracker time on the 3090 | PC-side timing log | §5.2 budget | before FOLLOW |
 | M-19 | Camera stall recovery time | power-cycle the dog with the Pi up; time to `camera_ok` | failure-modes §6 | before FOLLOW |
 | M-20 | ~~`mdp.phase` standing gate~~ resolved from source 2026-11-08: both phase values are 0 when the command norm < 0.1; otherwise sin/cos of the episode-step clock over a 0.4 s period | — | obs slots 9–10 | done |
+| M-21 | `audio_ctl stop` → silence on the Pi player | play a 3 s clip, send `stop`, record the speaker; time to silence | C-17, a fall cutting a line | before voice on dog |
+| M-22 | No stale speech after a link drop | drop Wi-Fi mid-line and between lines; nothing old may play on reconnect (`IMMEDIATE=1` and the bounded high-water mark are ZMQ's documented behaviour, untested here) | C-17 | before voice on dog |
+| M-23 | The voice board's other `$Bxxx#` codes | Yahboom's phrase table; say only non-motion phrases, with no Yahboom program running (their samples drive the dog from speech) | `keyword` meanings, D-21 | Phase 2 |
+| M-24 | `unload_allmotor()` and `load_allmotor()`. Logged: one leg only, per-leg calls; after reload two joints returned to their pre-unload angles and the third was still moving at the end of the window | stand: unload all, reload all, log every joint until it settles; then `adopt` | `REST`, the unload after a fall (C-7, C-8) | before `REST` or fall-unload is enabled |
+| M-25 | Projected-gravity axes and signs | stand: tilt the dog by hand about each axis; compare gravity built from roll/pitch with the sim's convention | obs slots 3–5 | **gate** |
+| M-26 | Servo response underneath the ~105 ms readback refresh | high-speed video of one leg against a protractor for a step command (Phase 1 results, "Open") | the 40 ms command-delay model, which is inferred | before trusting sim-to-real numbers |
+| M-27 | Sim placeholders still carried from the Mini2S: stance and default pose, servo kp / torque limit / delay, masses | system ID (Phase 2A week 2): scale, ruler, Phase 1 logs replayed in sim | every policy's training conditions | Phase 2A week 2 |
+| M-28 | Walk → zero-velocity stop | sim first: step the command from each scoreboard row to zero; falls, settle time, drift. Then on the stand, then tethered | D-5, the TTL and deadman behaviour, `release` | **gate** |
