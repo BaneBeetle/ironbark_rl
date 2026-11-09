@@ -141,6 +141,8 @@ No effect on motion by construction: the voice only subscribes to events and pus
 - **The default route goes to the dead card.** This Pi's `/etc/asound.conf` (V1's) sends `default` to card 2. The player names its device by card name and never uses `default`.
 - **The speaker browns out the Pi.** The USB sound card (decisions.md D-17) shares the Pi's USB current budget with the camera. A brownout is not a voice failure: it is a Pi hang (§2). The draw at speech volume is `# MEASURE:` (M-30) before the dog walks with voice on it; if it is too high, lower the gain or use one speaker of the pair.
 - **The voice board talks into the new mic.** While the board stays cabled with its speaker, its own wake reply plays beside the mic, and nothing tells the Pi when it speaks. The mic gate (D-20) opens a counted number of ticks after a `keyword` whose `source` is the voice board (the reply's length is `# MEASURE:`, M-14), or the board's speaker is unplugged.
+- **The dog hears itself.** With the mic open while a line plays, the STT would transcribe Tilly and she would answer herself. Two independent mutes prevent it (interfaces §8): the PC ignores mic audio from the start of a line, and the Pi shuts the mic stream while the device plays. A tail that is too short lets the echo through (M-33).
+- **Something said during a line is lost.** Accepted with Brian's direction to mute while speaking. Lines run about 2 to 3 s.
 - **Today** the dog's audio device is chosen but not installed (decisions.md D-17), so the voice plays on the PC and none of the above is live yet.
 
 ## 11. Version or schema mismatch

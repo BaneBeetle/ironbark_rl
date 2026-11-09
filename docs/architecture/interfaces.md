@@ -253,6 +253,8 @@ Control, one frame: `{"v":1,"type":"audio_ctl","seq":…,"t_ms":…,"cmd":"stop"
 
 **Device: chosen, not installed.** Brian picked a USB sound card with its own speaker pair and an onboard mic (decisions.md D-17, relayed by the voice session, 2026-11-08). Until it is on the Pi and has passed M-13, `AUDIO_DEVICE` stays unset and the voice keeps playing on the PC. The player names its device by card name: never by card number, which can shift, and never as `default`, because this Pi's `/etc/asound.conf` sends the default route to card 2. That card (`sndrpihifiberry`, PCM5102A, `hifiberry-dac` overlay) is V1's Robot HAT setup: the overlay registers it whether or not a DAC is wired, eight plays to `plughw:2,0` made no sound (Brian: "Silence..."), and `aplay` exiting 0 proves nothing there (decisions.md §1). The new card's ALSA name, its latency and whether it takes 24 kHz PCM as the vendor lists are `# MEASURE:` (M-13).
 
+**Mic mute while speaking** (Brian's direction, 2026-11-08; the mic stream itself waits on D-20). The dog's mic is deaf while the voice speaks. The PC ignores mic audio from the start of a line job until the line ends plus its tail (built: `mic_blocked` on `feature/voice`). The Pi shuts the mic stream from the first PCM write until the device buffer has drained, then keeps it shut for `MIC_GATE_TAIL_CHUNKS` mic chunks. Either half alone stops the dog transcribing itself. Both tails are `# MEASURE:` (M-33).
+
 ---
 
 ## 9. Policy I/O contract (Pi runtime ↔ ONNX model)
@@ -296,6 +298,7 @@ Per machine, only what it uses (LESSONS C4):
 | Pi | `ONNX_MODEL` | — | path + sha256 pinned in `health.versions` |
 | Pi | `AUDIO_DEVICE` | unset | `# MEASURE:` (M-13): the ALSA name of the USB sound card Brian picked (D-17), once it is on the Pi. A card name, never a card number, never `default` (the default route goes to the dead card 2). The player refuses to start while unset and reports `audio_down` |
 | Pi | `VOICE_MODULE_PORT` | `/dev/ttyUSB0` @ 115200 | measured 2026-11-08 (CH340, serial only). Optional: left unset when the board is unplugged, and the reader does not start |
+| Pi | `MIC_GATE_TAIL_CHUNKS` | unset | `# MEASURE:` (M-33), then Brian's number. Counted in mic chunks, never wall time. Used only once D-20 gives the dog a mic stream |
 | PC | `AUDIO_SNDHWM` | 100 chunks | design: above the longest cached clip (~66 chunks of 50 ms) |
 | Pi | `REQUIRE_DEADMAN` | `true` | Brian's call per session type |
 
@@ -376,3 +379,4 @@ The body of the S1 message being asked for (`velocity`, `action` or `mode`, §7)
 | 2026-11-08 | all | v1 drafted | V3 architecture |
 | 2026-11-08 | envelope, `state`, `event`, `audio`, `audio_ctl`, PC bus | `seq` per topic; `state.active`; PC-origin events get sockets (P2, P3); single S1 writer (`gateway`); S6 socket options, zero-length `final` chunk, end-of-utterance definition, `device_latency_ms` / `played_bytes`; `keyword` carries the raw frame; `tracks` / `owner` / `goal` / `say` / `cmd_request` schemas written down; only S1–S3 block arming; T3 re-arm is "above 30" | review by the voice session before merge (decisions.md §1) |
 | 2026-11-08 | `keyword`, config | `keyword` carries `word`, `source`, `raw` in place of `frame`, `code`; the voice-board reader is optional; `AUDIO_DEVICE` is a card name | Brian picked a USB sound card (D-17) and the voice board's future is undecided (decisions.md §1) |
+| 2026-11-08 | audio (mic), config | mic mute while speaking written down: the PC half from line start, the Pi half from the first PCM write to drain plus `MIC_GATE_TAIL_CHUNKS` | Brian's direction, relayed by the voice session (decisions.md §1) |

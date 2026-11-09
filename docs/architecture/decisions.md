@@ -2,7 +2,7 @@
 
 Brian owns every decision here. Claude recommends and records. Newest decisions go at the bottom of each section with date and Brian's words.
 
-Sections: §1 decided (the dated log); §2 Claude's defaults (C-1 to C-13 approved 2026-11-08; C-14 to C-19 awaiting Brian); §3 Brian's numbers (set 2026-11-08; the two gains wait on M-6); §4 design questions (D-10 to D-16 answered 2026-11-08; D-17 answered the same day through the voice session; D-18 to D-22 open); §5 the `# MEASURE:` register (what must be measured, how, and which decision it unblocks).
+Sections: §1 decided (the dated log); §2 Claude's defaults (C-1 to C-13 approved 2026-11-08; C-14 to C-19 awaiting Brian); §3 Brian's numbers (set 2026-11-08; the two gains wait on M-6, the mic tail on M-33); §4 design questions (D-10 to D-16 answered 2026-11-08; D-17 answered the same day through the voice session; D-18 to D-22 open); §5 the `# MEASURE:` register (what must be measured, how, and which decision it unblocks).
 
 ---
 
@@ -133,6 +133,23 @@ Relayed by the voice session, not said to this one. The card is not on the dog y
 
 **The voice board: not decided.** Brian has not said it leaves. The voice session's report (`reports/DOGZILLA S2 voice board removal.md`, untracked in the main checkout) recommends unplugging it and keeping it until two checks pass: tracing its 4-pin cable, and scoring a software wake word against the chip with 50 Hz loop timing logged. So C-18's `voice_module_reader` becomes optional, and `keyword` now names what was heard and carries its `source` (interfaces §6), which makes chip versus software a one-variable swap. From the report, for M-14 and M-29: the board matches Yahboom's documented CSK4002 module (their documents are for the V1.0 board; this one is V2.0 and its chip marking is unread), `$B000#` is the documented wake event, the Program micro-USB is documented only for firmware updates, and how Yahboom's own S2 LLM feature gets audio is still unknown.
 
+### 2026-11-08: Brian: mute the dog's mic whenever Tilly is speaking (relayed by the voice session)
+
+Brian, to the voice session:
+
+> I was thinking about muting the mic whenever tilly voice is speaking
+
+The voice session told him this matches its existing mic gate and points to D-20 (a). His reply: "Update IronBark V3 architecture design". He has not named a D-20 option, so the mute is recorded as his direction and the letter stays open.
+
+**The rule.** The dog's mic is deaf while the voice speaks and for a short tail after. It holds whichever way D-20 goes. It has two halves, and either one alone stops the dog answering its own voice:
+
+- **PC (built on `feature/voice`, `mic_blocked`):** mic audio is ignored from the moment a line job starts (per the voice session, that includes Haiku's thinking time) until the line ends plus `MIC_GATE_TAIL_S`. The PC knows a line is coming before the Pi does.
+- **Pi (design, nothing built):** the mic stream is shut from the first PCM write to the device until the device buffer has drained, plus a tail of `MIC_GATE_TAIL_CHUNKS` mic chunks. Chunks, because Pi-side code uses no wall clock.
+
+**The tail is unmeasured.** The voice's `MIC_GATE_TAIL_S = 0.3` is a starting guess made on the PC. How long the dog's mic hears its own speaker after a line is `# MEASURE:` on the new card (M-33). Both tails are Brian's to set from that (§3.4).
+
+**Trade-off, as the voice session put it to Brian:** nobody can talk over her, and anything said during a line is lost. Lines run about 2 to 3 s.
+
 ---
 
 ## 2. Claude's defaults (approved by Brian, 2026-11-08)
@@ -226,6 +243,12 @@ How the tracker constants compose (arithmetic, for the builder): with a verify e
 | `VX_CAP_LIDAR_DARK` | forward cap with no scan | | 0.2 m/s | **0.2 m/s** |
 | `LIDAR_DARK_SCANS` | scans missing before dark | | 3 | **3** |
 
+### 3.4 Voice (added 2026-11-08; not set)
+
+| Constant | Controls | Context | Rec | Brian |
+|---|---|---|---|---|
+| `MIC_GATE_TAIL_CHUNKS` (Pi) and the voice's `MIC_GATE_TAIL_S` (PC) | how long the mic stays deaf after a line ends | the PC value is 0.3 s, a starting guess; the dog's own echo on the new card is `# MEASURE:` (M-33) | set after M-33: the measured echo plus a margin | |
+
 ---
 
 ## 4. Design questions (answered by Brian, 2026-11-08)
@@ -247,7 +270,7 @@ How the tracker constants compose (arithmetic, for the builder): with a verify e
 | D-17 | **Audio hardware on the dog.** Speaker: no working path from the Pi is known. Eight plays to card 2 (`plughw:2,0`) made no sound, the last four with the voice board cabled (Brian: "Silence..."), and card 2 looks like V1's Robot HAT setup with nothing behind it on the S2 (§1). Brian recalls hearing Tilly from the dog; no logged play matches. Mic: none reachable, `arecord -l` lists no capture device | (a) a USB speakerphone on the Pi (mic + speaker + echo cancellation); (b) a separate USB speaker and USB mic; (c) keep both on the PC for Phase 1; (d) first learn the S2's intended audio path (M-29: Yahboom's image plays and records on the Pi somehow), then choose; (e) the voice board's own speaker, its stored phrases only | (c) now, since voice out and listening already work on the PC, and (d) before buying anything: if Yahboom's path exists on this hardware it is free. (a) if it does not, because echo cancellation in one device is what lets the mic stay open while the dog talks. Yahboom warns about the Pi's USB current limit: measure the draw before adding a USB device | **A USB sound card with its own 8 Ω 5 W speaker pair, for both the mic and the speaker** ("Imma just use this", to the voice session, relayed 2026-11-08; §1). Closest to (b), in one device, no echo cancellation documented. Not on the dog yet |
 | D-18 | **Pacing of the brain's `say` / `ask_owner`** | (a) both obey the 30 s Haiku spacing; (b) both skip the gaps like replies; (c) `ask_owner` is heard like a cached line, `say` obeys the 30 s spacing | (c): `ask_owner` is the verify fallback and must be heard; free chatter stays paced | |
 | D-19 | **Which events the voice speaks.** "Haiku handles any event not in the cache table" was written for 6 events; the catalogue now has about 25, and `speech_*` would loop | (a) a voice-owned speak list: cached = found / lost / reacquired / `battery_low` / `fell`, Haiku = `behavior_changed`, everything else silent; (b) the rule as written | (a). Add cached lines for `owner_verify_needed` ("that you, bro?") and `battery_critical`; `battery_critical` queues like `battery_low`; `estop` stays silent; only `fell` interrupts, as now | |
-| D-20 | **Dog mic → PC** (voice questions 1 and 3). Live since D-17 put a mic on the Pi; the card documents no echo cancellation | (a) reserve a stream: Pi PUSH (binds) → PC PULL on 5561, the audio framing of S6, sent only while a gate is open (opened by a wake `keyword` or a PC `mic_ctl open`, closed by `mic_ctl close` or a tick budget); the Pi shuts the gate itself while it is playing; (b) voice-activity detection on the Pi; (c) an always-open stream, with the wake word found on the PC | (a). The gate keeps pre-wake audio off Wi-Fi, and the Pi shutting it during playback is the half-duplex rule a card without echo cancellation needs. (b) puts audio processing on the Pi beside the 50 Hz loop (M-32). Nothing is built until the card is on the Pi and M-13 passes | |
+| D-20 | **Dog mic → PC** (voice questions 1 and 3). Live since D-17 put a mic on the Pi; the card documents no echo cancellation | (a) reserve a stream: Pi PUSH (binds) → PC PULL on 5561, the audio framing of S6, sent only while a gate is open (opened by a wake `keyword` or a PC `mic_ctl open`, closed by `mic_ctl close` or a tick budget); the Pi shuts the gate itself while it is playing; (b) voice-activity detection on the Pi; (c) an always-open stream, with the wake word found on the PC | (a). The gate keeps pre-wake audio off Wi-Fi, and the Pi shutting it during playback is the half-duplex rule a card without echo cancellation needs. (b) puts audio processing on the Pi beside the 50 Hz loop (M-32). Nothing is built until the card is on the Pi and M-13 passes | Direction, relayed 2026-11-08: "I was thinking about muting the mic whenever tilly voice is speaking" (§1). It fits (a). No option named yet |
 | D-21 | **Can speech cause motion?** (voice question 5) Today it cannot | (a) never; (b) only to reduce it: a heard "stop" / "stay" sets goal `STAY` through the brain's path, with no safety role; "follow me" reaches the brain as input like any other; (c) speech as a command channel | (b). A spoken stop is never a safety mechanism: recognition can miss and adds ≥ 0.4 s. The HUD e-stop and the power button stay the stops. The voice process still sends no commands | |
 | D-22 | **Who else learns what was said?** (voice question 7) Today it is private to the voice | (a) keep it private; (b) publish "a person is speaking" start / stop, no text, so the brain can hold its chatter; (c) also give the brain the text as `speech_text`, never logged | (b) and (c) together if D-21 is (b); transcripts are never written to committed logs, the voice's existing rule | |
 
@@ -295,3 +318,4 @@ Every unmeasured number the architecture depends on, with the procedure and the 
 | M-30 | USB current with the sound card at speech volume, camera running. Raspberry Pi documents a 600 mA or 1.6 A USB budget depending on the supply; which one this dog gets is unmeasured | inline USB meter on the card: idle, then speech at the planned gain, one speaker and two; `vcgencmd get_config usb_max_current_enable` and `vcgencmd get_throttled` before and after | failure-modes §10 (a brownout is a Pi hang), the speaker gain, one speaker or two | before the dog walks with voice on it |
 | M-31 | Mass and mounting point of the sound card and its speakers | kitchen scale; ruler from the body origin | the MJCF mass (with M-27) and Brian's randomization ranges | with M-27 |
 | M-32 | Does a wake-word model on the Pi disturb the 50 Hz loop? | M-2's probe with and without the model running on the card's mic: p50/p99 tick time and overruns (the voice report's check 8; Brian runs any motion in it) | C-18 (chip or software as the `keyword` source), D-20 | before a software wake word runs on the Pi |
+| M-33 | How long the dog's mic hears its own speaker after a line ends | card and speakers mounted where they will sit: play a cached line with the mute off, record the mic, find when the level is back at the room's noise floor; repeat at the planned gain (the voice's checklist step 7) | `MIC_GATE_TAIL_CHUNKS`, `MIC_GATE_TAIL_S` | before listening on the dog |
