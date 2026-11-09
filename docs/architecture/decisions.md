@@ -36,6 +36,12 @@ Brian, verbatim:
 
 The tables in §2–§4 carry each call. Still open after this: `KP_YAW` and `KP_RANGE` (set from a step test after M-6), D-10's final answer (after the obs-parity test), and the §5 register, whose **gate** rows block deployment. A number in §3 changes only through a new dated entry here.
 
+### 2026-11-08: the two flags (Brian)
+
+While filling in §3 and §4, Claude flagged two things: `IMU_STALE_TICKS = 75` does not clear two freezes back to back at the 25 Hz IMU read cadence (§3.1), and D-13 as written would start a yaw sweep away from a person still in view (§4). Brian, verbatim:
+
+> Both flags: keep IMU_STALE_TICKS = 75 (a brief pause is the safe failure); approve your D-13 reading (re-verify while visible, sweep only from LOST).
+
 ---
 
 ## 2. Claude's defaults (approved by Brian, 2026-11-08)
@@ -74,7 +80,7 @@ Each constant: what it controls, the measured context, Claude's recommendation w
 | `REQUIRE_DEADMAN` | whether nonzero velocity needs `deadman=true` | supervised sessions first | `true` until the first unsupervised session is a deliberate decision | **`true`** (changes only under D-14) |
 | `IMU_FREEZE_READS` | identical blocks before `frozen` | live refresh 4–8 ms; reads 40 ms apart under C-2 | 3 (120 ms; unambiguous) | **3** |
 | `GYRO_MAX_DPS` | reject threshold | outliers measured 1514–1623 °/s; real gait rates `# MEASURE:` (M-5) | 1000 | **1000** |
-| `IMU_STALE_TICKS` | frozen/rejected → velocity zero | longest measured freeze 1004 ms = 50 ticks; must exceed it | 75 (1.5 s) | **75** (see the flag below) |
+| `IMU_STALE_TICKS` | frozen/rejected → velocity zero | longest measured freeze 1004 ms = 50 ticks; must exceed it | 75 (1.5 s) | **75**, confirmed after the flag below |
 | `IMU_DEAD_TICKS` | → `IDLE_HOLD` | > `IMU_STALE_TICKS` | 150 (3 s) | **150** |
 | `FALL_UNLOAD_TICKS` | hold → unload after a fall | servo heat vs a chance to recover | 100 (2 s) | **100** |
 | `JOINT_MARGIN_DEG` | inside `MOTOR_LIMIT` | the probe used 3° | 3 | **3** |
@@ -84,7 +90,7 @@ Each constant: what it controls, the measured context, Claude's recommendation w
 | `BATTERY_CRITICAL_PCT` | velocity zero, rest requested | firmware lockout at 9 %; load sag suspected | 12 | **12** |
 | `BATTERY_EVERY_TICKS` | battery read cadence | V2 used 250 (5 s); a read costs ~3 ms in a tick | 250, on an `imu` tick | **250**, on an `imu` tick |
 
-**Flag (Claude, 2026-11-08, for Brian; nothing changed):** `IMU_STALE_TICKS = 75` clears one measured freeze (≤ 1004 ms) but not two back to back. Under C-2 the IMU is read every 40 ms, and the shortest measured live stretch between freezes is 25 ms (1 of the 40 in `latency_config.IMU_LIVE_MS`), so a read can miss it and see ~2 s of identical values; velocity would zero until the next accepted read. Expected to be rare, roughly one freeze in a hundred. M-2 now counts how often it happens at the real cadence. The number stays 75 unless Brian changes it.
+**Flag (Claude, 2026-11-08); Brian the same day: keep 75.** `IMU_STALE_TICKS = 75` clears one measured freeze (≤ 1004 ms) but not two back to back. Under C-2 the IMU is read every 40 ms, and the shortest measured live stretch between freezes is 25 ms (1 of the 40 in `latency_config.IMU_LIVE_MS`), so a read can miss it and see ~2 s of identical values; velocity would zero until the next accepted read. Expected to be rare, roughly one freeze in a hundred. Brian: "keep IMU_STALE_TICKS = 75 (a brief pause is the safe failure)." M-2 still counts how often it happens at the real cadence, as a measurement, not a reopened decision.
 
 ### 3.2 PC follow controller and owner tracker
 
@@ -127,7 +133,7 @@ How the tracker constants compose (arithmetic, for the builder): with a verify e
 | D-10 | Should the sim's joint-readback model mirror the 40 ms read cadence of C-2? | (a) leave `JOINT_REFRESH_PERIOD_S = 0.130` as is; (b) add the 2-tick read cadence to `stale_joint_pos`; (c) decide after the parity test | (c): the parity test (week 6) shows whether the extra ≤ 40 ms of staleness moves the policy; retrain only if it does | **(c)** |
 | D-11 | Pitch scan during rescan | (a) never (yaw sweep only); (b) stationary `ACTION` with `attitude('p')` after the yaw sweep fails (C-9); (c) add body pitch to the policy's command and retrain | (b) | **(b)** |
 | D-12 | VLM model for owner verify | Haiku 5.5 (fast, cheap) vs a larger model | Haiku 5.5 first; promote only if M-12's held-out accuracy says so | **"Haiku first"** |
-| D-13 | Verify failure policy | reject → unlock immediately, or reject → keep following at low confidence until the next verify | unlock after 2 consecutive rejects; one reject lowers confidence to `RESCAN_CONFIDENCE` | **as recommended**. Claude's reading, for Brian to veto: after one reject with the target still in view, the tracker re-verifies on the next frame and does not sweep; the yaw sweep runs only from `LOST` |
+| D-13 | Verify failure policy | reject → unlock immediately, or reject → keep following at low confidence until the next verify | unlock after 2 consecutive rejects; one reject lowers confidence to `RESCAN_CONFIDENCE` | **as recommended**, with the reading Brian approved the same day ("re-verify while visible, sweep only from LOST"): after one reject with the target still in view, the tracker re-verifies on the next frame and does not sweep; the yaw sweep runs only from `LOST` |
 | D-14 | Unsupervised sessions | when `REQUIRE_DEADMAN` may be false | after the stand-test gate and ≥ 3 supervised sessions with zero `ESTOP`s from the safety layer | **as recommended** |
 | D-15 | Session logging | what the PC records every session | all of `state`, `health`, `event`, `tracks`, `owner`, `velocity` to JSONL + the camera stream to MJPEG, by session id; it is the dataset for Path B-style learning later and the evidence after any hang | **yes** |
 | D-16 | Gamepad (roadmap, later) | `velocity` with `src: teleop` through the same arbiter | yes, nothing new on the Pi | **yes** |
