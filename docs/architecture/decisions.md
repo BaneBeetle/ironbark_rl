@@ -150,6 +150,20 @@ The voice session told him this matches its existing mic gate and points to D-20
 
 **Trade-off, as the voice session put it to Brian:** nobody can talk over her, and anything said during a line is lost. Lines run about 2 to 3 s.
 
+### 2026-11-09: Brian: never command all joints to 0°; solve the zero offsets from safe poses (relayed by the joint-control session)
+
+M-4's method said "command 0° per joint vs the MJCF default pose". Brian dropped that. His words, relayed by the joint-control session and recorded on `main` in `docs/deployment-notes.md` (`294d4e9`, `2b99d6c`):
+
+> Skip the all-joints-at-0° pose; it may be unsafe and exceeds the probe's ±15° rule. Solve zero offsets from safe poses instead: the boot pose (firmware 0/48/14, I'll photo it), plus the +10° held direction-test poses, compared against sim renders at the matching angles.
+
+On which number is the firmware angle, through his advisor session:
+
+> go whatever the actual agent that's in charge of actually manipulating it has access to the code, because they actually have it.
+
+So the firmware angle is the joint readback logged at each photo, and 0/48/14 is not a source. The Phase 1 runs with no `reset()` (`passive`, `map`) read hip −0.6 on all legs, thigh 39.4 / 40.0 / 46.9 / 45.6 and calf 19.3 / 19.3 / 19.8 / 20.3 (fl / fr / br / bl).
+
+**What this changes.** M-4's method in §5. M-4 is still the first hardware session and still a gate. Two tools it needs are not built (the joint-control session is building both): a hold in the probe's `map`, which today wiggles and returns and goes −10° when a joint has no room above, and a sim render at given joint angles.
+
 ---
 
 ## 2. Claude's defaults (approved by Brian, 2026-11-08)
@@ -289,7 +303,7 @@ Every unmeasured number the architecture depends on, with the procedure and the 
 | M-1 | Board behaviour when the Pi stops sending mid-motion, joint mode and gait mode | dog on the stand; probe commands a motion then `kill -STOP`s itself; video the legs; log whether the pose holds, the gait continues, and any board-side timeout | D-5, failure-modes §2 | **gate** |
 | M-2 | Composed tick time of the C-2 schedule. Done so far: both reads every tick (`imu-loop`, 21.0 ms). The alternating schedule has never run | a new probe mode (none exists): even ticks write + `read_imu()`, odd ticks write + `read_motor()`, one battery-only tick every 250, paced to 20 ms by the monotonic clock; p50/p99 per tick kind over 1500 ticks, overruns counted; try the obs/policy work between write and read; count IMU freezes that read longer than `IMU_STALE_TICKS` at this 25 Hz cadence | C-2, D-10, `IMU_STALE_TICKS`, the 17–19 ms inference | **gate** |
 | M-3 | Gyro unit and bias | rotate the dog by a known angle on the stand, integrate `read_imu()` gyro z; compare °/s vs rad/s; bias at rest over 60 s | obs slot 0–2 | **gate** |
-| M-4 | Joint sign and zero offset per joint vs the sim. Done: the id → joint map (`map_20261108-001412`). Open: sign and zero offset (every foot-direction prompt was skipped) | probe `map` with foot directions answered; command 0° per joint vs the MJCF default pose | action mapping, obs slots 11–22, whether `default_joint_pos` survives (if not: retrain everything) | **gate, first** |
+| M-4 | Joint sign and zero offset per joint vs the sim. Done: the id → joint map (`map_20261108-001412`). Open: sign and zero offset (every foot-direction prompt was skipped) | changed 2026-11-09 (Brian, §1): photo the boot pose, then each joint held at +10° with its foot direction answered (probe `map` with a hold); the readback logged at each photo is the firmware angle; compare against sim renders at the matching angles. **Never command all joints to 0°.** Not built yet: the hold, and the sim render | action mapping, obs slots 11–22, whether `default_joint_pos` survives (if not: retrain everything) | **gate, first** |
 | M-5 | Real gyro and accel ranges during walking | first tethered steps, `state` log | `GYRO_MAX_DPS`, accel band | before unsupervised |
 | M-6 | Command-to-motion and stop latency, external reference | high-speed video of the dog against floor marks for step velocity commands; compare against the 40 ms model | `KP_YAW`, `KP_RANGE`, §5.2 budget | before FOLLOW |
 | M-7 | `K_TURN` (achieved / commanded yaw rate) | video of in-place turns at 0.2/0.4/0.8 rad/s | dead reckoning | before FOLLOW |
