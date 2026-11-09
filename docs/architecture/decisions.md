@@ -2,7 +2,7 @@
 
 Brian owns every decision here. Claude recommends and records. Newest decisions go at the bottom of each section with date and Brian's words.
 
-Sections: §1 decided; §2 Claude's defaults (plumbing choices taken while writing, each one a veto away); §3 open: Brian's numbers; §4 open: design questions still waiting; §5 the `# MEASURE:` register (what must be measured, how, and which decision it unblocks).
+Sections: §1 decided (the dated log); §2 Claude's defaults (plumbing choices, approved 2026-11-08); §3 Brian's numbers (set 2026-11-08; the two gains wait on M-6); §4 design questions (answered 2026-11-08); §5 the `# MEASURE:` register (what must be measured, how, and which decision it unblocks).
 
 ---
 
@@ -26,11 +26,21 @@ Claude sent nine questions with a recommendation each; Brian: **"Go with all rec
 
 Carried in from earlier calls (deployment-notes.md, journal.md), unchanged: policy loop on the Pi; IMU sanity filter; round-to-nearest bytes; all-12-first on `adopt`; `XGO_DOG` direct (no `reset()`); never `calibration()`; no wall-clock on the Pi; dead reckoning from commanded turns, not IMU yaw; hostnames not IPs; receiver-clock ageing only; persistent journal + `get_throttled` logging; kill switch within reach; stand test of Pi-silence in both modes before deployment; voice pacing (4 s / 30 s / falls interrupt / battery queues), `FALL_TILT_DEG = 46`, `BATTERY_LOW_PCT = 20` re-arm 30.
 
+### 2026-11-08: defaults, numbers and D-10 to D-16 (Brian)
+
+Brian, verbatim:
+
+> §2: approve all defaults C-1 to C-13.
+> §3: accept all recommendations as written (standoff 1.5 m). Gains KP_YAW/KP_RANGE get set after M-6 as recommended.
+> §4: D-10 (c), D-11 (b), D-12 Haiku first, D-13 as recommended, D-14 as recommended, D-15 yes, D-16 yes.
+
+The tables in §2–§4 carry each call. Still open after this: `KP_YAW` and `KP_RANGE` (set from a step test after M-6), D-10's final answer (after the obs-parity test), and the §5 register, whose **gate** rows block deployment. A number in §3 changes only through a new dated entry here.
+
 ---
 
-## 2. Claude's defaults (veto any)
+## 2. Claude's defaults (approved by Brian, 2026-11-08)
 
-Plumbing choices made while writing the docs. None is a `brian/` design decision, but each changes how things are built, so they are listed for a veto.
+Plumbing choices made while writing the docs. None is a `brian/` design decision, but each changes how things are built, so they were listed for a veto. Brian: "approve all defaults C-1 to C-13."
 
 | # | Default | Why | Where |
 |---|---|---|---|
@@ -50,73 +60,77 @@ Plumbing choices made while writing the docs. None is a `brian/` design decision
 
 ---
 
-## 3. Open: Brian's numbers
+## 3. Brian's numbers (set 2026-11-08)
 
-Each constant: what it controls, the measured context, Claude's recommendation with a one-line reason, blank for Brian's call. Constraints between constants are written where they bind (LESSONS B4).
+Each constant: what it controls, the measured context, Claude's recommendation with a one-line reason, and Brian's call. Brian: "accept all recommendations as written (standoff 1.5 m). Gains KP_YAW/KP_RANGE get set after M-6 as recommended." Constraints between constants are written where they bind (LESSONS B4).
 
 ### 3.1 Pi safety layer
 
-| Constant | Controls | Context | Rec | Brian |
+| Constant | Controls | Context | Rec | Brian (2026-11-08) |
 |---|---|---|---|---|
-| `VELOCITY_TTL_TICKS` (default sent by the PC) | how long one velocity command stays valid | commands at 20 Hz = 2.5 ticks apart | 15 (300 ms; tolerates 5 missed messages) | |
-| `CMD_LOST_TICKS` | when `cmd_stream_lost` fires | must be > TTL | 50 (1 s) | |
-| `CMD_DEAD_TICKS` | when the arbiter drops to `IDLE_HOLD` | must be > `CMD_LOST_TICKS` | 250 (5 s) | |
-| `REQUIRE_DEADMAN` | whether nonzero velocity needs `deadman=true` | supervised sessions first | `true` until the first unsupervised session is a deliberate decision | |
-| `IMU_FREEZE_READS` | identical blocks before `frozen` | live refresh 4–8 ms; reads 40 ms apart under C-2 | 3 (120 ms; unambiguous) | |
-| `GYRO_MAX_DPS` | reject threshold | outliers measured 1514–1623 °/s; real gait rates `# MEASURE:` (M-5) | 1000 | |
-| `IMU_STALE_TICKS` | frozen/rejected → velocity zero | longest measured freeze 1004 ms = 50 ticks; must exceed it | 75 (1.5 s) | |
-| `IMU_DEAD_TICKS` | → `IDLE_HOLD` | > `IMU_STALE_TICKS` | 150 (3 s) | |
-| `FALL_UNLOAD_TICKS` | hold → unload after a fall | servo heat vs a chance to recover | 100 (2 s) | |
-| `JOINT_MARGIN_DEG` | inside `MOTOR_LIMIT` | the probe used 3° | 3 | |
-| `JOINT_STEP_MAX_DEG` | max target change per tick | servo spec 0.1 s/60° → 12°/20 ms | 12 | |
-| `ADOPT_RAMP_TICKS` | measured pose → policy default pose | | 50 (1 s) | |
-| `STAND_TICKS` | zero-velocity settle before `release` or `IDLE_HOLD` | one gait cycle ≈ 0.4 s | 25 (0.5 s) | |
-| `BATTERY_CRITICAL_PCT` | velocity zero, rest requested | firmware lockout at 9 %; load sag suspected | 12 | |
-| `BATTERY_EVERY_TICKS` | battery read cadence | V2 used 250 (5 s); a read costs ~3 ms in a tick | 250, on an `imu` tick | |
+| `VELOCITY_TTL_TICKS` (default sent by the PC) | how long one velocity command stays valid | commands at 20 Hz = 2.5 ticks apart | 15 (300 ms; tolerates 5 missed messages) | **15** |
+| `CMD_LOST_TICKS` | when `cmd_stream_lost` fires | must be > TTL | 50 (1 s) | **50** |
+| `CMD_DEAD_TICKS` | when the arbiter drops to `IDLE_HOLD` | must be > `CMD_LOST_TICKS` | 250 (5 s) | **250** |
+| `REQUIRE_DEADMAN` | whether nonzero velocity needs `deadman=true` | supervised sessions first | `true` until the first unsupervised session is a deliberate decision | **`true`** (changes only under D-14) |
+| `IMU_FREEZE_READS` | identical blocks before `frozen` | live refresh 4–8 ms; reads 40 ms apart under C-2 | 3 (120 ms; unambiguous) | **3** |
+| `GYRO_MAX_DPS` | reject threshold | outliers measured 1514–1623 °/s; real gait rates `# MEASURE:` (M-5) | 1000 | **1000** |
+| `IMU_STALE_TICKS` | frozen/rejected → velocity zero | longest measured freeze 1004 ms = 50 ticks; must exceed it | 75 (1.5 s) | **75** (see the flag below) |
+| `IMU_DEAD_TICKS` | → `IDLE_HOLD` | > `IMU_STALE_TICKS` | 150 (3 s) | **150** |
+| `FALL_UNLOAD_TICKS` | hold → unload after a fall | servo heat vs a chance to recover | 100 (2 s) | **100** |
+| `JOINT_MARGIN_DEG` | inside `MOTOR_LIMIT` | the probe used 3° | 3 | **3** |
+| `JOINT_STEP_MAX_DEG` | max target change per tick | servo spec 0.1 s/60° → 12°/20 ms | 12 | **12** |
+| `ADOPT_RAMP_TICKS` | measured pose → policy default pose | | 50 (1 s) | **50** |
+| `STAND_TICKS` | zero-velocity settle before `release` or `IDLE_HOLD` | one gait cycle ≈ 0.4 s | 25 (0.5 s) | **25** |
+| `BATTERY_CRITICAL_PCT` | velocity zero, rest requested | firmware lockout at 9 %; load sag suspected | 12 | **12** |
+| `BATTERY_EVERY_TICKS` | battery read cadence | V2 used 250 (5 s); a read costs ~3 ms in a tick | 250, on an `imu` tick | **250**, on an `imu` tick |
+
+**Flag (Claude, 2026-11-08, for Brian; nothing changed):** `IMU_STALE_TICKS = 75` clears one measured freeze (≤ 1004 ms) but not two back to back. Under C-2 the IMU is read every 40 ms, and the shortest measured live stretch between freezes is 25 ms (1 of the 40 in `latency_config.IMU_LIVE_MS`), so a read can miss it and see ~2 s of identical values; velocity would zero until the next accepted read. Expected to be rare, roughly one freeze in a hundred. M-2 now counts how often it happens at the real cadence. The number stays 75 unless Brian changes it.
 
 ### 3.2 PC follow controller and owner tracker
 
-| Constant | Controls | Context | Rec | Brian |
+| Constant | Controls | Context | Rec | Brian (2026-11-08) |
 |---|---|---|---|---|
-| `TARGET_LOST_FRAMES` | zero velocity and `target_lost`, one constant for both | voice placeholder was 3 at 5 Hz; tracker runs at 20 fps | 10 (0.5 s) | |
-| `STANDOFF_AREA_RATIO` | the range the dog holds | ladder: 0.159 at 1 m, 0.118 at 1.5 m, 0.099 at 2 m; 1 m is noisy (σ 40 px, clipped) | 0.118 (1.5 m); re-run the 1.5 m station first (its hit-rate dip is one sample) | |
-| `OFFSET_DEADBAND_PX` | no yaw correction inside | static noise σ 2.6–3.5 px at 2–3 m, 40 px at 1 m; motion jitter ~45 px median (uncommitted V2 log) | 30 at ≥ 1.5 m | |
-| `KP_YAW`, `KP_RANGE` | proportional gains | dead time ≈ 150–250 ms (architecture §5.2); the real number is M-6 | set from a step test after M-6; start at half the gain that gives one overshoot | |
-| `ACQUIRE_FRAMES` | consecutive argmax frames before lock | V2 §5: 3 | 3 | |
-| `CONFIDENCE_DECAY_LOCKED` | per-frame multiplier while locked and unverified | | 0.999 (half-life ~35 s at 20 fps) | |
-| `CONFIDENCE_DECAY_LOST` | per-frame multiplier while lost | | 0.97 (half-life ~1 s) | |
-| `RESCAN_CONFIDENCE` | below this → rescan | | 0.3 | |
-| `VERIFY_PERIOD_FRAMES` | periodic VLM verify while locked | VLM cost/latency | 600 (30 s) | |
-| `RESCAN_WZ` | sweep yaw rate | trained max 0.8 rad/s | 0.5 rad/s | |
-| `RESCAN_MAX_ANGLE_DEG` | sweep bound each side of the dead-reckoned bearing | | 90 | |
-| `RESCAN_COOLDOWN_FRAMES` | between sweeps | | 100 (5 s) | |
-| `RESCAN_MAX_ATTEMPTS` | before the voice fallback | | 2 | |
-| `BRAIN_VELOCITY_TTL_MAX` | cap on a brain `set_velocity` | | 100 ticks (2 s) | |
-| `TELEM_STALE_S`, `FRAME_STALE_FRAMES` | PC-side link/age thresholds (PC clock allowed) | | 1.0 s; 5 frames | |
+| `TARGET_LOST_FRAMES` | zero velocity and `target_lost`, one constant for both | voice placeholder was 3 at 5 Hz; tracker runs at 20 fps | 10 (0.5 s) | **10** |
+| `STANDOFF_AREA_RATIO` | the range the dog holds | ladder: 0.159 at 1 m, 0.118 at 1.5 m, 0.099 at 2 m; 1 m is noisy (σ 40 px, clipped) | 0.118 (1.5 m); re-run the 1.5 m station first (its hit-rate dip is one sample) | **0.118 (standoff 1.5 m)**; re-run the 1.5 m ladder station first |
+| `OFFSET_DEADBAND_PX` | no yaw correction inside | static noise σ 2.6–3.5 px at 2–3 m, 40 px at 1 m; motion jitter ~45 px median (uncommitted V2 log) | 30 at ≥ 1.5 m | **30** at ≥ 1.5 m |
+| `KP_YAW`, `KP_RANGE` | proportional gains | dead time ≈ 150–250 ms (architecture §5.2); the real number is M-6 | set from a step test after M-6; start at half the gain that gives one overshoot | **not set: after M-6**, as recommended |
+| `ACQUIRE_FRAMES` | consecutive argmax frames before lock | V2 §5: 3 | 3 | **3** |
+| `CONFIDENCE_DECAY_LOCKED` | per-frame multiplier while locked and unverified | | 0.999 (half-life ~35 s at 20 fps) | **0.999** |
+| `CONFIDENCE_DECAY_LOST` | per-frame multiplier while lost | | 0.97 (half-life ~1 s) | **0.97** |
+| `RESCAN_CONFIDENCE` | below this → rescan | | 0.3 | **0.3** |
+| `VERIFY_PERIOD_FRAMES` | periodic VLM verify while locked | VLM cost/latency | 600 (30 s) | **600** |
+| `RESCAN_WZ` | sweep yaw rate | trained max 0.8 rad/s | 0.5 rad/s | **0.5 rad/s** |
+| `RESCAN_MAX_ANGLE_DEG` | sweep bound each side of the dead-reckoned bearing | | 90 | **90** |
+| `RESCAN_COOLDOWN_FRAMES` | between sweeps | | 100 (5 s) | **100** |
+| `RESCAN_MAX_ATTEMPTS` | before the voice fallback | | 2 | **2** |
+| `BRAIN_VELOCITY_TTL_MAX` | cap on a brain `set_velocity` | | 100 ticks (2 s) | **100 ticks** |
+| `TELEM_STALE_S`, `FRAME_STALE_FRAMES` | PC-side link/age thresholds (PC clock allowed) | | 1.0 s; 5 frames | **1.0 s; 5 frames** |
+
+How the tracker constants compose (arithmetic, for the builder): with a verify every 600 frames, a locked target's confidence falls to 0.999⁶⁰⁰ ≈ 0.55 between verifies and never reaches 0.3 while verifies succeed; it takes ~1200 frames (60 s) without one.
 
 ### 3.3 Lidar reflex (Phase 2)
 
-| Constant | Controls | Context | Rec | Brian |
+| Constant | Controls | Context | Rec | Brian (2026-11-08) |
 |---|---|---|---|---|
-| `FRONT_SECTOR_DEG` | half-width of the forward sector | body 14.5 cm wide; lidar offset from the nose `# MEASURE:` (M-9) | ±30° | |
-| `STOP_DISTANCE_M` | vx → 0 at or under | | 0.25 | |
-| `TAPER_DISTANCE_M` | full vx allowed at or beyond | | 0.60 | |
-| `VX_CAP_LIDAR_DARK` | forward cap with no scan | | 0.2 m/s | |
-| `LIDAR_DARK_SCANS` | scans missing before dark | | 3 | |
+| `FRONT_SECTOR_DEG` | half-width of the forward sector | body 14.5 cm wide; lidar offset from the nose `# MEASURE:` (M-9) | ±30° | **±30°** |
+| `STOP_DISTANCE_M` | vx → 0 at or under | | 0.25 | **0.25** |
+| `TAPER_DISTANCE_M` | full vx allowed at or beyond | | 0.60 | **0.60** |
+| `VX_CAP_LIDAR_DARK` | forward cap with no scan | | 0.2 m/s | **0.2 m/s** |
+| `LIDAR_DARK_SCANS` | scans missing before dark | | 3 | **3** |
 
 ---
 
-## 4. Open: design questions still waiting
+## 4. Design questions (answered by Brian, 2026-11-08)
 
-| # | Question | Options | Rec | Brian |
+| # | Question | Options | Rec | Brian (2026-11-08) |
 |---|---|---|---|---|
-| D-10 | Should the sim's joint-readback model mirror the 40 ms read cadence of C-2? | (a) leave `JOINT_REFRESH_PERIOD_S = 0.130` as is; (b) add the 2-tick read cadence to `stale_joint_pos`; (c) decide after the parity test | (c): the parity test (week 6) shows whether the extra ≤ 40 ms of staleness moves the policy; retrain only if it does | |
-| D-11 | Pitch scan during rescan | (a) never (yaw sweep only); (b) stationary `ACTION` with `attitude('p')` after the yaw sweep fails (C-9); (c) add body pitch to the policy's command and retrain | (b) | |
-| D-12 | VLM model for owner verify | Haiku 5.5 (fast, cheap) vs a larger model | Haiku 5.5 first; promote only if M-12's held-out accuracy says so | |
-| D-13 | Verify failure policy | reject → unlock immediately, or reject → keep following at low confidence until the next verify | unlock after 2 consecutive rejects; one reject lowers confidence to `RESCAN_CONFIDENCE` | |
-| D-14 | Unsupervised sessions | when `REQUIRE_DEADMAN` may be false | after the stand-test gate and ≥ 3 supervised sessions with zero `ESTOP`s from the safety layer | |
-| D-15 | Session logging | what the PC records every session | all of `state`, `health`, `event`, `tracks`, `owner`, `velocity` to JSONL + the camera stream to MJPEG, by session id; it is the dataset for Path B-style learning later and the evidence after any hang | |
-| D-16 | Gamepad (roadmap, later) | `velocity` with `src: teleop` through the same arbiter | yes, nothing new on the Pi | |
+| D-10 | Should the sim's joint-readback model mirror the 40 ms read cadence of C-2? | (a) leave `JOINT_REFRESH_PERIOD_S = 0.130` as is; (b) add the 2-tick read cadence to `stale_joint_pos`; (c) decide after the parity test | (c): the parity test (week 6) shows whether the extra ≤ 40 ms of staleness moves the policy; retrain only if it does | **(c)** |
+| D-11 | Pitch scan during rescan | (a) never (yaw sweep only); (b) stationary `ACTION` with `attitude('p')` after the yaw sweep fails (C-9); (c) add body pitch to the policy's command and retrain | (b) | **(b)** |
+| D-12 | VLM model for owner verify | Haiku 5.5 (fast, cheap) vs a larger model | Haiku 5.5 first; promote only if M-12's held-out accuracy says so | **"Haiku first"** |
+| D-13 | Verify failure policy | reject → unlock immediately, or reject → keep following at low confidence until the next verify | unlock after 2 consecutive rejects; one reject lowers confidence to `RESCAN_CONFIDENCE` | **as recommended**. Claude's reading, for Brian to veto: after one reject with the target still in view, the tracker re-verifies on the next frame and does not sweep; the yaw sweep runs only from `LOST` |
+| D-14 | Unsupervised sessions | when `REQUIRE_DEADMAN` may be false | after the stand-test gate and ≥ 3 supervised sessions with zero `ESTOP`s from the safety layer | **as recommended** |
+| D-15 | Session logging | what the PC records every session | all of `state`, `health`, `event`, `tracks`, `owner`, `velocity` to JSONL + the camera stream to MJPEG, by session id; it is the dataset for Path B-style learning later and the evidence after any hang | **yes** |
+| D-16 | Gamepad (roadmap, later) | `velocity` with `src: teleop` through the same arbiter | yes, nothing new on the Pi | **yes** |
 
 ---
 
@@ -127,7 +141,7 @@ Every unmeasured number the architecture depends on, with the procedure and the 
 | # | Measure | How | Unblocks | Gate |
 |---|---|---|---|---|
 | M-1 | Board behaviour when the Pi stops sending mid-motion, joint mode and gait mode | dog on the stand; probe commands a motion then `kill -STOP`s itself; video the legs; log whether the pose holds, the gait continues, and any board-side timeout | D-5, failure-modes §2 | **gate** |
-| M-2 | Composed tick time of the C-2 schedule | probe `imu-loop` variant alternating reads; p50/p99 per tick over 1500 ticks | C-2, D-10 | **gate** |
+| M-2 | Composed tick time of the C-2 schedule | probe `imu-loop` variant alternating reads; p50/p99 per tick over 1500 ticks; count IMU freezes that read longer than `IMU_STALE_TICKS` at this 25 Hz cadence | C-2, D-10, `IMU_STALE_TICKS` | **gate** |
 | M-3 | Gyro unit and bias | rotate the dog by a known angle on the stand, integrate `read_imu()` gyro z; compare °/s vs rad/s; bias at rest over 60 s | obs slot 0–2 | **gate** |
 | M-4 | Joint sign and zero offset per joint vs the sim | probe `map` with foot directions answered; command 0° per joint vs the MJCF default pose | action mapping, obs slots 11–22 | **gate** |
 | M-5 | Real gyro and accel ranges during walking | first tethered steps, `state` log | `GYRO_MAX_DPS`, accel band | before unsupervised |
