@@ -138,7 +138,10 @@ No effect on motion by construction: the voice only subscribes to events and pus
 - **Device failure** on the Pi: `health.audio.status`, `audio_down`.
 - **Device busy at boot.** The first open after power-on failed with "Device or resource busy" (2026-11-08, uptime 0) and worked seconds later: the player retries a counted number of times, then reports `audio_down`.
 - **A device that opens but makes no sound.** Seen for real: `aplay` to the Pi's card 2 exits 0 and nothing is heard, because the overlay registers a card with no DAC behind it. No software check catches this; the session-start test line and the operator's ears do (interfaces §3, step 6).
-- **Today** the Pi has no playback path known to make sound (decisions.md D-17, M-29), so the voice plays on the PC and none of the above is live yet.
+- **The default route goes to the dead card.** This Pi's `/etc/asound.conf` (V1's) sends `default` to card 2. The player names its device by card name and never uses `default`.
+- **The speaker browns out the Pi.** The USB sound card (decisions.md D-17) shares the Pi's USB current budget with the camera. A brownout is not a voice failure: it is a Pi hang (§2). The draw at speech volume is `# MEASURE:` (M-30) before the dog walks with voice on it; if it is too high, lower the gain or use one speaker of the pair.
+- **The voice board talks into the new mic.** While the board stays cabled with its speaker, its own wake reply plays beside the mic, and nothing tells the Pi when it speaks. The mic gate (D-20) opens a counted number of ticks after a `keyword` whose `source` is the voice board (the reply's length is `# MEASURE:`, M-14), or the board's speaker is unplugged.
+- **Today** the dog's audio device is chosen but not installed (decisions.md D-17), so the voice plays on the PC and none of the above is live yet.
 
 ## 11. Version or schema mismatch
 

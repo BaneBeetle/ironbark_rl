@@ -43,7 +43,7 @@ The Pi binds every socket. The PC connects to `PI_HOST` (`raspberrypi.local`, DH
 | S4 | camera Pi → PC | PUSH → PULL | PUSH **bind** `tcp://*:50505`, `SNDHWM=2` | PULL connect, `CONFLATE=1` | 50505 | binary, §8 |
 | S5 | lidar Pi → PC (Phase 2) | PUSH → PULL | PUSH **bind** `tcp://*:50507` | PULL connect, `CONFLATE=1` | 50507 | JSON scan, §8 |
 | S6 | audio PC → Pi | PUSH → PULL | PULL **bind** `tcp://*:5560` | PUSH connect, `IMMEDIATE=1`, `SNDHWM=AUDIO_SNDHWM`, non-blocking send | 5560 | multipart, §8 |
-| I1 | Pi internal: `cam_sender`, `lidar_reader`, `audio_player`, `voice_module_reader` → `runtime` | PUSH → PULL | PULL bind `ipc:///tmp/ironbark/runtime.sock` | — | — | `cam_health`, `lidar_sectors`, `speech`, `keyword` |
+| I1 | Pi internal: `cam_sender`, `lidar_reader`, `audio_player`, a keyword detector (`voice_module_reader`, optional) → `runtime` | PUSH → PULL | PULL bind `ipc:///tmp/ironbark/runtime.sock` | — | — | `cam_health`, `lidar_sectors`, `speech`, `keyword` |
 | P1–P5 | PC bus: each PC process binds one loopback PUB | PUB → SUB | — | `tcp://127.0.0.1:5570`–`5574` | — | `tracks`, `owner`, `goal`, `say`, `cmd_request`, `event`; §12 |
 
 `LINGER=0` on every socket. S1 is drained to the newest message every tick (as V2 did); S4/S5 use `CONFLATE` so a reconnect never delivers a 3.87 s-old frame (V2 measured that burst). S6 must never queue while the Pi is unreachable, or old speech would play on reconnect (§8). Port 5557 (V1 teleop) and 5560 are unused in V2, so nothing collides; 5556/5558/50505/50507 keep their V2 numbers.
@@ -170,10 +170,12 @@ Where each source publishes, always on topic `event`: `pi` on S2; `pc:owner_trac
 | `rescan_started` / `rescan_failed` | pc:owner_tracker | sweep begins / `RESCAN_MAX_ATTEMPTS` exhausted | — | `bearing_deg`, `attempt` |
 | `owner_verify_needed` | pc:owner_tracker | rescans exhausted → voice fallback ("that you, bro?") | `owner_verified` | — |
 | `behavior_changed` | pc:brain | goal changed | — | `from`, `to` |
-| `keyword` (Phase 2) | pi (voice_module_reader) | the voice board sends a frame on its serial port | — | `frame` (raw ASCII, e.g. `"$B000#"`), `code` (e.g. `"000"`) |
+| `keyword` (Phase 2) | pi (one detector: `voice_module_reader` while the voice board is plugged in, or a software wake word) | a wake word or a command phrase was recognised | — | `word` (e.g. `"wake"`), `source` (`"voice_board"` or `"software"`), `raw` (the board's ASCII frame, e.g. `"$B000#"`; null from software) |
 | `speech_text` (reserved; decisions.md D-22) | pc:voice | free-text STT result | — | `text`, `confidence` (null when the STT gives none). Never written to a committed log |
 
-Measured 2026-11-08 by the voice session with Brian (`docs/voice/s2-voice-module.md`, branch `feature/voice`): saying "Hello Yahboom" made the board (a YB-MVE02-V2.0) send `$B000#` at 115200 baud on `/dev/ttyUSB0` and answer through its own speaker. That `000` is the wake word is inferred from timing; the other codes are unmeasured (M-23). Yahboom's own voice samples drive the dog from spoken commands; nothing in V3 runs them.
+Measured 2026-11-08 by the voice session with Brian (`docs/voice/s2-voice-module.md`, branch `feature/voice`): saying "Hello Yahboom" made the board (a YB-MVE02-V2.0) send `$B000#` at 115200 baud on `/dev/ttyUSB0` and answer through its own speaker. That `000` is the wake word is inferred from timing, and Yahboom's protocol document for the V1.0 board lists `$B000#` as the wake event; the other codes are unmeasured (M-23). Yahboom's own voice samples drive the dog from spoken commands; nothing in V3 runs them.
+
+`keyword` names what was heard, not which detector heard it (C-18): whether the voice board stays is undecided, and a software wake word must be able to replace it without any subscriber changing. The reader maps frames to words from a table on the Pi (`$B000#` → `"wake"`; a frame with no entry is logged and not published). Only one detector runs at a time.
 
 ---
 
@@ -249,7 +251,7 @@ Control, one frame: `{"v":1,"type":"audio_ctl","seq":…,"t_ms":…,"cmd":"stop"
 
 **Events.** `speech_started` at the first PCM write to the device, with `device_latency_ms` (sound leaves the speaker that much after a write). `speech_ended` when the `final` chunk has been received and the device buffer has drained, or when a `stop` took effect (`interrupted: true`), with `played_bytes`. Both echo the first chunk's `t_ms` as `pc_t_ms`. The PC-clock round trip that gives is an **upper bound** on event-to-sound: it includes the Pi → PC leg and the hop through the runtime. If `speech_ended` never arrives, the voice times out from the PCM byte count.
 
-**Device: none known to work.** The Pi lists one non-HDMI playback card, card 2 `sndrpihifiberry` (PCM5102A, `hifiberry-dac` overlay), device 0, and no capture device (live `aplay -l` / `arecord -l`, 2026-11-08). Eight plays to `plughw:2,0` made no sound, four of them with the voice board cabled (Brian: "Silence..."). The card looks like V1's Robot HAT setup, which the overlay registers whether or not a DAC is wired, so `aplay` exiting 0 proves nothing here (decisions.md §1). `AUDIO_DEVICE` stays unset and the voice keeps playing on the PC until D-17 and M-29 give the dog a path.
+**Device: chosen, not installed.** Brian picked a USB sound card with its own speaker pair and an onboard mic (decisions.md D-17, relayed by the voice session, 2026-11-08). Until it is on the Pi and has passed M-13, `AUDIO_DEVICE` stays unset and the voice keeps playing on the PC. The player names its device by card name: never by card number, which can shift, and never as `default`, because this Pi's `/etc/asound.conf` sends the default route to card 2. That card (`sndrpihifiberry`, PCM5102A, `hifiberry-dac` overlay) is V1's Robot HAT setup: the overlay registers it whether or not a DAC is wired, eight plays to `plughw:2,0` made no sound (Brian: "Silence..."), and `aplay` exiting 0 proves nothing there (decisions.md §1). The new card's ALSA name, its latency and whether it takes 24 kHz PCM as the vendor lists are `# MEASURE:` (M-13).
 
 ---
 
@@ -292,8 +294,8 @@ Per machine, only what it uses (LESSONS C4):
 | Pi | `MOTION_PORT` | `/dev/ttyAMA0` | measured |
 | Pi | `LIDAR_PORT` | unset | `# MEASURE:` trace the cable; refuses to start the reader while unset |
 | Pi | `ONNX_MODEL` | — | path + sha256 pinned in `health.versions` |
-| Pi | `AUDIO_DEVICE` | unset | `# MEASURE:` (M-13, M-29). The only candidate, card 2 `plughw:2,0`, was silent in eight plays and looks like a V1 leftover with no hardware behind it. The player refuses to start while unset and reports `audio_down` |
-| Pi | `VOICE_MODULE_PORT` | `/dev/ttyUSB0` @ 115200 | measured 2026-11-08 (CH340, serial only) |
+| Pi | `AUDIO_DEVICE` | unset | `# MEASURE:` (M-13): the ALSA name of the USB sound card Brian picked (D-17), once it is on the Pi. A card name, never a card number, never `default` (the default route goes to the dead card 2). The player refuses to start while unset and reports `audio_down` |
+| Pi | `VOICE_MODULE_PORT` | `/dev/ttyUSB0` @ 115200 | measured 2026-11-08 (CH340, serial only). Optional: left unset when the board is unplugged, and the reader does not start |
 | PC | `AUDIO_SNDHWM` | 100 chunks | design: above the longest cached clip (~66 chunks of 50 ms) |
 | Pi | `REQUIRE_DEADMAN` | `true` | Brian's call per session type |
 
@@ -373,3 +375,4 @@ The body of the S1 message being asked for (`velocity`, `action` or `mode`, §7)
 |---|---|---|---|
 | 2026-11-08 | all | v1 drafted | V3 architecture |
 | 2026-11-08 | envelope, `state`, `event`, `audio`, `audio_ctl`, PC bus | `seq` per topic; `state.active`; PC-origin events get sockets (P2, P3); single S1 writer (`gateway`); S6 socket options, zero-length `final` chunk, end-of-utterance definition, `device_latency_ms` / `played_bytes`; `keyword` carries the raw frame; `tracks` / `owner` / `goal` / `say` / `cmd_request` schemas written down; only S1–S3 block arming; T3 re-arm is "above 30" | review by the voice session before merge (decisions.md §1) |
+| 2026-11-08 | `keyword`, config | `keyword` carries `word`, `source`, `raw` in place of `frame`, `code`; the voice-board reader is optional; `AUDIO_DEVICE` is a card name | Brian picked a USB sound card (D-17) and the voice board's future is undecided (decisions.md §1) |
