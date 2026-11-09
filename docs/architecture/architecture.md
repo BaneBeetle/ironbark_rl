@@ -4,6 +4,8 @@ Design only: no code lands from this document. Every agent building a V3 compone
 
 Status (2026-11-08): Brian accepted all nine recommendations ("Go with all recs"), then approved Claude's defaults C-1 to C-13, set the numbers in `decisions.md` §3 as recommended and answered D-10 to D-16. Still open: the two follow gains (set after M-6) and the `# MEASURE:` register in `decisions.md` §5, whose gate rows block deployment. Every number marked `# MEASURE:` has its procedure there.
 
+Revised the same day after reviews by the voice and joint-control sessions and Brian's six corrections (`decisions.md` §1): the text now says what is measured, what is only scored in sim, and what is unverified. Awaiting Brian: defaults C-14 to C-19 and questions D-17 to D-22.
+
 Sources this design leans on: [`docs/v2-archive/MEASURED_FACTS.md`](../v2-archive/MEASURED_FACTS.md), [`LESSONS.md`](../v2-archive/LESSONS.md), [`findings/`](../v2-archive/findings/), [`docs/phase1-joint-control-results.md`](../phase1-joint-control-results.md), [`docs/deployment-notes.md`](../deployment-notes.md), [`docs/roadmap.md`](../roadmap.md), `docs/voice/decisions.md` (branch `feature/voice`).
 
 ---
@@ -28,12 +30,12 @@ Rules every component follows (each one traces to a V2 lesson; the full map is �
 1. **One motor owner at a time**, chosen by a Pi-side arbiter. The brain and the operator *request*; the arbiter *decides*.
 2. **The safety layer never originates motion.** It clamps, zeroes, holds. Nothing in it calls a gait or an action group.
 3. **Locomotion runs only in joint mode** (the RL policy). The firmware gait is never used to walk. Firmware action groups run only from a standing stop, through a measured handoff.
-4. **Frame counts and state predicates on the Pi; wall clock only on the PC.** Every message that must expire carries a tick count.
+4. **Frame counts and state predicates on the Pi; wall clock only on the PC.** Every message that must expire carries a tick count. One exception (Brian, 2026-11-08): a monotonic clock paces the 50 Hz loop on the Pi, and does nothing else; every decision still counts ticks or frames.
 5. **No cross-host timestamp arithmetic.** Receivers age data by their own clock or tick.
-6. **The owner of a fact publishes it, once.** The Pi says `fell`; the tracker says `target_lost`; voice subscribes and never re-derives either.
+6. **The owner of a fact publishes it, once.** The Pi says `fell`; the tracker says `target_lost`; voice subscribes and never re-derives either. The event is the edge; the same owner also carries the level in a periodic message, so a lost event is never a lost fact.
 7. **The Pi binds every socket; the PC connects to one hostname.** The Pi needs no PC address, and the PC needs no inbound firewall rule.
 8. **Every threshold carries a tag** (`measured | vendor | design | MEASURE`). A `MEASURE` threshold blocks the behaviour that depends on it, or at least raises a degraded notice at mode entry.
-9. **Every vendor call is unverified until a probe log says otherwise.** The runtime uses the calls Phase 1 measured and nothing else.
+9. **Every vendor call is unverified until a probe log says otherwise.** The runtime uses the calls a probe has logged; a call with no log is blocked until it has one (§3.4 lists them).
 10. **Write V3 from scratch; port facts, not code.** `motor_controller.py` stays in the archive as a reference.
 
 ---
@@ -45,13 +47,14 @@ Rules every component follows (each one traces to a V2 lesson; the full map is �
 | **Pi 5** | `runtime` | 50 Hz tick | Arbiter (modes), safety layer (IMU filter, watchdog, tilt cutoff, joint clamps), lidar reflex (Phase 2), policy inference (ONNX), motion-board adapter (xgolib quirks), telemetry PUB (`state` 50 Hz, `health` 1 Hz, `event`), `hello` REP |
 | Pi 5 | `cam_sender` | 20 fps | `/dev/video0` MJPG 640×480 → PUSH to the PC; frame stats + stall detection → runtime over `ipc://` |
 | Pi 5 | `lidar_reader` (Phase 2) | scan rate (`# MEASURE:`; vendor nominal ~10 Hz) | MS200 UART → full scans PUSH to the PC; sector minima → runtime over `ipc://` |
-| Pi 5 | `audio_player` | on demand | PULL PCM from the PC, play on the S2 speaker (`# MEASURE:` the audio device), report `speech_started/ended` to the runtime |
+| Pi 5 | `audio_player` | on demand | PULL PCM from the PC, play on a Pi audio device, report `speech_started/ended` to the runtime. **No such device exists today** (measured 2026-11-08: the dog's speaker plugs into the voice board; the Pi's HifiBerry output was inaudible). Waits on decisions.md D-17 |
+| Pi 5 | `voice_module_reader` (Phase 2) | per frame | Owns the voice board's serial port (`/dev/ttyUSB0`, 115200); publishes `keyword` through the runtime |
 | **PC (3090)** | `perception` | 20 Hz (camera-bound) | YOLO + tracker on the camera stream → `tracks` |
 | PC | `owner_tracker` | 20 Hz | Lock, confidence, dead reckoning, rescan, VLM verify → `owner` + events |
-| PC | `follow_controller` | 20 Hz | Deterministic P-control from `owner` → `velocity` with TTL; obeys the brain's goal |
+| PC | `follow_controller` | 20 Hz | Deterministic P-control from `owner` → a `velocity` request with TTL; obeys the brain's goal (or the operator's, from the HUD) |
 | PC | `brain` | 0.3–1 Hz, event-driven | VLM with tools: goal, direct velocity (short TTL), action group, say, ask owner |
 | PC | `voice` | event-driven | Pacing policy (built), cached lines / Haiku → TTS → PCM PUSH to the Pi |
-| PC | `hud` | 20 Hz | Operator view, deadman (real key-held), e-stop, link states, `seq` echo, degraded notices |
+| PC | `hud` + `gateway` | 20 Hz | Operator view, deadman (real key-held), e-stop, link states, `seq` echo, degraded notices. The gateway is the only writer on the command socket: it forwards requests while armed and sends zero velocity while disarmed |
 
 **Why perception is on the PC** (decision 2): the camera→PC path is measured (20 fps, 10.9 ms one-way), the 3090 is idle at deploy time, and a Pi-side detector needs either the CPU (YOLO11n-class at roughly 5–10 fps, unmeasured) or a Hailo HAT (new hardware). The `tracks` schema is host-agnostic so the detector can move to the Pi later without touching anything downstream. Nothing safety-critical on the Pi depends on perception; the watchdog and the lidar reflex are local.
 
@@ -61,9 +64,16 @@ Rules every component follows (each one traces to a V2 lesson; the full map is �
 
 ### 3.1 Tick schedule
 
-The policy is trained at 50 Hz (20 ms). Measured serial costs (`phase1-joint-control-results.md`): 12-joint `motor()` 9.7 ms of wire time; `read_motor()` 16.2 ms when it waits behind the write; `read_imu()` 4.6 ms; both reads every tick → 21.0 ms/step, 47.6 Hz. So both reads cannot share a 20 ms tick.
+The policy is trained at 50 Hz (20 ms). Measured serial costs (`phase1-joint-control-results.md`): 12-joint `motor()` 9.7 ms of wire time (the call returns in 0.13 ms and the bytes drain in the background); `read_motor()` 3.6 ms alone, 16.2–18.0 ms when it waits behind the write; `read_imu()` 4.6 ms; both reads every tick → 21.0 ms/step, 47.6 Hz. So both reads cannot share a 20 ms tick.
 
-Design: alternate the reads. Even ticks write + `read_imu()` (~14 ms); odd ticks write + `read_motor()` (~18 ms). Each tick fits 20 ms. Joint readback lands at 25 Hz, which loses nothing because each joint's value refreshes only every ~105–130 ms in the firmware; the IMU at 25 Hz is finer than its live refresh (4–8 ms) only during live stretches, and it is frozen 42 % of the time anyway.
+Design: alternate the reads.
+
+- **Odd ticks**, write + `read_motor()`: **18.0 ms, measured** (p99 18.3).
+- **Even ticks**, write + `read_imu()`: **17–19 ms, inferred, not measured.** A read behind a write is not a plain sum: `read_motor()` costs 3.0–4.7 ms more than write plus read alone, and the same penalty on `read_imu()` gives 17–19 ms (the joint-control session's review; the first draft's 14 ms was a plain sum).
+- That leaves **≤ 2 ms per tick** for the observation, the ONNX forward, the safety layer and the JSON. The composed schedule has never run; it is M-2, a gate, and needs a new probe mode.
+- **Battery reads get their own tick** (Brian, 2026-11-08): once every `BATTERY_EVERY_TICKS`, a tick does write + `read_battery()` and no other read. On an IMU tick it would add ~3.2 ms and overrun.
+- **Pacing** (Brian, 2026-11-08): "a monotonic clock is allowed on the Pi for loop pacing ONLY; decisions still use tick/frame counts." The schedule does not pace itself (the Phase 1 loop ran at whatever the serial link took), and the policy's phase observation assumes tick × 0.02 s. So the loop sleeps to the next 20 ms boundary on the monotonic clock. A tick that overruns is counted in `health.loop.overruns` and never caught up. Nothing else on the Pi reads a clock.
+- **What the cadence costs.** Joint readback at 25 Hz loses little: each joint's value refreshes only every ~105–130 ms in the firmware. The IMU at 25 Hz is **coarser** than its live refresh (4–8 ms), so every IMU value is held one extra tick, on top of a register that is frozen 42 % of the time. Neither 40 ms hold is in the sim.
 
 ```
 tick t (even)                          tick t+1 (odd)
@@ -77,33 +87,37 @@ tick t (even)                          tick t+1 (odd)
 └ telemetry: state (every tick), health (every 50), events
 ```
 
-Brian (D-10, 2026-11-08): whether the sim's readback model should mirror the 40 ms read cadence is decided after the obs-parity test (Phase 2A week 6), which tells whether it matters. `# MEASURE:` the actual tick time of this schedule, and whether the firmware accepts 2 Mbaud (xgolib hints "RL programs" use it), which would make the wire time negligible.
+Work placed between the write and the read may cost nothing, since the bytes drain in the background; untested (M-2).
+
+Brian (D-10, 2026-11-08): whether the sim should mirror the 40 ms read cadence is decided after the obs-parity test (Phase 2A week 6), which tells whether it matters. The review adds the IMU hold to that question; D-10 was asked about joints only.
+
+A faster serial link is not a way out today: xgolib has no call that changes the firmware's baud (`__change_baud` only reopens the host side), so 2 Mbaud helps only if the board is found to support it some other way (M-11).
 
 ### 3.2 Arbiter: modes and the motor owner
 
 | Mode | Motor owner | What the board sees | Entry | Exit |
 |---|---|---|---|---|
-| `BOOT` | none | nothing | power-on | `imu.ready` latch (first nonzero yaw, a predicate, never a timer) → `IDLE_HOLD` |
+| `BOOT` | none | nothing | power-on | `imu.ready` latch (first nonzero yaw, a predicate, never a timer) → `adopt` → `IDLE_HOLD`. This is the session's first `motor()` call, so it is an `adopt` like any other |
 | `IDLE_HOLD` | runtime | all 12 joints held at their measured angles (joint mode) | any fault, stream loss timeout, operator | request → `POLICY` or `ACTION` or `REST` |
 | `POLICY` | policy | 12 joint targets at 50 Hz; velocity command from the arbiter (PC stream, brain, or zero) | from `IDLE_HOLD` via the adopt ramp | zero-velocity stand → `IDLE_HOLD`; fault → `IDLE_HOLD`/`ESTOP` |
 | `ACTION` | firmware | one allow-listed action group, with a tick budget | only from `IDLE_HOLD` after a `release` | budget elapsed → `adopt` → `IDLE_HOLD` |
-| `REST` | firmware then none | lie-down action, then `unload_allmotor()` (the thermal lever V2 named, LESSONS A1) | from `IDLE_HOLD` | `load_allmotor()` → `adopt` → `IDLE_HOLD` |
-| `ESTOP` | runtime | joints held; after `FALL_UNLOAD_TICKS` when fallen, unloaded | operator e-stop, `fell`, IMU rejected too long | only an operator `clear_estop` |
+| `REST` | firmware then none | lie-down action, then `unload_allmotor()` (the thermal lever V2 named, LESSONS A1) | from `IDLE_HOLD` | `load_allmotor()` → `adopt` → `IDLE_HOLD`. Loading moves the joints before `adopt` can run (one leg measured: two joints went back to their pre-unload angles, the third was still moving when the window ended): M-24 |
+| `ESTOP` | runtime | joints held; after `FALL_UNLOAD_TICKS` when fallen, unloaded (hold only until M-24 has logged `unload_allmotor()`) | operator e-stop, `fell`, IMU rejected too long | only an operator `clear_estop` |
 
 Priority when requests conflict: `ESTOP` > fault → `IDLE_HOLD` > operator request > brain request. A brain request that arrives while walking is answered with `rejected: walking`; the brain must first set goal `STAY`, the follow controller sends zero velocity, and the arbiter reaches `IDLE_HOLD` on its own. Action groups never preempt walking (decision 4).
 
-**Handoffs** (both `# MEASURE:` on the stand before any deployment; procedures in decisions.md §5):
+**Handoffs** (both are gate items, `# MEASURE:` on the stand before any deployment: M-8 in decisions.md §5):
 
-- **`adopt` (firmware → joint mode):** wait one full readback cycle (≥ 7 ticks) so every joint's reading is fresh; send all 12 *measured* angles first (rounded to the nearest byte, since `conver2u8` truncates); then ramp from the measured pose to the policy's default pose over `ADOPT_RAMP_TICKS`. Reason: the first `motor()` call switches the board to joint mode and drives every unsent joint to its last joint-mode setpoint (~8° jumps seen in Phase 1).
-- **`release` (joint mode → firmware):** policy at zero velocity for `STAND_TICKS`, then drive the joints to `firmware_stance` (the pose read at boot while the board still owned the legs), then `stop()`. Reason: `stop()` hands control back and the legs snap to the firmware stance; pre-positioning makes the snap ≈ 0.
+- **`adopt` (firmware → joint mode):** wait one full readback cycle (≥ 8 ticks: the 12-joint cycle measured 126–144 ms) so every joint's reading is fresh; send all 12 *measured* angles first (rounded to the nearest byte, since `conver2u8` truncates); then ramp from the measured pose to the policy's default pose over `ADOPT_RAMP_TICKS`. Reason: the first `motor()` call switches the board to joint mode and drives every unsent joint to its last joint-mode setpoint (~8° jumps seen in Phase 1). It is not atomic: the 12 packets take 9.7 ms on the wire. Logged so far only from the boot pose (final change ≤ 0.8°); an adopt from the firmware's stance after `stop()` or an action group is unlogged.
+- **`release` (joint mode → firmware):** policy at zero velocity for `STAND_TICKS`, then drive the joints to the pose `stop()` will return them to, then `stop()`, so the snap is small. **That pose is unmeasured** (Brian, 2026-11-08). The first draft read it at boot, and the logs contradict that: the boot pose and the pose after `stop()` differ by 7–8° at the calves and 4–5° at the thighs, and that `stop()` followed a `reset()`, which V3 never calls. Where `stop()` lands with no `reset()` that boot has never been logged. M-8 must cover that case. Until it does, `release` is blocked, and `ACTION` and `REST` with it.
 
 ### 3.3 Safety layer (runs every tick, between the arbiter and the policy)
 
 | Guard | Signal | Response |
 |---|---|---|
-| IMU sanity filter | whole accel or gyro vector exactly 0.0; \|gyro\| > `GYRO_MAX_DPS`; block identical for `IMU_FREEZE_READS` consecutive reads | reading rejected / marked frozen; policy sees the last good value (what the sim's `imu_frozen` term does); `imu.status` and `frozen_ticks` in `state`; frozen or rejected for > `IMU_STALE_TICKS` → velocity zeroed; > `IMU_DEAD_TICKS` → `IDLE_HOLD` |
+| IMU sanity filter | whole accel or gyro vector exactly 0.0; \|gyro\| > `GYRO_MAX_DPS`; block identical for `IMU_FREEZE_READS` consecutive reads | reading rejected / marked frozen; policy sees the last good value (the same hold as the sim's `imu_frozen` term, which is scoring-only: see below); `imu.status` and `frozen_ticks` in `state`; frozen or rejected for > `IMU_STALE_TICKS` → velocity zeroed; > `IMU_DEAD_TICKS` → `IDLE_HOLD` |
 | Tilt cutoff | `is_fallen` (Brian's `metrics.py`, `FALL_TILT_DEG = 46`) on filtered roll/pitch | `fell` event, `ESTOP` (hold), unload after `FALL_UNLOAD_TICKS` so the servos stop fighting the floor |
-| Command watchdog | ticks since the last `velocity` message | TTL expiry → velocity zero (the policy stands); `CMD_LOST_TICKS` → `cmd_stream_lost` event; `CMD_DEAD_TICKS` → `IDLE_HOLD` |
+| Command watchdog | ticks since the last `velocity` message | TTL expiry → velocity zero (the policy should then stand: unverified, see below); `CMD_LOST_TICKS` → `cmd_stream_lost` event; `CMD_DEAD_TICKS` → `IDLE_HOLD` |
 | Deadman | `velocity.deadman` false or absent while `REQUIRE_DEADMAN` | velocity zero |
 | Velocity clamp | trained ranges vx −0.5…0.6, vy ±0.3, wz ±0.8 (sim command ranges) | clamp, count in `health` |
 | Joint clamp | `MOTOR_LIMIT` minus `JOINT_MARGIN_DEG`; per-tick step ≤ `JOINT_STEP_MAX_DEG` | clamp, count in `health` |
@@ -112,20 +126,27 @@ Priority when requests conflict: `ESTOP` > fault → `IDLE_HOLD` > operator requ
 
 All thresholds above are Brian's calls, set 2026-11-08 (decisions.md §3).
 
+**Two things this layer leans on that no trained policy has shown yet** (Brian, 2026-11-08, after the joint-control session's review):
+
+- **IMU freezes are scoring-only in the sim today.** Every policy so far trained with a fresh IMU each step. Scoring EXP-010's policy under the measured freezes raised flicker from 15.1 % to 25.4 %, with 0 falls. Plan: train with them in the domain-randomization phase (Phase 2A week 5).
+- **"The policy stands" on a zero command is unverified.** Training has `rel_standing_envs = 0`, so zero commands are about 0.4 % of draws, and the scoreboard's stand row is a 10 s stand from rest. The walk → zero transition, which TTL expiry, the deadman and `release` all depend on, is not scored anywhere and is rarely trained. Plan: an eval of walk → stop transitions (M-28: sim first, then the stand) and more stand commands in training.
+
 ### 3.4 Motion-board adapter
 
-The only module that imports xgolib. It wraps exactly the calls Phase 1 measured and hides the quirks:
+The only module that imports xgolib. It wraps the calls a probe has logged, hides their quirks, and blocks the rest until they have a log:
 
 - Builds `XGO_DOG(port, 115200, version="xgomini")` directly; never the `XGO()` factory (it calls `reset()`, which moves the dog). Never `calibration()`.
 - `write_joints(angles_deg[12])`: xgolib id order `11,12,13,21,…,43`; rounds to the nearest byte; clamps to `MOTOR_LIMIT`; refuses partial writes (all 12 or nothing).
 - `read_joints()`: returns angles plus, per joint, the tick its value last changed (readback is a 105–130 ms round-robin sample-and-hold).
 - `read_imu()`: raw block → the sanity filter; gyro unit conversion once the unit is measured (xgolib says °/s after `/16.4`; V2 said rad/s: `# MEASURE:`).
-- `stop()`, `action(id)` (allow-listed ids only), `unload_allmotor()`/`load_allmotor()`, `attitude('p', deg)` (stationary, firmware mode only).
+- Sets `motor_speed` explicitly at every `adopt`: every Phase 1 joint test set it first (255 unless the test varied it), and the boot default is unknown.
+- `stop()`: logged; it hands control back to the firmware.
+- **Not logged by any probe yet, so blocked until they are:** `action(id)` for allow-listed ids (only `reset()` = action 255 has ever run: M-10); `unload_allmotor()` / `load_allmotor()` (only the per-leg `unload_motor` / `load_motor` have run: M-24); `attitude('p', deg)` standing still (V2 logged it mid-walk in gait mode only).
 - Pins the installed `xgolib_dog.py` by hash, as the probe does; refuses to start on a mismatch.
 
 ### 3.5 Policy inference
 
-ONNX (exported by the trainer), onnxruntime CPU on the Pi; an MLP forward is well under 1 ms. The observation vector is assembled exactly as the `-StaleJoints` task feeds the actor (interfaces.md §9), including the staleness: raw held readings, no interpolation. Parity is tested before the first tethered step (Phase 2A week 6).
+ONNX (exported by the trainer), onnxruntime CPU on the Pi; an MLP forward is well under 1 ms. The observation vector is assembled exactly as the `-StaleJoints` task feeds the actor (interfaces.md §9), including the staleness: raw held readings, no interpolation. The observation normaliser is inside the ONNX graph, so the runtime feeds raw values (checked by the joint-control session on EXP-025's `policy.onnx`: input [1, 35], output [1, 12]). Parity is tested before the first tethered step (Phase 2A week 6).
 
 ---
 
@@ -155,11 +176,15 @@ VLM (Claude; model per decisions.md) called on events and on a slow timer with t
 
 ### 4.5 Voice
 
-Built on `feature/voice`: pacing policy (4 s / 30 s, urgent events skip, falls interrupt, battery queues), cached lines, Haiku for novel lines, ElevenLabs Flash → 24 kHz PCM. V3 changes two things: it **subscribes to `event`** instead of deriving events from state (decision 6: T1 debounce moves to the tracker, T3/T4 onto the Pi; `is_fallen` stays the single definition), and **audio goes to the Pi** over PUSH/PULL (Brian's option (a)). Phase 2 adds STT: the CSK4002 module is a keyword recogniser over serial, so `keyword` events first; `speech_text` reserved for a raw-mic path (decision 7).
+Built on `feature/voice`: pacing policy (4 s / 30 s, urgent events skip, falls interrupt, battery queues), cached lines, Haiku for novel lines, ElevenLabs Flash → 24 kHz PCM. V3 changes two things: it **subscribes to `event`** instead of deriving events from state (decision 6: T1 debounce moves to the tracker, T3/T4 onto the Pi; `is_fallen` stays the single definition), and **audio goes to the Pi** over PUSH/PULL (Brian's option (a)) once the dog has a speaker the Pi can reach. It has none today: the speaker plugs into the voice board, which shows up on USB as serial only, and a clip to the Pi's HifiBerry output was inaudible (measured 2026-11-08; decisions.md D-17). Until then the voice plays on the PC.
+
+Listening is already built PC-side on `feature/voice`: PC mic → ElevenLabs Scribe → Haiku → TTS, half-duplex, unit-tested, not yet run live. It needs no cross-component message. The dog's voice board is a wake-word and command recogniser, not a microphone the Pi can read: "Hello Yahboom" produced `$B000#` on its serial port, and no capture device appears. So `keyword` events come first (decision 7), from a `voice_module_reader` on the Pi. A dog-side mic for STT waits on D-17 and D-20; what heard speech may cause waits on D-21 and D-22.
 
 ### 4.6 HUD and deadman
 
 Opens DISARMED; a real key-held deadman (W5's design adapted to the PC); SPACE = e-stop; shows three link states per socket pair (OFFLINE / CALIBRATING / LIVE, LESSONS C2), the `last_cmd_seq` echo (LESSONS C1), mode, degraded notices, battery, camera health, IMU status.
+
+The HUD process also hosts the **gateway**, the only writer on the command socket. Armed, it forwards the follow controller's and the brain's requests with the deadman flag; disarmed, it forwards nothing and sends zero velocity, so the link stays live and disarming is one choke point on the PC (interfaces.md §12). The HUD can also set the goal itself, so a supervised FOLLOW session runs with no brain.
 
 ---
 
@@ -177,7 +202,7 @@ Opens DISARMED; a real key-held deadman (W5's design adapted to the PC); SPACE =
 | camera | Pi → PC | PUSH (Pi binds) → PULL (PC connects, CONFLATE) | 50505 | 20 fps | `<qI` header + JPEG (V2 format) |
 | lidar (Phase 2) | Pi → PC | PUSH (Pi binds) → PULL | 50507 | scan rate | V1 scan JSON |
 | audio | PC → Pi | PUSH (PC connects) → PULL (Pi binds) | 5560 | on demand | header + PCM, multipart |
-| PC-internal | perception → tracker → controller → brain/voice | PUB/SUB on `ipc://` or `tcp://127.0.0.1` | — | 20 Hz | `tracks`, `owner`, `goal` |
+| PC bus | each PC process's own loopback PUB | PUB → SUB | 5570–5574 on `127.0.0.1` | 20 Hz | `tracks`, `owner`, `goal`, `say`, `cmd_request`, `event` (interfaces.md §12) |
 
 Full schemas: [interfaces.md](interfaces.md).
 
@@ -200,13 +225,13 @@ Measured values are tagged; the rest are estimates to be replaced (`# MEASURE:`)
 
 At the trained maximum of 0.8 rad/s (46 °/s), 0.25 s of dead time is ≈ 11° of yaw before a correction starts: the P-gain and deadband must be chosen against that number, measured, not assumed.
 
-**Policy loop (Pi)**: 20 ms tick; obs are 0–130 ms stale by construction (joints) and up to ~1 s stale during IMU freezes; both are in the sim the policy trained in.
+**Policy loop (Pi)**: 20 ms tick, paced by the monotonic clock. Joint observations are 0–130 ms stale by construction, plus up to 40 ms from the read cadence; the policy trained with the 130 ms staleness (EXP-010) but not with the cadence. IMU observations are up to ~1 s stale during freezes, which no policy has trained with yet (§3.3).
 
-**Comms loss → safe**: TTL expiry ≤ `VELOCITY_TTL_TICKS` × 20 ms after the last message; stand reached one gait cycle later.
+**Comms loss → safe**: TTL expiry ≤ `VELOCITY_TTL_TICKS` × 20 ms after the last message. How long the walk → stand transition then takes, and whether it is always clean, is unmeasured (M-28).
 
 **Brain**: 1–3 s per call (`# MEASURE:` per model); never in a loop.
 
-**Voice**: event → first sound, measured 0.19–0.21 s on cached lines (PC speaker); target p50 1.5 s (Brian). With audio on the Pi, the Pi's `speech_started` echo of the PC's `t_ms` gives a round-trip measurement on the PC's clock only (LESSONS C5).
+**Voice**: event → first sound, measured 0.19–0.21 s on cached lines (PC speaker); target p50 1.5 s (Brian). With audio on the Pi, the Pi's `speech_started` echo of the PC's `t_ms` gives a round trip on the PC's clock only (LESSONS C5). It is an upper bound: it includes the Pi → PC leg.
 
 **Lidar reflex (Phase 2)**: worst case one scan period + one tick ≈ 120 ms at the nominal 10 Hz (`# MEASURE:` the scan rate).
 
@@ -214,7 +239,7 @@ At the trained maximum of 0.8 rad/s (46 °/s), 0.25 s of dead time is ≈ 11° o
 
 | Item | Rate | Headroom |
 |---|---|---|
-| serial, joint mode | 12 writes + alternating reads per tick | 14/18 ms of 20 ms (measured components; `# MEASURE:` the composed schedule) |
+| serial, joint mode | 12 writes + alternating reads per tick | 17–19 ms (inferred) / 18.0 ms (measured) of 20 ms, so ≤ 2 ms is left for everything else. `# MEASURE:` the composed schedule (M-2, gate) |
 | `state` JSON | 50 Hz × ~600 B ≈ 30 kB/s | trivial |
 | camera | 7.7 Mbps at q75 | measured; Wi-Fi dependent |
 | ONNX forward | < 1 ms | design |
@@ -226,11 +251,11 @@ At the trained maximum of 0.8 rad/s (46 °/s), 0.25 s of dead time is ≈ 11° o
 | Roadmap item | Component here | Phase |
 |---|---|---|
 | Deploy the RL policy | Pi runtime §3, parity test, stand-test gate | 1 |
-| Domain randomization, gyro units, joint map check, Pi-hang stop test, kill switch | decisions.md §5 measurement register | 1 (gate) |
+| Domain randomization (now also the measured IMU freezes and more stand commands), gyro units, joint map check, Pi-hang stop test, kill switch | decisions.md §5 measurement register. M-4 (joint sign and zero offset) is the first hardware session: a new default pose means retraining every policy | 1 (gate) |
 | VLM brain with owner tracking | §4.2–4.4 | 1 |
 | Voice output | §4.5 (built; re-pointed at events + Pi audio) | 1 |
 | Personality: action groups as tools | arbiter `ACTION` mode + allow-list | 1 |
-| Conversation (STT → Haiku → TTS) | §4.5 Phase 2 path | 2 |
+| Conversation (STT → Haiku → TTS) | §4.5: the PC-side loop is built; a mic and a speaker on the dog wait on D-17 | 2 |
 | LiDAR reflex + SLAM | §3.3 reflex; SLAM behind one ROS2 bridge node on the Pi | 2 |
 | Gamepad | `velocity` with `src: teleop` | later |
 
@@ -243,7 +268,7 @@ At the trained maximum of 0.8 rad/s (46 °/s), 0.25 s of dead time is ≈ 11° o
 | A1 workarounds for the old platform | No gait-buffer scaffolding; the firmware gait is never used to walk; `REST` uses `unload_allmotor()`; if the runtime grows past ~600 lines, ask what is being ported | §1 rule 3, §3.2 |
 | A2 handled boot ruins yaw | `BOOT` waits on the first-nonzero-yaw latch (predicate); an exact-0.0 vector is a rejected read; HUD shows CALIBRATING separately from OFFLINE | §3.2, §3.3, §4.6 |
 | A3 frozen IMU misread as fine | Sanity filter with `status`/`frozen_ticks` in `state`; `health` reports fresh-value rate, never call rate; freezes are in the sim's scoring | §3.3, interfaces §4 |
-| A4 SDK calls lie | Only Phase-1-measured calls; no `turn_by`, no timed moves; probe verdicts computed from data | §3.4 |
+| A4 SDK calls lie | Only calls a probe has logged; the unlogged ones are blocked until they are; no `turn_by`, no timed moves; probe verdicts computed from data | §3.4 |
 | A5 power shapes testing | `battery_pct` in every `state`; `battery_low`/`critical` events; `REST` before the 9 % lockout; sustained-load runtime `# MEASURE:` | §3.3 |
 | A6 dead time on a continuous machine | TTL'd velocity; proportional 20 Hz controller on the PC, not the VLM; no commit-frame hysteresis; dead time measured externally | §4.3, §5.2 |
 | A7 watchdog on the machine that hung | Walk only in joint mode (a hang holds a pose, it doesn't walk: stand test confirms); kill switch = power button in reach; board-timeout test; persistent journal + `get_throttled` + Wi-Fi in `health` | §3.2, failure-modes §2 |
