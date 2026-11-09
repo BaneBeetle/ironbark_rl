@@ -47,7 +47,7 @@ Rules every component follows (each one traces to a V2 lesson; the full map is �
 | **Pi 5** | `runtime` | 50 Hz tick | Arbiter (modes), safety layer (IMU filter, watchdog, tilt cutoff, joint clamps), lidar reflex (Phase 2), policy inference (ONNX), motion-board adapter (xgolib quirks), telemetry PUB (`state` 50 Hz, `health` 1 Hz, `event`), `hello` REP |
 | Pi 5 | `cam_sender` | 20 fps | `/dev/video0` MJPG 640×480 → PUSH to the PC; frame stats + stall detection → runtime over `ipc://` |
 | Pi 5 | `lidar_reader` (Phase 2) | scan rate (`# MEASURE:`; vendor nominal ~10 Hz) | MS200 UART → full scans PUSH to the PC; sector minima → runtime over `ipc://` |
-| Pi 5 | `audio_player` | on demand | PULL PCM from the PC, play it on the Pi's DAC (card 2 `sndrpihifiberry`, `plughw:2,0`: the dog's speaker played Tilly through it, Brian 2026-11-08), report `speech_started/ended` to the runtime. Loudness and latency are M-13 |
+| Pi 5 | `audio_player` | on demand | PULL PCM from the PC, play it on a Pi audio device, report `speech_started/ended` to the runtime. The candidate device is the Pi's DAC (card 2 `sndrpihifiberry`, `plughw:2,0`); whether the dog's speaker sounds from it is unverified (M-13, decisions.md D-17) |
 | Pi 5 | `voice_module_reader` (Phase 2) | per frame | Owns the voice board's serial port (`/dev/ttyUSB0`, 115200); publishes `keyword` through the runtime |
 | **PC (3090)** | `perception` | 20 Hz (camera-bound) | YOLO + tracker on the camera stream → `tracks` |
 | PC | `owner_tracker` | 20 Hz | Lock, confidence, dead reckoning, rescan, VLM verify → `owner` + events |
@@ -176,7 +176,7 @@ VLM (Claude; model per decisions.md) called on events and on a slow timer with t
 
 ### 4.5 Voice
 
-Built on `feature/voice`: pacing policy (4 s / 30 s, urgent events skip, falls interrupt, battery queues), cached lines, Haiku for novel lines, ElevenLabs Flash → 24 kHz PCM. V3 changes two things: it **subscribes to `event`** instead of deriving events from state (decision 6: T1 debounce moves to the tracker, T3/T4 onto the Pi; `is_fallen` stays the single definition), and **audio goes to the Pi** over PUSH/PULL (Brian's option (a)) through the Pi's DAC (card 2, `plughw:2,0`). The dog's speaker played Tilly from it in Brian's test (2026-11-08; how it was played is in decisions.md §1). Until the Pi player is built the voice plays on the PC.
+Built on `feature/voice`: pacing policy (4 s / 30 s, urgent events skip, falls interrupt, battery queues), cached lines, Haiku for novel lines, ElevenLabs Flash → 24 kHz PCM. V3 changes two things: it **subscribes to `event`** instead of deriving events from state (decision 6: T1 debounce moves to the tracker, T3/T4 onto the Pi; `is_fallen` stays the single definition), and **audio goes to the Pi** over PUSH/PULL (Brian's option (a)) once a Pi playback path is confirmed. The candidate is the Pi's DAC (card 2, `plughw:2,0`). Brian reports the dog's speaker played Tilly; the logged plays to that device were reported silent, and the record does not settle it (decisions.md §1). One audible re-run does (M-13). Until then the voice plays on the PC.
 
 Listening is already built PC-side on `feature/voice`: PC mic → ElevenLabs Scribe → Haiku → TTS, half-duplex, unit-tested, not yet run live. It needs no cross-component message. The dog's voice board is a wake-word and command recogniser, not a microphone the Pi can read: "Hello Yahboom" produced `$B000#` on its serial port, and `arecord -l` lists no capture device with or without the board cabled. So `keyword` events come first (decision 7), from a `voice_module_reader` on the Pi. A dog-side mic for STT waits on D-17 and D-20; what heard speech may cause waits on D-21 and D-22.
 
@@ -255,7 +255,7 @@ At the trained maximum of 0.8 rad/s (46 °/s), 0.25 s of dead time is ≈ 11° o
 | VLM brain with owner tracking | §4.2–4.4 | 1 |
 | Voice output | §4.5 (built; re-pointed at events + Pi audio) | 1 |
 | Personality: action groups as tools | arbiter `ACTION` mode + allow-list | 1 |
-| Conversation (STT → Haiku → TTS) | §4.5: the PC-side loop is built; the dog's speaker plays from the Pi; a mic on the dog waits on D-17 | 2 |
+| Conversation (STT → Haiku → TTS) | §4.5: the PC-side loop is built; the dog's speaker from the Pi waits on M-13, a mic on the dog on D-17 | 2 |
 | LiDAR reflex + SLAM | §3.3 reflex; SLAM behind one ROS2 bridge node on the Pi | 2 |
 | Gamepad | `velocity` with `src: teleop` | later |
 

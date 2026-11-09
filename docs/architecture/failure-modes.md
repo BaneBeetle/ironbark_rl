@@ -136,7 +136,7 @@ No effect on motion by construction: the voice only subscribes to events and pus
 - **`speech_ended` never arrives.** The voice times out from the PCM byte count.
 - **A fall during a line.** `audio_ctl stop` is read by the player's receive thread while the clip plays; it discards the queued PCM and drops the device buffer (M-21).
 - **Device failure** on the Pi: `health.audio.status`, `audio_down`.
-- **Today** the Pi player is not built, so the voice plays on the PC and none of the above is live yet. The device exists: the dog's speaker plays from the Pi's DAC, `plughw:2,0` (Brian, 2026-11-08).
+- **Today** the Pi player is not built, so the voice plays on the PC and none of the above is live yet. Whether the dog's speaker sounds from the Pi's DAC (`plughw:2,0`, the candidate) is unverified until M-13.
 
 ## 11. Version or schema mismatch
 

@@ -249,7 +249,7 @@ Control, one frame: `{"v":1,"type":"audio_ctl","seq":…,"t_ms":…,"cmd":"stop"
 
 **Events.** `speech_started` at the first PCM write to the device, with `device_latency_ms` (sound leaves the speaker that much after a write). `speech_ended` when the `final` chunk has been received and the device buffer has drained, or when a `stop` took effect (`interrupted: true`), with `played_bytes`. Both echo the first chunk's `t_ms` as `pc_t_ms`. The PC-clock round trip that gives is an **upper bound** on event-to-sound: it includes the Pi → PC leg and the hop through the runtime. If `speech_ended` never arrives, the voice times out from the PCM byte count.
 
-**Device.** The dog's speaker plays from the Pi's DAC: card 2 `sndrpihifiberry` (PCM5102A, `hifiberry-dac` overlay), device 0, opened as `plughw:2,0` (Brian, 2026-11-08: it played Tilly; decisions.md §1 has how). It is playback only; the Pi has no capture device. Loudness and device latency are M-13.
+**Device: a candidate, unverified.** The Pi's only DAC is card 2 `sndrpihifiberry` (PCM5102A, `hifiberry-dac` overlay), device 0, opened as `plughw:2,0`. Whether the dog's speaker sounds from it is `# MEASURE:` (M-13): Brian reports hearing Tilly from the dog, the four logged plays to this device were reported silent, and the record does not settle which is right (decisions.md §1). It is playback only; the Pi has no capture device. Until M-13 passes the voice keeps playing on the PC.
 
 ---
 
@@ -292,7 +292,7 @@ Per machine, only what it uses (LESSONS C4):
 | Pi | `MOTION_PORT` | `/dev/ttyAMA0` | measured |
 | Pi | `LIDAR_PORT` | unset | `# MEASURE:` trace the cable; refuses to start the reader while unset |
 | Pi | `ONNX_MODEL` | — | path + sha256 pinned in `health.versions` |
-| Pi | `AUDIO_DEVICE` | `plughw:2,0` | card 2 `sndrpihifiberry`, device 0 (saved `aplay -l`, 2026-11-08; Brian heard Tilly through it). Loudness, gain and latency `# MEASURE:` (M-13). The player reports `audio_down` if the device will not open |
+| Pi | `AUDIO_DEVICE` | unset; candidate `plughw:2,0` | `# MEASURE:` (M-13). Card 2 `sndrpihifiberry`, device 0, from the saved `aplay -l` (2026-11-08). Audible through the dog's speaker: unverified. The player refuses to start while unset and reports `audio_down` |
 | Pi | `VOICE_MODULE_PORT` | `/dev/ttyUSB0` @ 115200 | measured 2026-11-08 (CH340, serial only) |
 | PC | `AUDIO_SNDHWM` | 100 chunks | design: above the longest cached clip (~66 chunks of 50 ms) |
 | Pi | `REQUIRE_DEADMAN` | `true` | Brian's call per session type |
