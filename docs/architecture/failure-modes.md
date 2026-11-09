@@ -136,7 +136,9 @@ No effect on motion by construction: the voice only subscribes to events and pus
 - **`speech_ended` never arrives.** The voice times out from the PCM byte count.
 - **A fall during a line.** `audio_ctl stop` is read by the player's receive thread while the clip plays; it discards the queued PCM and drops the device buffer (M-21).
 - **Device failure** on the Pi: `health.audio.status`, `audio_down`.
-- **Today** the Pi player is not built, so the voice plays on the PC and none of the above is live yet. Whether the dog's speaker sounds from the Pi's DAC (`plughw:2,0`, the candidate) is unverified until M-13.
+- **Device busy at boot.** The first open after power-on failed with "Device or resource busy" (2026-11-08, uptime 0) and worked seconds later: the player retries a counted number of times, then reports `audio_down`.
+- **A device that opens but makes no sound.** Seen for real: `aplay` to the Pi's card 2 exits 0 and nothing is heard, because the overlay registers a card with no DAC behind it. No software check catches this; the session-start test line and the operator's ears do (interfaces §3, step 6).
+- **Today** the Pi has no playback path known to make sound (decisions.md D-17, M-29), so the voice plays on the PC and none of the above is live yet.
 
 ## 11. Version or schema mismatch
 

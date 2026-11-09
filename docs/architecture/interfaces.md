@@ -245,11 +245,11 @@ Control, one frame: `{"v":1,"type":"audio_ctl","seq":…,"t_ms":…,"cmd":"stop"
 
 **Sender (voice).** `IMMEDIATE=1`, so nothing queues while the Pi is unreachable; `SNDHWM = AUDIO_SNDHWM`, bounded but above the longest clip in chunks; sends are non-blocking, and a send that would block drops the whole line. Without these, a link drop would replay up to ~50 s of old speech on reconnect, and the Pi has no way to age audio. This is ZMQ's documented behaviour, not yet tested here (M-22).
 
-**Player (Pi).** PUSH does not pace, so a cached clip arrives in one burst and the player owns the pacing. It receives on a thread separate from playback, so an `audio_ctl stop` is seen while a clip plays; `stop` discards the queued PCM of that utterance and **drops** the device buffer (drop, not drain). Stop-to-silence time is `# MEASURE:` (M-21).
+**Player (Pi).** PUSH does not pace, so a cached clip arrives in one burst and the player owns the pacing. It receives on a thread separate from playback, so an `audio_ctl stop` is seen while a clip plays; `stop` discards the queued PCM of that utterance and **drops** the device buffer (drop, not drain). Stop-to-silence time is `# MEASURE:` (M-21). Opening the device right after boot can fail with "Device or resource busy" (seen 2026-11-08 at uptime 0, clear seconds later): the player retries a counted number of times before it reports `audio_down`. A successful open or write is not proof of sound; only a person's ears are (§3, step 6).
 
 **Events.** `speech_started` at the first PCM write to the device, with `device_latency_ms` (sound leaves the speaker that much after a write). `speech_ended` when the `final` chunk has been received and the device buffer has drained, or when a `stop` took effect (`interrupted: true`), with `played_bytes`. Both echo the first chunk's `t_ms` as `pc_t_ms`. The PC-clock round trip that gives is an **upper bound** on event-to-sound: it includes the Pi → PC leg and the hop through the runtime. If `speech_ended` never arrives, the voice times out from the PCM byte count.
 
-**Device: a candidate, unverified.** The Pi's only DAC is card 2 `sndrpihifiberry` (PCM5102A, `hifiberry-dac` overlay), device 0, opened as `plughw:2,0`. Whether the dog's speaker sounds from it is `# MEASURE:` (M-13): Brian reports hearing Tilly from the dog, the four logged plays to this device were reported silent, and the record does not settle which is right (decisions.md §1). It is playback only; the Pi has no capture device. Until M-13 passes the voice keeps playing on the PC.
+**Device: none known to work.** The Pi lists one non-HDMI playback card, card 2 `sndrpihifiberry` (PCM5102A, `hifiberry-dac` overlay), device 0, and no capture device (live `aplay -l` / `arecord -l`, 2026-11-08). Eight plays to `plughw:2,0` made no sound, four of them with the voice board cabled (Brian: "Silence..."). The card looks like V1's Robot HAT setup, which the overlay registers whether or not a DAC is wired, so `aplay` exiting 0 proves nothing here (decisions.md §1). `AUDIO_DEVICE` stays unset and the voice keeps playing on the PC until D-17 and M-29 give the dog a path.
 
 ---
 
@@ -292,7 +292,7 @@ Per machine, only what it uses (LESSONS C4):
 | Pi | `MOTION_PORT` | `/dev/ttyAMA0` | measured |
 | Pi | `LIDAR_PORT` | unset | `# MEASURE:` trace the cable; refuses to start the reader while unset |
 | Pi | `ONNX_MODEL` | — | path + sha256 pinned in `health.versions` |
-| Pi | `AUDIO_DEVICE` | unset; candidate `plughw:2,0` | `# MEASURE:` (M-13). Card 2 `sndrpihifiberry`, device 0, from the saved `aplay -l` (2026-11-08). Audible through the dog's speaker: unverified. The player refuses to start while unset and reports `audio_down` |
+| Pi | `AUDIO_DEVICE` | unset | `# MEASURE:` (M-13, M-29). The only candidate, card 2 `plughw:2,0`, was silent in eight plays and looks like a V1 leftover with no hardware behind it. The player refuses to start while unset and reports `audio_down` |
 | Pi | `VOICE_MODULE_PORT` | `/dev/ttyUSB0` @ 115200 | measured 2026-11-08 (CH340, serial only) |
 | PC | `AUDIO_SNDHWM` | 100 chunks | design: above the longest cached clip (~66 chunks of 50 ms) |
 | Pi | `REQUIRE_DEADMAN` | `true` | Brian's call per session type |
