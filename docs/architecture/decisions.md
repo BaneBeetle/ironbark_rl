@@ -49,7 +49,7 @@ While filling in §3 and §4, Claude flagged two things: `IMU_STALE_TICKS = 75` 
 Brian told Claude it can ask the other sessions. The voice session checked commit `17f2c92` against its code and measurements (`docs/voice/oracle-questions.md`, `s2-voice-module.md`, `decisions.md` on `feature/voice`). What changed:
 
 - **Corrected to match what Brian had already decided.** T3 re-arms "above 30%" (the docs said ≥ 30). D-6's `verify_result` is published as `owner_verified` / `owner_rejected`. failure-modes §10 no longer claims a cached-line fallback: cached events never call an API, and a failed Haiku line is logged and dropped. architecture §4.5 no longer calls STT a Phase 2 item: the PC-side loop (mic → Scribe → Haiku → Tilly) is built.
-- **Measured facts taken in.** The dog has no speaker or microphone the Pi can reach: the speaker plugs into the voice board (a YB-MVE02-V2.0, seen on USB as CH340 serial only) and a clip to the Pi's HifiBerry output was inaudible. The board's wake word works and sends `$B000#` at 115200 baud. D-7's "keyword events first" stands; its "mic availability is unknown" is now "not reachable through the board's USB".
+- **Measured facts taken in.** The dog has no microphone the Pi can reach. (The review also said "no speaker": Brian corrected that the same day, see the last entry in this section. It was an inference from a silent report and from the speaker's plug going into the voice board, a YB-MVE02-V2.0 seen on USB as CH340 serial only.) The board's wake word works and sends `$B000#` at 115200 baud. D-7's "keyword events first" stands; its "mic availability is unknown" is now "not reachable through the board's USB".
 - **Gaps fixed in `interfaces.md`**, as defaults C-14 to C-19 in §2 (awaiting Brian).
 - **New questions for Brian:** D-17 to D-22 in §4. Five of them are the voice session's logged Oracle questions.
 
@@ -69,6 +69,26 @@ The joint-control session checked the same commit against the Phase 1 logs and t
 | 6 | M-4 marked first in §5, interfaces §9, architecture §6 |
 
 Also from that review, corrected without needing a call: `adopt` waits ≥ 8 ticks (the cycle measured 126–144 ms), is not atomic, and is what `BOOT` → `IDLE_HOLD` runs; the IMU at 25 Hz is coarser, not finer, than its live refresh; vendor calls no probe has logged (`action(id)`, `unload_allmotor` / `load_allmotor`, stationary `attitude`) are blocked until one has; the adapter sets `motor_speed` itself; the ONNX holds its own normaliser; `default_joint_pos` is still the Mini2S placeholder; M-11 reworded; new register rows M-24 to M-28. Checked and confirmed by the same review: the measured serial components, the adapter's construction and rounding, and the 35-float layout against EXP-025's exported model.
+
+### 2026-11-08: the dog's speaker does play from the Pi (Brian)
+
+Brian, verbatim:
+
+> Correction for D-17: the dog's speaker DID play Tilly's voice in my test, so a playback path from the Pi exists. Identify it: run `aplay -l` on the Pi (M-13) to find the audio device, and record how that test was played. Also check whether a mic on the same device is reachable with `arecord -l`.
+
+**The device.** Card 2, `sndrpihifiberry` [`snd_rpi_hifiberry_dac`], device 0 ("HifiBerry DAC HiFi pcm5102a-hifi-0"): the Pi's I2S DAC from the `hifiberry-dac` overlay. Cards 0 and 1 are the two HDMI outputs. Source: the voice session's saved `aplay -l` output (`samples/pi_audio/inventory.txt` and `inventory_usb_connected.txt` in its worktree; 2026-11-08, 19:14 and 20:04 EST). **Not re-run live:** the Pi was off the network when Claude tried at 22:15 EST (no ping, SSH or mDNS at 192.168.68.56).
+
+**How the test was played** (the voice session's record: four plays in two rounds, 2026-11-08 at 19:33 and 19:34 EST):
+
+- Clip: `samples/1_target_found.wav`, 24 kHz mono S16_LE, 1.86 s ("Yo, there's my guy. Let's roll."), copied to the Pi's `/tmp` with `scp` and deleted after each round.
+- Commands: round 1, `aplay -q -D plughw:2,0 /tmp/tilly_quiet.wav` twice, 1 s apart. Round 2, `tilly_quiet.wav` then `tilly_mid.wav`, 2 s apart. All four exited 0.
+- Volume: software gain written into the file only, 30 % (`tilly_quiet`) and 60 % (`tilly_mid`). No `amixer` or `pactl` command was run, no mixer value was read, and 100 % was never tried. `plughw:2,0` bypasses the default route in `/etc/asound.conf` (softvol into dmix), so that route was never exercised.
+- State: before the voice board's USB port was cabled. Whether the voice board had power is not recorded.
+- What Brian said at the time: after round 1, "try one more time?"; after round 2, "cant hear it. Ill take the dog down and check this". The voice session logged that as "no audible sound". What he says now is the quote above. Which of the four plays he heard is not on record.
+
+**A mic on the same device: no.** The PCM5102A is a playback-only DAC, and `arecord -l` listed no capture hardware at all, before and after the voice board's USB was cabled (the only PulseAudio source is the monitor of the output). The voice board's own mic works for its wake word but does not reach the Pi.
+
+**What this changes.** The "no speaker the Pi can reach" statements are withdrawn across the four docs. `AUDIO_DEVICE` is `plughw:2,0`. D-17 is now about the mic and about loudness. M-13 keeps the live re-run, the loudness check and the latency.
 
 ---
 
@@ -181,7 +201,7 @@ How the tracker constants compose (arithmetic, for the builder): with a verify e
 
 | # | Question | Options | Rec | Brian |
 |---|---|---|---|---|
-| D-17 | **Audio hardware on the dog.** Measured: no speaker or mic the Pi can reach | (a) one USB speakerphone on the Pi (mic + speaker + echo cancellation); (b) a separate USB speaker and USB mic; (c) keep both on the PC for Phase 1 and decide later; (d) the voice board's own speaker, canned phrases only | (c) now, since voice out and listening already work on the PC; (a) when the dog should talk from its own body, because echo cancellation in one device is what lets the mic stay open while it speaks. Yahboom warns about the Pi's USB current limit: measure the draw first | |
+| D-17 | **Audio hardware on the dog.** Corrected by Brian 2026-11-08: the speaker does play from the Pi (card 2, `plughw:2,0`; §1). No microphone is reachable: `arecord -l` lists none | Speaker: use the Pi's DAC output as it is; how loud it is at which gain is still to measure (M-13). Mic: (a) a USB mic or speakerphone on the Pi; (b) keep the mic on the PC for Phase 1 and decide later; (c) the voice board's wake word only (`keyword`), no free speech heard on the dog | Speaker: `AUDIO_DEVICE = plughw:2,0`, so the dog can speak from its own body in Phase 1. Mic: (b) now, (a) when the dog should hear from its own body; with a separate mic and speaker the half-duplex gate stays. Yahboom warns about the Pi's USB current limit: measure the draw before adding a USB device | |
 | D-18 | **Pacing of the brain's `say` / `ask_owner`** | (a) both obey the 30 s Haiku spacing; (b) both skip the gaps like replies; (c) `ask_owner` is heard like a cached line, `say` obeys the 30 s spacing | (c): `ask_owner` is the verify fallback and must be heard; free chatter stays paced | |
 | D-19 | **Which events the voice speaks.** "Haiku handles any event not in the cache table" was written for 6 events; the catalogue now has about 25, and `speech_*` would loop | (a) a voice-owned speak list: cached = found / lost / reacquired / `battery_low` / `fell`, Haiku = `behavior_changed`, everything else silent; (b) the rule as written | (a). Add cached lines for `owner_verify_needed` ("that you, bro?") and `battery_critical`; `battery_critical` queues like `battery_low`; `estop` stays silent; only `fell` interrupts, as now | |
 | D-20 | **Dog mic → PC** (voice questions 1 and 3; only matters once D-17 puts a mic on the dog) | (a) reserve a stream now: Pi PUSH (binds) → PC PULL on 5561, the audio framing of S6, sent only while a gate is open (opened by a wake `keyword` or a PC `mic_ctl open`, closed by `mic_ctl close` or a tick budget); the Pi shuts the gate itself while it is playing; (b) voice-activity detection on the Pi; (c) decide with D-17 | (c), with (a) as the shape to start from. Nothing is built until there is a mic | |
@@ -212,7 +232,7 @@ Every unmeasured number the architecture depends on, with the procedure and the 
 | M-10 | xgolib `action()` ids, each group's duration and whether it ends standing | read `xgolib_dog.py` on the Pi; time each allow-listed group on the stand | C-6 allow-list | before personality |
 | M-11 | Whether the board can run above 115200 baud at all | xgolib has no call that changes the firmware's baud (`__change_baud` only reopens the host side), so opening the port at 2 Mbaud tests nothing unless the board is already there. Ask Yahboom, or look for a firmware-side switch | C-2 headroom | optional |
 | M-12 | Owner verify accuracy | held-out photo set: owner vs others, same room, same lighting; accuracy and latency per model | D-12, D-13 | before FOLLOW |
-| M-13 | Pi-side audio device and playback latency. Measured 2026-11-08: none usable (HifiBerry output inaudible; the speaker plugs into the voice board) | after D-17 adds a device: `aplay -l`, an audible test line, device latency, round trip via `speech_started` | voice on the Pi, `AUDIO_DEVICE` | before voice on dog |
+| M-13 | Pi-side audio device and playback latency. Identified from saved listings (2026-11-08): card 2 `sndrpihifiberry` (HifiBerry DAC overlay, PCM5102A), device 0, played as `plughw:2,0`; Brian: it played Tilly. No capture device. Not re-run live (the Pi was off the network) | when the Pi is up: `aplay -l` and `arecord -l` again; one Tilly line at 30 %, 60 % and 100 % gain with Brian's verdict on each play; device latency; round trip via `speech_started`; whether the default route (softvol into dmix) sounds the same; whether the voice board must be powered for the speaker to sound | voice on the Pi, `AUDIO_DEVICE`, D-17 | before voice on dog |
 | M-14 | Voice board wiring and whether raw audio is exposed. Measured 2026-11-08 (voice session, Brian): board YB-MVE02-V2.0; its "USB connect" port is CH340 serial only, no capture device; wake word → `$B000#` at 115200 | still open: the board's "Program" micro-USB port; which chip it is | D-7, D-17, D-20 | Phase 2 |
 | M-15 | Pi-side detector rate (for a later move) | `yolo benchmark` NCNN export on the Pi 5 | D-2 revisit | optional |
 | M-16 | Sustained-load battery runtime | one full session with `battery_pct` logged, policy standing and walking | session planning | before demos |
