@@ -65,7 +65,7 @@ The joint-control session checked the same commit against the Phase 1 logs and t
 | 2 | architecture §3.3 and §5.2, failure-modes §4, interfaces §9. The plan is a training experiment in the domain-randomization phase (Phase 2A week 5); its design is Brian's when it is written up |
 | 3 | architecture §3.3, failure-modes §1, new gate row M-28 (walk → stop eval). More stand commands in training (`rel_standing_envs` is 0 today): the amount is Brian's, as its own experiment |
 | 4 | architecture §3.1 and §5.3, C-2 amended, `BATTERY_EVERY_TICKS` in §3.1, M-2 rewritten |
-| 5 | architecture §1 rule 4 and §3.1, interfaces §9. `CLAUDE.md`'s hard rule ("No wall-clock logic in Pi-side code") still reads as absolute; this entry is the exception until that file says so |
+| 5 | architecture §1 rule 4 and §3.1, interfaces §9. `CLAUDE.md`'s hard rule ("No wall-clock logic in Pi-side code") carries the exception on `main` since `aea73cb` |
 | 6 | M-4 marked first in §5, interfaces §9, architecture §6 |
 
 Also from that review, corrected without needing a call: `adopt` waits ≥ 8 ticks (the cycle measured 126–144 ms), is not atomic, and is what `BOOT` → `IDLE_HOLD` runs; the IMU at 25 Hz is coarser, not finer, than its live refresh; vendor calls no probe has logged (`action(id)`, `unload_allmotor` / `load_allmotor`, stationary `attitude`) are blocked until one has; the adapter sets `motor_speed` itself; the ONNX holds its own normaliser; `default_joint_pos` is still the Mini2S placeholder; M-11 reworded; new register rows M-24 to M-28. Checked and confirmed by the same review: the measured serial components, the adapter's construction and rounding, and the 35-float layout against EXP-025's exported model.
