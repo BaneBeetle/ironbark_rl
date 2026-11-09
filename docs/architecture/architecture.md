@@ -2,7 +2,7 @@
 
 Design only: no code lands from this document. Every agent building a V3 component builds to the contracts in [interfaces.md](interfaces.md); the behaviour under faults is in [failure-modes.md](failure-modes.md); the calls Brian made and the ones still open are in [decisions.md](decisions.md).
 
-Status: Brian accepted all nine recommendations on 2026-11-08 ("Go with all recs"). Numbers without a measurement tag are Brian's to set and are listed as open in `decisions.md`. Every number marked `# MEASURE:` has a measurement procedure in `decisions.md` §5.
+Status (2026-11-08): Brian accepted all nine recommendations ("Go with all recs"), then approved Claude's defaults C-1 to C-13, set the numbers in `decisions.md` §3 as recommended and answered D-10 to D-16. Still open: the two follow gains (set after M-6) and the `# MEASURE:` register in `decisions.md` §5, whose gate rows block deployment. Every number marked `# MEASURE:` has its procedure there.
 
 Sources this design leans on: [`docs/v2-archive/MEASURED_FACTS.md`](../v2-archive/MEASURED_FACTS.md), [`LESSONS.md`](../v2-archive/LESSONS.md), [`findings/`](../v2-archive/findings/), [`docs/phase1-joint-control-results.md`](../phase1-joint-control-results.md), [`docs/deployment-notes.md`](../deployment-notes.md), [`docs/roadmap.md`](../roadmap.md), `docs/voice/decisions.md` (branch `feature/voice`).
 
@@ -77,7 +77,7 @@ tick t (even)                          tick t+1 (odd)
 └ telemetry: state (every tick), health (every 50), events
 ```
 
-Open for Brian (decisions.md D-10): whether the sim's readback model should mirror the 40 ms read cadence; the obs-parity test (Phase 2A week 6) tells whether it matters. `# MEASURE:` the actual tick time of this schedule, and whether the firmware accepts 2 Mbaud (xgolib hints "RL programs" use it), which would make the wire time negligible.
+Brian (D-10, 2026-11-08): whether the sim's readback model should mirror the 40 ms read cadence is decided after the obs-parity test (Phase 2A week 6), which tells whether it matters. `# MEASURE:` the actual tick time of this schedule, and whether the firmware accepts 2 Mbaud (xgolib hints "RL programs" use it), which would make the wire time negligible.
 
 ### 3.2 Arbiter: modes and the motor owner
 
@@ -110,7 +110,7 @@ Priority when requests conflict: `ESTOP` > fault → `IDLE_HOLD` > operator requ
 | Lidar reflex (Phase 2) | front-sector minimum range, scan age in scans | vx clamped by a taper; lidar dark → `VX_CAP_LIDAR_DARK` + degraded notice at mode entry; never adds motion (decision 8) |
 | Battery | `battery_pct` ≤ `BATTERY_LOW_PCT` (20, Brian) / ≤ `BATTERY_CRITICAL_PCT` | events; critical → velocity zero, then `IDLE_HOLD`; the brain is asked to `REST` before the ≤ 9 % firmware lockout lies the dog down on its own |
 
-All thresholds above are Brian's calls (decisions.md §3) unless tagged measured.
+All thresholds above are Brian's calls, set 2026-11-08 (decisions.md §3).
 
 ### 3.4 Motion-board adapter
 
@@ -140,14 +140,14 @@ YOLO (11s on the 3090, as V2) + tracker (ByteTrack) on the camera stream, 640×4
 States: `UNLOCKED → ACQUIRING → LOCKED ⇄ LOST → RESCAN → (voice fallback) → UNLOCKED`.
 
 - **Lock** by track id, acquisition score = area × centre weight over `ACQUIRE_FRAMES` (V2 §5 shape), then **VLM verify** against the multi-reference owner photos on the PC (the one identity exception, CLAUDE.md). Verify on first lock, after every re-lock, and every `VERIFY_PERIOD_FRAMES` while locked.
-- **Confidence** ∈ [0, 1]: verify success → 1.0; decays per frame while unverified, faster while `LOST`; below `RESCAN_CONFIDENCE` → `RESCAN`.
+- **Confidence** ∈ [0, 1]: verify success → 1.0; decays per frame while unverified, faster while `LOST`; below `RESCAN_CONFIDENCE` while `LOST` → `RESCAN`. A verify reject drops confidence to `RESCAN_CONFIDENCE`; two consecutive rejects unlock (Brian, D-13).
 - **Dead reckoning** of the target bearing while unseen: `bearing += K_TURN × wz_cmd × dt`, from the *commanded* yaw rate, never IMU yaw (frozen register, LESSONS A3). `K_TURN` (achieved/commanded) is `# MEASURE:` with an external reference.
-- **Rescan**: a yaw sweep *under the policy* (vx = 0, wz = ±`RESCAN_WZ`) toward the dead-reckoned bearing, bounded, with `RESCAN_COOLDOWN_FRAMES` between sweeps. Head pitch is not available in joint mode (`attitude()` is a firmware call); a pitch scan is a stationary `ACTION` and runs only if the yaw sweep failed (decision in decisions.md D-11).
+- **Rescan**: a yaw sweep *under the policy* (vx = 0, wz = ±`RESCAN_WZ`) toward the dead-reckoned bearing, bounded, with `RESCAN_COOLDOWN_FRAMES` between sweeps. Head pitch is not available in joint mode (`attitude()` is a firmware call); a pitch scan is a stationary `ACTION` and runs only if the yaw sweep failed (Brian, D-11).
 - **Voice fallback** after `RESCAN_MAX_ATTEMPTS`: event `owner_verify_needed` → voice says "that you, bro?" → Phase 2 keyword answer, or a verify on the next lock.
 
 ### 4.3 Follow controller (decision 3)
 
-Deterministic, 20 Hz, pixel-domain P-control: `wz = clamp(Kp_yaw × offset_x_norm)`, `vx = clamp(Kp_range × (area_target − area_ratio))`, with deadbands derived from the ladder noise (σ 2.6–3.5 px at 2–3 m, 40 px at 1 m). Area ratio is the range proxy (bbox height saturates under 2 m). Gains and the standoff are Brian's; the dead time they must tolerate is §5.2. The controller obeys the brain's goal (`FOLLOW_OWNER`, `STAY`, `LOOK_AROUND`, `GO_TO(bearing, range)`, `REST`) and emits `velocity` with `deadman` from the HUD. Target lost → zero velocity within `TARGET_LOST_FRAMES` (one constant, shared with the voice's `target_lost` event: LESSONS B4).
+Deterministic, 20 Hz, pixel-domain P-control: `wz = clamp(Kp_yaw × offset_x_norm)`, `vx = clamp(Kp_range × (area_target − area_ratio))`, with deadbands derived from the ladder noise (σ 2.6–3.5 px at 2–3 m, 40 px at 1 m). Area ratio is the range proxy (bbox height saturates under 2 m). The standoff is 1.5 m (`STANDOFF_AREA_RATIO = 0.118`, Brian); the gains are set from a step test after M-6, against the dead time in §5.2. The controller obeys the brain's goal (`FOLLOW_OWNER`, `STAY`, `LOOK_AROUND`, `GO_TO(bearing, range)`, `REST`) and emits `velocity` with `deadman` from the HUD. Target lost → zero velocity within `TARGET_LOST_FRAMES` (one constant, shared with the voice's `target_lost` event: LESSONS B4).
 
 ### 4.4 Brain
 
