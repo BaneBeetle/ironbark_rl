@@ -13,14 +13,14 @@ The PC process died, Wi-Fi dropped, or the PC is alive but its loop stalled.
 | | |
 |---|---|
 | Detect (Pi) | ticks since the last S1 message. Three thresholds defined from one another: `VELOCITY_TTL_TICKS` (per message) < `CMD_LOST_TICKS` < `CMD_DEAD_TICKS` |
-| Pi does | TTL expiry → the arbiter's velocity is zero; the policy stands in place (a trained behaviour: the stand command is 1/8 of the scoreboard grid). At `CMD_LOST_TICKS` → `event: cmd_stream_lost`, `degraded += "cmd_stream"`. At `CMD_DEAD_TICKS` → `IDLE_HOLD` (joints held at measured angles; cheaper than balancing forever) |
+| Pi does | TTL expiry → the arbiter's velocity is zero; the policy is meant to bring the dog to a stand. **Unverified** (Brian, 2026-11-08): the scoreboard's stand row is a 10 s stand from rest, training has `rel_standing_envs = 0` (zero commands ≈ 0.4 % of draws), and the walk → zero transition is not scored anywhere. At `CMD_LOST_TICKS` → `event: cmd_stream_lost`, `degraded += "cmd_stream"`. At `CMD_DEAD_TICKS` → `IDLE_HOLD` (joints held at measured angles; cheaper than balancing forever) |
 | PC does | if alive: HUD link S1 → STALE then OFFLINE from its own clock; disarms; the follow controller keeps publishing (so recovery is automatic when the link returns) |
 | Operator sees | HUD: S1 OFFLINE, mode, `last_cmd_seq` frozen |
 | Recovery | first S1 message → `cmd_stream_ok`; the arbiter stays in `IDLE_HOLD` until a `mode: POLICY` request arrives (no automatic re-walk) |
 | Evidence | `health.cmd.stream_lost_count`, Pi journal line with tick and last `seq` |
-| Test | kill the PC process mid-walk on the stand: measure ticks to zero velocity and to `IDLE_HOLD` |
+| Test | first M-28: an eval of walk → stop transitions in sim (falls, settle time, drift per starting command), then the same on the stand. Then kill the PC process mid-walk on the stand: measure ticks to zero velocity and to `IDLE_HOLD` |
 
-Why zero velocity rather than a freeze: a mid-stride frozen pose may be unstable; the policy at zero command is the posture it trained to hold (decision 5). Freeze applies only when the IMU is also bad (§4).
+Why zero velocity rather than a freeze: a mid-stride frozen pose may be unstable, and a zero command asks the policy for a stand (decision 5). That choice rests on the policy stopping cleanly from a walk, which nobody has measured. Brian's plan (2026-11-08): the walk → stop eval (M-28) and more stand commands in training. If M-28 shows falls or long drifts, this section is the one to revisit. Freeze applies only when the IMU is also bad (§4).
 
 ## 2. Pi hang
 
@@ -57,12 +57,12 @@ Measured: the whole IMU block holds for ~1 s at a time (41.8 % of the time), occ
 | | |
 |---|---|
 | Detect (Pi) | sanity filter every read: zero vector → `rejected`; \|gyro\| > `GYRO_MAX_DPS` → `rejected`; identical block for `IMU_FREEZE_READS` → `frozen`; no nonzero yaw yet → `ready=false` |
-| Pi does | `BOOT` refuses every motion until `ready` (predicate, never a timer; LESSONS A2). While `frozen`/`rejected`: the policy sees the last accepted value (matches the sim's `imu_frozen` scoring term). At `IMU_STALE_TICKS` → velocity zero, `event: imu_frozen`, `degraded += "imu"`. At `IMU_DEAD_TICKS` → `IDLE_HOLD`. Tilt cutoff keeps using the last accepted roll/pitch |
+| Pi does | `BOOT` refuses every motion until `ready` (predicate, never a timer; LESSONS A2). While `frozen`/`rejected`: the policy sees the last accepted value (the same hold as the sim's `imu_frozen` term). That term is scoring-only: no policy has trained with freezes, and scoring EXP-010's policy under them raised flicker 15.1 % → 25.4 % with 0 falls. At `IMU_STALE_TICKS` → velocity zero, `event: imu_frozen`, `degraded += "imu"`. At `IMU_DEAD_TICKS` → `IDLE_HOLD`. Tilt cutoff keeps using the last accepted roll/pitch |
 | PC does | HUD shows `imu.status` and `frozen_ticks`; the brain is told in its state summary |
 | Operator sees | CALIBRATING (before ready) / IMU FROZEN n ticks |
 | Recovery | first accepted read → `imu_ok`; `IDLE_HOLD` stays until requested out |
 | Evidence | `health.imu` fresh-value rate, freeze count, longest freeze; `state.imu.status` at 50 Hz in the PC log |
-| Test | replay the measured freeze logs (`joint_control_imu*_20261108-*.jsonl`) through the filter: no false `rejected` on live reads, every measured freeze detected within `IMU_FREEZE_READS`; sim scoring with `-ImuFreeze` already exists for the policy side |
+| Test | replay the measured freeze logs (`joint_control_imu*_20261108-*.jsonl`) through the filter: no false `rejected` on live reads, every measured freeze detected within `IMU_FREEZE_READS`; sim scoring with `-ImuFreeze` already exists for the policy side; training with freezes is planned for the domain-randomization phase (Brian, 2026-11-08) |
 | Fallback (logged option, not decided) | a separate I2C IMU wired to the Pi (Brian, 2026-11-07) |
 
 `IMU_STALE_TICKS` must exceed the longest measured freeze (1004 ms = 50 ticks) or the dog would stop on every normal freeze; `IMU_DEAD_TICKS` sits above that. If a future experiment adds an "IMU age" observation, the filter already has `age_ticks` for it.
@@ -100,9 +100,9 @@ Measured drain 99 → 79 % in ~3 min of intermittent motion; the firmware lies t
 
 | | |
 |---|---|
-| Detect (Pi) | `battery_pct` (read every `BATTERY_EVERY_TICKS`) ≤ 20 → low (Brian); ≤ `BATTERY_CRITICAL_PCT` → critical; re-arm ≥ 30 |
+| Detect (Pi) | `battery_pct` (read every `BATTERY_EVERY_TICKS`) ≤ 20 → low (Brian); ≤ `BATTERY_CRITICAL_PCT` → critical; re-arm above 30 (Brian's T3). The battery read has its own tick |
 | Pi does | low: `event: battery_low`. Critical: velocity zero, `event: battery_critical`, `degraded += "battery"`, `IDLE_HOLD` after `STAND_TICKS`; `action`/`mode: POLICY` requests rejected with `"battery_critical"` |
-| PC does | voice says the cached line (queued behind a playing line, per Brian); the brain is expected to request `REST` (lie down, unload) so the dog rests under control before the firmware does it mid-stride at 9 % |
+| PC does | voice says the cached `battery_low` line (queued behind a playing line, per Brian); whether `battery_critical` is spoken at all is decisions.md D-19 (it has no cached line today); the brain is expected to request `REST` (lie down, unload) so the dog rests under control before the firmware does it mid-stride at 9 % |
 | Operator sees | percent and the event on the HUD |
 | Recovery | charging (power off) |
 | Evidence | `battery_pct` in every `state` → the session log doubles as a drain measurement (`# MEASURE:` sustained-load runtime, never measured) |
@@ -129,7 +129,14 @@ Measured drain 99 → 79 % in ~3 min of intermittent motion; the firmware lies t
 
 ## 10. Voice path failure (API, network, Pi speaker)
 
-No effect on motion by construction: the voice only subscribes to events and pushes audio. ElevenLabs/Haiku failures fall back to cached lines; cache misses are dropped under the pacing policy; the Pi player's device failure is `health.audio.status`. A fall still interrupts a playing line because the interrupt is a local `audio_ctl` on S6.
+No effect on motion by construction: the voice only subscribes to events and pushes audio, and an S6 failure never blocks arming (it raises `audio_down`).
+
+- **API failure.** Cached events never call an API. A Haiku or TTS failure on any other line is logged and the line is dropped; there is no fallback line (the voice's built behaviour).
+- **Link drop mid-line.** The sender does not queue while the Pi is unreachable (`IMMEDIATE=1`, bounded high-water mark), so no old speech plays after a reconnect; the line is dropped (M-22).
+- **`speech_ended` never arrives.** The voice times out from the PCM byte count.
+- **A fall during a line.** `audio_ctl stop` is read by the player's receive thread while the clip plays; it discards the queued PCM and drops the device buffer (M-21).
+- **Device failure** on the Pi: `health.audio.status`, `audio_down`.
+- **Today** the dog has no speaker the Pi can reach (decisions.md D-17), so the voice plays on the PC and none of the above is live yet.
 
 ## 11. Version or schema mismatch
 
@@ -147,7 +154,7 @@ No effect on motion by construction: the voice only subscribes to events and pus
 | Detect (Pi) | tilt ≥ `FALL_TILT_DEG` (46, Brian); joint clamps hitting (`safety.joints_clamped`); per-tick step > `JOINT_STEP_MAX_DEG`; operator judgement |
 | Pi does | clamps every tick; `fell` → `ESTOP` (hold), unload after `FALL_UNLOAD_TICKS`; operator SPACE → `ESTOP` |
 | PC does | HUD; voice "fell" line (interrupts, per Brian) |
-| Recovery | operator `clear_estop` only, after setting the dog upright; `adopt` → `IDLE_HOLD` |
+| Recovery | operator `clear_estop` only, after setting the dog upright; `load_allmotor()` if it was unloaded, then `adopt` → `IDLE_HOLD`. Loading moves the joints before `adopt` can run, and `unload_allmotor` / `load_allmotor` have never been logged (M-24) |
 | Evidence | 50 Hz `state` log: the whole episode is replayable through the parity test |
 | Test | first steps tethered on the stand with velocity zero, then slow commands, deadman held (Phase 2A week 6) |
 
@@ -155,13 +162,28 @@ No effect on motion by construction: the voice only subscribes to events and pus
 
 Not failures that can happen at runtime by construction: no component subtracts timestamps across hosts, and the PC's only address is a hostname validated by connecting at startup. A stale hostname shows up as every link OFFLINE at the self-test, before anything is armed.
 
+## 14. A once-only event is lost
+
+An event is sent once. A link blip, a slow joiner or a restarted subscriber can miss it, and a `battery_low` that is missed would not fire again until the dog was recharged (Brian: `battery_low` is "never dropped").
+
+| | |
+|---|---|
+| Detect (subscriber) | a gap in `seq` for the `event` topic (counted per topic), or its own startup |
+| Subscriber does | reconciles from the level: `state.active` for the Pi's conditions, `owner.state` for the target, `goal` for the behaviour. A condition that is active and was never announced is treated as if its event had just arrived |
+| Publisher does | nothing extra: the level rides in a periodic message it already sends |
+| Test | start the voice after the battery crossed 20 %; drop S2 for a second across a `fell`. Both must still be spoken |
+
+## 15. A handoff that cannot be trusted yet
+
+`release` (joint mode → firmware) needs the pose `stop()` returns the legs to, and that pose is unmeasured without a prior `reset()` (Brian, 2026-11-08; M-8). `load_allmotor()` moves the joints before `adopt` can run (M-24). Until those rows are measured the arbiter refuses `ACTION` and `REST` with `rejected: handoff_unmeasured`, and `ESTOP` after a fall holds the joints without unloading (`unload_allmotor()` is itself unlogged): the operator recovers the dog by hand with the power button.
+
 ---
 
 ## Summary: who stops the dog, by failure
 
 | Failure | Stopper | How fast |
 |---|---|---|
-| PC dies | Pi TTL → stand → hold | ≤ `VELOCITY_TTL_TICKS` × 20 ms |
+| PC dies | Pi TTL → zero velocity → stand → hold | zero velocity ≤ `VELOCITY_TTL_TICKS` × 20 ms; the stand itself is unmeasured (M-28) |
 | Pi dies, joint mode | nobody; the board holds the pose (to confirm on the stand) | — |
 | Pi dies, firmware mode | nobody; the board keeps going → **why V3 never walks in firmware mode** | — |
 | IMU bad | Pi safety layer | `IMU_STALE_TICKS` |
