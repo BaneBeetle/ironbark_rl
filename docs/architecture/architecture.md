@@ -4,7 +4,7 @@ Design only: no code lands from this document. Every agent building a V3 compone
 
 Status (2026-11-08): Brian accepted all nine recommendations ("Go with all recs"), then approved Claude's defaults C-1 to C-13, set the numbers in `decisions.md` §3 as recommended and answered D-10 to D-16. Still open: the two follow gains (set after M-6) and the `# MEASURE:` register in `decisions.md` §5, whose gate rows block deployment. Every number marked `# MEASURE:` has its procedure there.
 
-Revised the same day after reviews by the voice and joint-control sessions and Brian's six corrections (`decisions.md` §1): the text now says what is measured, what is only scored in sim, and what is unverified. Awaiting Brian: defaults C-14 to C-19 and questions D-18 to D-22 (D-17 is answered: a USB sound card for the dog's mic and speaker).
+Revised the same day after reviews by the voice and joint-control sessions and Brian's six corrections (`decisions.md` §1): the text now says what is measured, what is only scored in sim, and what is unverified. Brian approved defaults C-14, C-15, C-16 and C-19 on 2026-11-09. Still open, all voice, which he has parked to work on motion: defaults C-17 and C-18 and questions D-18 to D-22 (D-17 is answered: a USB sound card for the dog's mic and speaker).
 
 Sources this design leans on: [`docs/v2-archive/MEASURED_FACTS.md`](../v2-archive/MEASURED_FACTS.md), [`LESSONS.md`](../v2-archive/LESSONS.md), [`findings/`](../v2-archive/findings/), [`docs/phase1-joint-control-results.md`](../phase1-joint-control-results.md), [`docs/deployment-notes.md`](../deployment-notes.md), [`docs/roadmap.md`](../roadmap.md), `docs/voice/decisions.md` (branch `feature/voice`).
 

@@ -2,7 +2,7 @@
 
 Brian owns every decision here. Claude recommends and records. Newest decisions go at the bottom of each section with date and Brian's words.
 
-Sections: §1 decided (the dated log); §2 Claude's defaults (C-1 to C-13 approved 2026-11-08; C-14 to C-19 awaiting Brian); §3 Brian's numbers (set 2026-11-08; the two gains wait on M-6, the mic tail on M-33); §4 design questions (D-10 to D-16 answered 2026-11-08; D-17 answered the same day through the voice session; D-18 to D-22 open); §5 the `# MEASURE:` register (what must be measured, how, and which decision it unblocks).
+Sections: §1 decided (the dated log); §2 Claude's defaults (C-1 to C-13 approved 2026-11-08; C-14, C-15, C-16 and C-19 approved 2026-11-09 through his advisor session; C-17 and C-18 open); §3 Brian's numbers (set 2026-11-08; the two gains wait on M-6, the mic tail on M-33); §4 design questions (D-10 to D-16 answered 2026-11-08; D-17 answered the same day through the voice session; D-18 to D-22 open); §5 the `# MEASURE:` register (what must be measured, how, and which decision it unblocks).
 
 ---
 
@@ -164,6 +164,16 @@ So the firmware angle is the joint readback logged at each photo, and 0/48/14 is
 
 **What this changes.** M-4's method in §5. M-4 is still the first hardware session and still a gate. Two tools it needs are not built (the joint-control session is building both): a hold in the probe's `map`, which today wiggles and returns and goes −10° when a joint has no room above, and a sim render at given joint angles.
 
+### 2026-11-09: Brian approves C-14, C-15, C-16 and C-19 (relayed by his advisor session)
+
+The advisor session briefed Brian on the four motion-related defaults as they read at branch head `08407b9`, then asked: "Approve C-14, C-15, C-16 and C-19 and have me relay that to the Oracle?" Brian:
+
+> Approve all 4
+
+Approved: only S1–S3 block arming (C-14); one writer on the command socket, the `gateway` (C-15); `seq` per topic with a level for every paired event (C-16); PC-origin events published by their owner on the PC bus (C-19).
+
+**Still open:** C-17, C-18 and D-18 to D-22, all voice. Brian has parked voice to work on motion: "the whole voice interaction thing is like a nice little feature rather than a necessary need". This is not approval to merge the PR; that stays his.
+
 ---
 
 ## 2. Claude's defaults (approved by Brian, 2026-11-08)
@@ -186,16 +196,16 @@ Plumbing choices made while writing the docs. None is a `brian/` design decision
 | C-12 | **Owner photos live outside the repo** (`OWNER_PHOTOS_DIR`) | Privacy; they are not code | interfaces §10 |
 | C-13 | **Unknown fields are rejected, not tolerated** | LESSONS B1: V2 carried nine dead fields | interfaces §1 |
 
-### Added 2026-11-08 after the reviews: awaiting Brian
+### Added 2026-11-08 after the reviews (C-14, C-15, C-16, C-19 approved 2026-11-09; C-17, C-18 open)
 
 | # | Default | Why | Where | Brian |
 |---|---|---|---|---|
-| C-14 | **Only S1–S3 block arming.** A camera, lidar or audio self-test failure raises a degraded notice and blocks only the behaviour that needs that stream | The first draft let a dead speaker block arming, against failure-modes §10 ("no effect on motion") | interfaces §3 | |
-| C-15 | **One writer on the command socket: a `gateway` in the HUD process.** The follow controller and the brain publish `cmd_request` on the PC bus; the gateway adds `deadman` and forwards, and sends zero velocity while disarmed | With several writers `last_cmd_seq` means nothing; disarming becomes one choke point on the PC | interfaces §12 | |
-| C-16 | **`seq` counts per topic, and every paired event has a level** in a periodic message from its owner (`state.active`, `owner.state`, `goal`) | An event-only subscriber saw constant gaps; a `battery_low` lost in a link blip would never fire again, breaking "never dropped" | interfaces §1, §4; failure-modes §14 | |
-| C-17 | **Audio stream rules.** Sender: `IMMEDIATE=1`, bounded high-water mark, non-blocking send, drop the line if it would block. Player: receives on its own thread; `stop` discards queued PCM and drops the device buffer. A zero-length `final` chunk is allowed; "ended" means final received and drained | Otherwise a link drop replays up to ~50 s of old speech, and a `stop` queues behind a 3 s clip | interfaces §8 | |
-| C-18 | **A `voice_module_reader` process on the Pi owns the voice board's serial port** and publishes `keyword` through the runtime. Amended 2026-11-08 (the board's future is undecided, §1): the reader is optional and runs only while the board is plugged in; `keyword` names what was heard and carries its `source`, so a software wake word can publish the same event | Voice session's question 4: no process owned it. Source-independent, so chip versus software is a one-variable swap | architecture §2, interfaces §6 | |
-| C-19 | **PC-origin events are published by their owner on the PC bus** (tracker `:5571`, brain `:5572`, topic `event`); subscribers merge them with the Pi's. The HUD can publish the goal, so supervised FOLLOW runs with no brain | The first draft gave these events no socket, so `target_*` could not reach the voice | interfaces §12 | |
+| C-14 | **Only S1–S3 block arming.** A camera, lidar or audio self-test failure raises a degraded notice and blocks only the behaviour that needs that stream | The first draft let a dead speaker block arming, against failure-modes §10 ("no effect on motion") | interfaces §3 | **approved** 2026-11-09 ("Approve all 4", relayed by his advisor session; §1) |
+| C-15 | **One writer on the command socket: a `gateway` in the HUD process.** The follow controller and the brain publish `cmd_request` on the PC bus; the gateway adds `deadman` and forwards, and sends zero velocity while disarmed | With several writers `last_cmd_seq` means nothing; disarming becomes one choke point on the PC | interfaces §12 | **approved** 2026-11-09 ("Approve all 4", relayed by his advisor session; §1) |
+| C-16 | **`seq` counts per topic, and every paired event has a level** in a periodic message from its owner (`state.active`, `owner.state`, `goal`) | An event-only subscriber saw constant gaps; a `battery_low` lost in a link blip would never fire again, breaking "never dropped" | interfaces §1, §4; failure-modes §14 | **approved** 2026-11-09 ("Approve all 4", relayed by his advisor session; §1) |
+| C-17 | **Audio stream rules.** Sender: `IMMEDIATE=1`, bounded high-water mark, non-blocking send, drop the line if it would block. Player: receives on its own thread; `stop` discards queued PCM and drops the device buffer. A zero-length `final` chunk is allowed; "ended" means final received and drained | Otherwise a link drop replays up to ~50 s of old speech, and a `stop` queues behind a 3 s clip | interfaces §8 | open (voice is parked, §1) |
+| C-18 | **A `voice_module_reader` process on the Pi owns the voice board's serial port** and publishes `keyword` through the runtime. Amended 2026-11-08 (the board's future is undecided, §1): the reader is optional and runs only while the board is plugged in; `keyword` names what was heard and carries its `source`, so a software wake word can publish the same event | Voice session's question 4: no process owned it. Source-independent, so chip versus software is a one-variable swap | architecture §2, interfaces §6 | open (voice is parked, §1) |
+| C-19 | **PC-origin events are published by their owner on the PC bus** (tracker `:5571`, brain `:5572`, topic `event`); subscribers merge them with the Pi's. The HUD can publish the goal, so supervised FOLLOW runs with no brain | The first draft gave these events no socket, so `target_*` could not reach the voice | interfaces §12 | **approved** 2026-11-09 ("Approve all 4", relayed by his advisor session; §1) |
 
 ---
 
